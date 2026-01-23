@@ -14,15 +14,18 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { streamApi, cameraApi } from '../services/api';
+import { useStreams, useCreateStream, useUpdateStream, useDeleteStream, useCameras } from '../hooks/useQueries';
 import { Stream, Camera } from '../types';
+import CameraStream from '../components/CameraStream';
 
 const Streams: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -31,37 +34,27 @@ const Streams: React.FC = () => {
     camera_id: 0,
     status: 'stopped',
     current_frame: 0,
-    metadata: {},
+    stream_metadata: {},
   });
 
-  const queryClient = useQueryClient();
+  // TanStack Query hooks for server state management
+  const {
+    data: streams,
+    isLoading: streamsLoading,
+    isError: streamsError,
+    error: streamsErrorData,
+    refetch: refetchStreams
+  } = useStreams();
 
-  const { data: streams, isLoading: streamsLoading } = useQuery('streams', streamApi.getAll);
-  const { data: cameras, isLoading: camerasLoading } = useQuery('cameras', cameraApi.getAll);
+  const {
+    data: cameras,
+    isLoading: camerasLoading,
+    isError: camerasError
+  } = useCameras();
 
-  const createMutation = useMutation(streamApi.create, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('streams');
-      handleClose();
-    },
-  });
-
-  const updateMutation = useMutation(
-    (data: { id: number; stream: Partial<Stream> }) =>
-      streamApi.update(data.id, data.stream),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('streams');
-        handleClose();
-      },
-    }
-  );
-
-  const deleteMutation = useMutation(streamApi.delete, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('streams');
-    },
-  });
+  const createMutation = useCreateStream();
+  const updateMutation = useUpdateStream();
+  const deleteMutation = useDeleteStream();
 
   const handleOpen = (stream?: Stream) => {
     if (stream) {
@@ -70,7 +63,7 @@ const Streams: React.FC = () => {
         camera_id: stream.camera_id,
         status: stream.status,
         current_frame: stream.current_frame,
-        metadata: stream.metadata,
+        stream_metadata: stream.stream_metadata,
       });
     } else {
       setSelectedStream(null);
@@ -78,7 +71,7 @@ const Streams: React.FC = () => {
         camera_id: 0,
         status: 'stopped',
         current_frame: 0,
-        metadata: {},
+        stream_metadata: {},
       });
     }
     setOpen(true);
@@ -91,24 +84,36 @@ const Streams: React.FC = () => {
       camera_id: 0,
       status: 'stopped',
       current_frame: 0,
-      metadata: {},
+      stream_metadata: {},
     });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedStream) {
-      updateMutation.mutate({
-        id: selectedStream.id,
-        stream: formData,
-      });
+      updateMutation.mutate(
+        { id: selectedStream.id, data: formData },
+        { onSuccess: () => handleClose() }
+      );
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(formData, { onSuccess: () => handleClose() });
     }
   };
 
   if (streamsLoading || camerasLoading) {
-    return <Typography>Loading...</Typography>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (streamsError || camerasError) {
+    return (
+      <Alert severity="error" sx={{ m: 2 }}>
+        Error loading data: {streamsErrorData?.message || 'Unknown error'}
+      </Alert>
+    );
   }
 
   const streamList = Array.isArray(streams) ? streams : [];
@@ -118,13 +123,22 @@ const Streams: React.FC = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h4">Streams</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpen()}
-        >
-          Add Stream
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => refetchStreams()}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpen()}
+          >
+            Add Stream
+          </Button>
+        </Box>
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
@@ -141,6 +155,7 @@ const Streams: React.FC = () => {
                   <Typography color="textSecondary" gutterBottom>
                     Frame: {stream.current_frame}
                   </Typography>
+                  <CameraStream stream={stream} />
                   <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
                     <IconButton
                       color="primary"

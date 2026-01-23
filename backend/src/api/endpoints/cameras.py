@@ -146,15 +146,29 @@ def update_camera(
 
 
 @router.delete("/{camera_id}")
-def delete_camera(
+async def delete_camera(
     camera_id: int,
     db: Session = Depends(get_db)
 ):
-    """Delete a camera."""
+    """Delete a camera and all associated streams, detections, alarms, and ROIs."""
+    from ...models.stream import Stream
+    from ...services.gstreamer import gstreamer_service
+
     db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if db_camera is None:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    # Stop and remove all associated streams from GStreamer before deleting
+    streams = db.query(Stream).filter(Stream.camera_id == camera_id).all()
+    for stream in streams:
+        if stream.stream_name:
+            try:
+                await gstreamer_service.remove_stream(stream.stream_name)
+            except Exception as e:
+                # Log but don't fail if GStreamer cleanup fails
+                print(f"Warning: Failed to remove stream {stream.stream_name} from GStreamer: {e}")
+
+    # Delete camera (cascade will delete related streams, detections, alarms, ROIs)
     db.delete(db_camera)
     db.commit()
     return {"message": "Camera deleted successfully"}

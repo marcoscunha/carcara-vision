@@ -22,8 +22,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { cameraApi } from '../services/api';
+import { useCameras, useCreateCamera, useUpdateCamera, useDeleteCamera } from '../hooks/useQueries';
 import { Camera } from '../types';
 import { CameraScanner } from '../components/CameraScanner';
 
@@ -40,33 +39,12 @@ const Cameras: React.FC = () => {
     is_available: false,
   });
 
-  const queryClient = useQueryClient();
+  // TanStack Query hooks for server state management
+  const { data: cameras, isLoading } = useCameras();
 
-  const { data: cameras, isLoading } = useQuery('cameras', cameraApi.getAll);
-
-  const createMutation = useMutation(cameraApi.create, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('cameras');
-      handleClose();
-    },
-  });
-
-  const updateMutation = useMutation(
-    (data: { id: number; camera: Partial<Camera> }) =>
-      cameraApi.update(data.id, data.camera),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('cameras');
-        handleClose();
-      },
-    }
-  );
-
-  const deleteMutation = useMutation(cameraApi.delete, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('cameras');
-    },
-  });
+  const createMutation = useCreateCamera();
+  const updateMutation = useUpdateCamera();
+  const deleteMutation = useDeleteCamera();
 
   const handleOpen = (camera?: Camera) => {
     if (camera) {
@@ -112,39 +90,12 @@ const Cameras: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedCamera) {
-      updateMutation.mutate({
-        id: selectedCamera.id,
-        camera: formData,
-      });
+      updateMutation.mutate(
+        { id: selectedCamera.id, data: formData },
+        { onSuccess: () => handleClose() }
+      );
     } else {
-      createMutation.mutate(formData);
-    }
-  };
-
-  const handleCreateCamera = async () => {
-    try {
-      await cameraApi.create({
-        name: formData.name,
-        rtsp_url: formData.rtsp_url,
-        is_active: formData.is_active,
-        device_id: formData.device_id,
-        resolution: formData.resolution,
-        fps: formData.fps,
-        is_available: formData.is_available,
-      });
-      queryClient.invalidateQueries('cameras');
-      handleClose();
-      setFormData({
-        name: '',
-        rtsp_url: '',
-        is_active: true,
-        device_id: 0,
-        resolution: [0, 0],
-        fps: 0,
-        is_available: false,
-      });
-    } catch (error) {
-      console.error('Error creating camera:', error);
+      createMutation.mutate(formData, { onSuccess: () => handleClose() });
     }
   };
 
@@ -287,7 +238,7 @@ const Cameras: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={handleClose}>Cancel</Button>
-            <Button onClick={handleCreateCamera} variant="contained" color="primary">
+            <Button type="submit" variant="contained" color="primary">
               {selectedCamera ? 'Update' : 'Create'}
             </Button>
           </DialogActions>

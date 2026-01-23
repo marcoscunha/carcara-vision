@@ -21,8 +21,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { alarmApi, cameraApi, modelApi } from '../services/api';
+import { useAlarms, useCreateAlarm, useUpdateAlarm, useDeleteAlarm, useCameras, useModels } from '../hooks/useQueries';
 import { Alarm, Camera, Model } from '../types';
 
 const Alarms: React.FC = () => {
@@ -37,35 +36,14 @@ const Alarms: React.FC = () => {
     is_active: true,
   });
 
-  const queryClient = useQueryClient();
+  // TanStack Query hooks for server state management
+  const { data: alarms, isLoading: alarmsLoading } = useAlarms();
+  const { data: cameras, isLoading: camerasLoading } = useCameras();
+  const { data: models, isLoading: modelsLoading } = useModels();
 
-  const { data: alarms, isLoading: alarmsLoading } = useQuery('alarms', alarmApi.getAll);
-  const { data: cameras, isLoading: camerasLoading } = useQuery('cameras', cameraApi.getAll);
-  const { data: models, isLoading: modelsLoading } = useQuery('models', modelApi.getAll);
-
-  const createMutation = useMutation(alarmApi.create, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('alarms');
-      handleClose();
-    },
-  });
-
-  const updateMutation = useMutation(
-    (data: { id: number; alarm: Partial<Alarm> }) =>
-      alarmApi.update(data.id, data.alarm),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('alarms');
-        handleClose();
-      },
-    }
-  );
-
-  const deleteMutation = useMutation(alarmApi.delete, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('alarms');
-    },
-  });
+  const createMutation = useCreateAlarm();
+  const updateMutation = useUpdateAlarm();
+  const deleteMutation = useDeleteAlarm();
 
   const handleOpen = (alarm?: Alarm) => {
     if (alarm) {
@@ -108,12 +86,12 @@ const Alarms: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedAlarm) {
-      updateMutation.mutate({
-        id: selectedAlarm.id,
-        alarm: formData,
-      });
+      updateMutation.mutate(
+        { id: selectedAlarm.id, data: formData },
+        { onSuccess: () => handleClose() }
+      );
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(formData, { onSuccess: () => handleClose() });
     }
   };
 

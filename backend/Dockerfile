@@ -1,22 +1,22 @@
+# syntax=docker/dockerfile:1.4
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    netcat-traditional \
-    dos2unix \
-    v4l-utils \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies needed for building
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    dos2unix
 
-# Copy requirements
+# Copy requirements first for better caching
 COPY pyproject.toml poetry.lock* ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir poetry && \
+# Install Python dependencies with cache mounts
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/root/.cache/pypoetry \
+    pip install poetry && \
     poetry config virtualenvs.create false && \
     poetry config installer.max-workers 10 && \
     poetry install --only main --no-root --no-interaction
@@ -24,44 +24,33 @@ RUN pip install --no-cache-dir poetry && \
 # Copy application code
 COPY . .
 
-# Fix line endings and make scripts executable
+# Fix line endings and make scripts executable in one layer
 RUN dos2unix scripts/migrate.sh scripts/start.sh && \
-    chmod +x scripts/migrate.sh scripts/start.sh && \
-    chown -R root:root /app
+    chmod +x scripts/migrate.sh scripts/start.sh
 
 # Final stage
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install only the necessary system dependencies
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+# Install only the necessary runtime dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
     libglib2.0-0 \
     netcat-traditional \
-    v4l-utils \
-    && rm -rf /var/lib/apt/lists/*
+    v4l-utils
 
-# Copy Python packages from builder
+# Copy Python packages from builder (already cleaned)
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code and scripts
-COPY --from=builder /app /app
-
-# Create scripts directory if it doesn't exist
-RUN mkdir -p /app/scripts
-
-# Set proper permissions for all scripts
-RUN chmod -R +x /app/scripts && \
-    chown -R root:root /app
-
-# Clean up Python cache
-RUN find /usr/local/lib/python3.11/site-packages -type d -name "__pycache__" -exec rm -r {} + && \
-    find /usr/local/lib/python3.11/site-packages -type d -name "*.dist-info" -exec rm -r {} + && \
-    find /usr/local/lib/python3.11/site-packages -type d -name "*.egg-info" -exec rm -r {} + && \
-    find /usr/local/lib/python3.11/site-packages -type f -name "*.pyc" -delete && \
-    find /usr/local/lib/python3.11/site-packages -type f -name "*.pyo" -delete
+# Copy only necessary application files
+COPY --from=builder /app/src /app/src
+COPY --from=builder /app/scripts /app/scripts
+COPY --from=builder /app/alembic.ini /app/alembic.ini
+COPY --from=builder /app/migrations /app/migrations
 
 # Add application directory to PYTHONPATH
 ENV PYTHONPATH=/app

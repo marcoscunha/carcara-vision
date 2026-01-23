@@ -1,8 +1,5 @@
 import asyncio
-from collections import defaultdict
-from threading import Lock
 
-import cv2
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -12,92 +9,11 @@ from sqlalchemy.orm import Session
 
 from ...db.session import get_db
 from ...models.stream import Stream
+from ...services.cameras import CameraStreamManager
+from ...services.cameras import camera_stream_lockers
+from ...services.cameras import camera_stream_managers
 
 router = APIRouter()
-
-
-class CameraStreamManager:
-    def __init__(self, camera_device_id: int):
-        self.camera_device_id = camera_device_id
-        self.streamer = None
-        self.subscribers = []
-        self.lock = Lock()
-        self.status = "stopped"
-
-    def start_stream(self, camera_device_id: int):
-        with self.lock:
-            cap = cv2.VideoCapture(camera_device_id)
-            if not cap.isOpened():
-                print(f"==============================================================================")
-                print(f"STARTING for camera")
-                print(f"==============================================================================")
-                cap.release()
-                raise HTTPException(status_code=400, detail=f"Cannot open camera {camera_device_id}")
-
-            self.streamer = cap
-            self.status = "started"
-            print(f"==============================================================================")
-            print(f"STARTING for camera {camera_device_id}")
-            print(f"==============================================================================")
-
-    def stop_stream(self):
-        print(f"==============================================================================")
-        print(f"Stopping stream for camera {self.streamer} - cameras {len(self.subscribers)}")
-        print(f"==============================================================================")
-        self.streamer.release()
-        self.streamer = None
-        self.subscribers = []
-
-    def kill_stream(self):
-        """Forcefully stop the stream and remove all subscribers."""
-        with self.lock:
-            print(f"==============================================================================")
-            print(f"Killing stream for camera {self.camera_device_id}")
-            print(f"==============================================================================")
-            if self.streamer:
-                self.streamer.release()
-                self.streamer = None
-            self.subscribers.clear()
-            self.status = "stopped"
-
-    async def publish_frames(self):
-        cap = self.streamer
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            _, buffer = cv2.imencode('.jpg', frame)
-            for subscriber in self.subscribers:
-                try:
-                    await subscriber.send_bytes(buffer.tobytes())
-                except WebSocketDisconnect:
-                    self.subscribers.remove(subscriber)  # Remove disconnected subscriber
-            await asyncio.sleep(1 / 30)
-
-    def add_subscriber(self, websocket: WebSocket):
-        self.subscribers.append(websocket)  # Add WebSocket to the list
-
-    def remove_subscriber(self, websocket: WebSocket):
-        with self.lock:
-            print(f"==============================================================================")
-            print(f" REMOVING SUBSCRIBER  {len(self.subscribers)}")
-            print(f"==============================================================================")
-            if websocket in self.subscribers:
-                self.subscribers.remove(websocket)  # Remove WebSocket from the list
-            if not self.subscribers:
-                self.stop_stream()
-
-
-camera_stream_managers = {
-    "local": defaultdict(list),
-    "remote": defaultdict(list)
-}
-
-camera_stream_lockers = {
-    "local": defaultdict(Lock),
-    "remote": defaultdict(Lock)
-}
 
 
 @router.websocket("/{stream_id}")
@@ -138,9 +54,9 @@ async def stream_camera(websocket: WebSocket,
             # If there are multiple subscribers, just wait for the frames to be published
             while True:
                 await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        print("WebSocket disconnected")
     except Exception as e:
-        print(f"Error in WebSocket stream: {e}")
-    except:
         # Print the trace of the error
         import traceback
         traceback.print_exc()

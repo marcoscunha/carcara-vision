@@ -72,6 +72,6 @@ LOGGING_CONFIG: Dict[str, Any] = {
 
 def setup_logging():
     """Configure logging for the application."""
-    logging.config.dictConfig(LOGGING_CONFIG)
+    # logging.config.dictConfig(LOGGING_CONFIG)
     logger = logging.getLogger(__name__)
     logger.info("Logging configured successfully")

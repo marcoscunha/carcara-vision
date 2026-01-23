@@ -36,6 +36,25 @@ class CameraService:
         return f"Camera {device_id}"
 
     @staticmethod
+    def _get_device_path_fallback(device_id: int) -> Optional[str]:
+        """
+        Get a unique device identifier from /sys/class/video4linux as fallback.
+
+        Args:
+            device_id: The ID of the video device (e.g., 0 for /dev/video0).
+
+        Returns:
+            A string representing a unique path for the device, or None if unavailable.
+        """
+        try:
+            device_path = f"/sys/class/video4linux/video{device_id}/device"
+            if os.path.exists(device_path):
+                return os.path.realpath(device_path)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
     def get_camera_physical_address(device_id: int) -> Optional[str]:
         """
         Retrieve the physical address of the camera using udevadm.
@@ -177,8 +196,14 @@ class CameraService:
                     usb_id = CameraService.get_camera_usb_id(device_id)
 
                     # Use a combination of physical address and USB ID to ensure uniqueness
-                    unique_device_key = (physical_address, usb_id)
-                    if not physical_address or unique_device_key in seen_devices:
+                    # If physical_address is unavailable (e.g., udevadm not installed), use device_id as fallback
+                    if physical_address:
+                        unique_device_key = (physical_address, usb_id)
+                    else:
+                        # Fallback: use device path from /sys/class/video4linux if available
+                        unique_device_key = CameraService._get_device_path_fallback(device_id) or f"device_{device_id}"
+
+                    if unique_device_key in seen_devices:
                         cap.release()
                         continue
 

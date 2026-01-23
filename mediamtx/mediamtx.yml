@@ -1,0 +1,148 @@
+# MediaMTX Configuration
+# Replacement for go2rtc as media server
+
+###############################################
+# Global settings
+
+# Verbosity of the program; available values are "error", "warn", "info", "debug".
+logLevel: info
+# Destinations of log messages; available values are "stdout", "file" and "syslog".
+logDestinations:
+  - stdout
+
+# Timeout of read operations.
+readTimeout: 10s
+# Timeout of write operations.
+writeTimeout: 10s
+# Size of the queue of outgoing packets.
+writeQueueSize: 512
+
+###############################################
+# Authentication settings
+
+# Authentication method. Available values are:
+# * internal: credentials are stored in the configuration file
+# * http: an external HTTP URL is called to perform authentication
+# * jwt: JWT tokens are used
+authMethod: internal
+
+# List of users for internal authentication.
+authInternalUsers:
+  # User for API access
+  - user: any
+    pass: ""
+    permissions:
+      - action: api
+      - action: publish
+        path: ""
+      - action: read
+        path: ""
+      - action: playback
+        path: ""
+
+###############################################
+# RTSP settings
+
+# Enable RTSP server
+rtsp: yes
+# Address of the RTSP TCP listener.
+rtspAddress: :8554
+# Transport protocols for RTSP
+rtspTransports:
+  - tcp
+  - udp
+
+###############################################
+# RTMP settings
+
+rtmp: yes
+rtmpAddress: :1935
+# Encrypt with TLS (RTMPS).
+rtmpEncryption: "no"
+
+###############################################
+# HLS settings
+
+hls: yes
+hlsAddress: :8888
+# By default, HLS is muxed with MPEG-TS. Set to "fmp4" to use fMP4 instead.
+hlsVariant: mpegts
+# Number of segments stored on the server.
+hlsSegmentCount: 7
+# Minimum duration of each segment.
+hlsSegmentDuration: 1s
+# Minimum duration of each part. Lower = less latency.
+hlsPartDuration: 200ms
+# Maximum latency.
+hlsSegmentMaxSize: 50M
+# Allow playback from external websites.
+hlsAllowOrigins:
+  - "*"
+# Always start publishing immediately.
+hlsAlwaysRemux: no
+
+###############################################
+# WebRTC settings
+
+webrtc: yes
+webrtcAddress: :8889
+# Enable TLS/HTTPS on the WebRTC server.
+webrtcEncryption: no
+# WebRTC local addresses for UDP/TCP
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+# ICE servers for WebRTC.
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+# Allow CORS from any origin for WebRTC.
+webrtcAllowOrigins:
+  - "*"
+
+###############################################
+# SRT settings
+
+srt: yes
+srtAddress: :8890
+
+###############################################
+# Metrics and API
+
+api: yes
+apiAddress: :9997
+# Enable TLS/HTTPS on the Control API server.
+apiEncryption: no
+# List of allowed CORS origins for the API.
+apiAllowOrigins:
+  - "*"
+# Enable Prometheus metrics.
+metrics: yes
+metricsAddress: :9998
+# Enable pprof profiling.
+pprof: no
+pprofAddress: :9999
+
+###############################################
+# Path configuration
+
+# Default settings for all paths
+pathDefaults:
+  # Source of the stream.
+  source: publisher
+
+  # If source is "publisher" and no publisher connects within this timeout,
+  # the stream is closed.
+  sourceOnDemand: no
+  sourceOnDemandStartTimeout: 10s
+  sourceOnDemandCloseAfter: 10s
+
+  # Maximum number of readers. 0 means infinite.
+  maxReaders: 0
+
+  # Record settings (disabled by default)
+  record: no
+
+# Stream paths - dynamically added via RTSP publish
+# Streams published by GStreamer will automatically appear here
+paths:
+  # Allow all paths to be dynamically created
+  all_others:

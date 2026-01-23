@@ -1,6 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import JSON
+from sqlalchemy import Boolean
+from sqlalchemy import Column
+from sqlalchemy import DateTime
+from sqlalchemy import Float
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy.orm import relationship
 
 from ..db.base_class import Base
 
@@ -10,13 +18,16 @@ class Alarm(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    camera_id = Column(Integer, ForeignKey("cameras.id"))
+    camera_id = Column(Integer, ForeignKey("cameras.id", ondelete="CASCADE"))
     class_name = Column(String)
     confidence_threshold = Column(Float)
     region_of_interest = Column(JSON)  # Store as array of points
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    camera = relationship("Camera", back_populates="alarms")
 
     # Relationships
     camera = relationship("Camera", back_populates="alarms")

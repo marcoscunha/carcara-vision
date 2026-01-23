@@ -14,13 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from src.services.cameras import camera_stream_managers
+
 from .api.endpoints import alarms
 from .api.endpoints import cameras
 from .api.endpoints import detections
 from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
 from .api.endpoints import streams
-from .api.endpoints import ws_streams
+from .api.endpoints import ws_streams  # Deprecated: kept for backward compatibility
 from .core.config import settings
 from .core.logging import setup_logging
 from .db.init_db import init_db
@@ -103,21 +105,9 @@ app.include_router(
     prefix=f"{settings.API_V1_STR}/models",
     tags=["models"]
 )
-app.include_router(
-    alarms.router,
-    prefix=f"{settings.API_V1_STR}/alarms",
-    tags=["alarms"]
-)
-app.include_router(
-    roi_endpoints.router,
-    prefix=f"{settings.API_V1_STR}/roi",
-    tags=["roi"]
-)
-app.include_router(
-    ws_streams.router,
-    prefix=f"{settings.API_V1_STR}/ws/streams",
-    tags=["ws_streams"]
-)
+app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
+app.include_router(roi_endpoints.router, prefix=f"{settings.API_V1_STR}/roi", tags=["roi"])
+app.include_router(ws_streams.router, prefix=f"{settings.API_V1_STR}/ws/streams", tags=["ws_streams"])
 
 
 @app.get("/")
@@ -137,6 +127,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"Database URI: {settings.SQLALCHEMY_DATABASE_URI}")
     logger.info(f"Using GPU: {settings.USE_GPU}")
+    logger.info(f"Camera Manager: {settings.MODEL_PATH}", end="")
+
     yield
     # Shutdown Logic
+    logger.info("Application shutting down...")
     logger.info("Application shutting down...")

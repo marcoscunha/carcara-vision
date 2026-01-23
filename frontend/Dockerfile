@@ -1,18 +1,21 @@
-FROM node:20-alpine as build
+# syntax=docker/dockerfile:1.4
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with specific flags
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+# Install dependencies with npm cache mount
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --legacy-peer-deps --no-audit --no-fund
 
 # Copy the rest of the application
 COPY . .
 
 # Build the application
 RUN npm run build
+# Build with console.log active
 
 # Production stage
 FROM nginx:alpine

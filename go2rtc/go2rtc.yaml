@@ -1,0 +1,28 @@
+# Low-latency WebRTC configuration
+webrtc:
+  candidates:
+    - stun:stun.l.google.com:19302
+  # Disable additional ICE candidates to speed up connection
+  ice_servers: []
+
+# API settings
+api:
+  listen: ":1984"
+  origin: "*" # Allow CORS from any origin
+
+# FFmpeg configuration - bin should only be the path to ffmpeg binary
+ffmpeg:
+  bin: ffmpeg
+
+# Streams with V4L2 devices
+# Using ffmpeg source with proper format for v4l2 devices
+streams:
+  Intergrated_webcam_hd: "ffmpeg:/dev/video0#video=h264#width=640#height=360"
+  hp_pro_webcam_C920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_126_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_127_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_132_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_134_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_136_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_137_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"
+  camera_139_hd_pro_webcam_c920: "ffmpeg:/dev/video4#video=h264#width=640#height=360"

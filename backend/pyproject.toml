@@ -1,46 +1,156 @@
 [tool.poetry]
 name = "carcara-nvc-backend"
-version = "0.1.0"
-description = "Backend for Carcara NVC - IP Camera Streaming and Object Detection"
+version = "2.0.0"
+description = "Network Video Controller with ML-powered Detection - Supporting YOLO, VLMs, and Edge AI"
 authors = ["Your Name <your.email@example.com>"]
 packages = [
     { include = "src" }
 ]
+readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11.12"
-fastapi = "0.115.12"
-uvicorn = "0.34.2"
-sqlalchemy = "2.0.40"
-psycopg2-binary = "2.9.10"
-pydantic = "2.11.4"
-pydantic-settings = "2.9.1"
-python-multipart = "0.0.20"
-python-jose = {extras = ["cryptography"], version = "3.4.0"}
-passlib = {extras = ["bcrypt"], version = "1.7.4"}
-alembic = "1.15.2"
-opencv-python = "4.11.0.86"
-numpy = "2.2.5"
-ultralytics = "8.3.121"
-torch = {version = "2.7.0", source = "pytorch"}
-torchvision = {version = "0.22.0", source = "pytorch"}
-websockets= "15.0.1"
+python = "^3.11"
+# Web Framework
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.34.0"}
+websockets = "^15.0"
+python-multipart = "^0.0.20"
+
+# Database
+sqlalchemy = "^2.0.40"
+psycopg2-binary = "^2.9.10"
+alembic = "^1.15.0"
+
+# Configuration & Validation
+pydantic = "^2.11.0"
+pydantic-settings = "^2.9.0"
+python-dotenv = "^1.0.0"
+
+# Security
+python-jose = {extras = ["cryptography"], version = "^3.4.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+
+# Computer Vision & ML - Core
+opencv-python = "^4.11.0"
+numpy = "^2.2.0"
+pillow = "^11.0.0"
+
+# YOLO Object Detection
+ultralytics = "^8.3.0"
+
+# PyTorch - CPU by default (override for GPU)
+torch = {version = "^2.7.0", source = "pytorch-cpu"}
+torchvision = {version = "^0.22.0", source = "pytorch-cpu"}
+
+# ONNX Runtime - CPU by default
+onnxruntime = {version = "^1.20.0", optional = true}
+
+# Optional: VLM Support
+ollama = {version = "^0.4.0", optional = true}
+openai = {version = "^1.60.0", optional = true}
+transformers = {version = "^4.48.0", optional = true}
+
+# Optional: TensorRT Support
+tensorrt = {version = "^10.0.0", optional = true}
+pycuda = {version = "^2024.1", optional = true}
+
+# Optional: Edge AI Support
+tflite-runtime = {version = "^2.14.0", optional = true}
+
+# System utilities
+psutil = "^6.0.0"
+aiofiles = "^24.1.0"
+httpx = "^0.28.0"
+
+[tool.poetry.extras]
+# GPU support with CUDA
+cuda = ["onnxruntime-gpu"]
+
+# TensorRT optimization
+tensorrt = ["tensorrt", "pycuda"]
+
+# VLM capabilities
+vlm = ["ollama", "openai", "transformers"]
+
+# Edge deployment (Raspberry Pi, Coral TPU)
+edge = ["tflite-runtime"]
+
+# Full installation with all features
+full = ["ollama", "openai", "transformers", "tensorrt", "pycuda", "tflite-runtime"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "8.3.5"
-black = "25.1.0"
-isort = "6.0.1"
-flake8 = "7.2.0"
+pytest = "^8.3.0"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^6.0.0"
+black = "^25.1.0"
+isort = "^6.0.0"
+flake8 = "^7.2.0"
+mypy = "^1.14.0"
+pre-commit = "^4.0.0"
 
-[[tool.poetry.source]]
-name = "pytorch"
-url = "https://download.pytorch.org/whl/cu118"
-priority = "explicit"
+[tool.poetry.group.jetson]
+optional = true
+
+[tool.poetry.group.jetson.dependencies]
+# Jetson-specific packages (installed via system on Jetson devices)
+# tensorrt and pycuda are typically pre-installed on JetPack
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.6.0"
+mkdocs-material = "^9.5.0"
+mkdocstrings = {extras = ["python"], version = "^0.27.0"}
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 priority = "explicit"
+
+[[tool.poetry.source]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip = [".git", ".venv", "migrations"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,6 +1,13 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import JSON
+from sqlalchemy import Column
+from sqlalchemy import DateTime
+from sqlalchemy import Float
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy.orm import relationship
 
 from ..db.base_class import Base
 
@@ -9,8 +16,8 @@ class Detection(Base):
     __tablename__ = "detections"
 
     id = Column(Integer, primary_key=True, index=True)
-    camera_id = Column(Integer, ForeignKey("cameras.id"))
-    stream_id = Column(Integer, ForeignKey("streams.id"))
+    camera_id = Column(Integer, ForeignKey("cameras.id", ondelete="CASCADE"))
+    stream_id = Column(Integer, ForeignKey("streams.id", ondelete="CASCADE"))
     frame_number = Column(Integer)
     timestamp = Column(DateTime, default=datetime.utcnow)
     detection_model_name = Column(String)

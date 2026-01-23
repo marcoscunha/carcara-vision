@@ -11,33 +11,22 @@ import {
   Slider,
   Button,
 } from '@mui/material';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { modelApi } from '../services/api';
+import { useModels, useUpdateModel } from '../hooks/useQueries';
 import { Model } from '../types';
 
 const Settings: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5);
 
-  const queryClient = useQueryClient();
-
-  const { data: models, isLoading } = useQuery('models', modelApi.getAll);
-
-  const updateMutation = useMutation(
-    (data: { name: string; confidence: number }) =>
-      modelApi.update(data.name, { confidence_threshold: data.confidence }),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('models');
-      },
-    }
-  );
+  // TanStack Query hooks for server state management
+  const { data: models, isLoading } = useModels();
+  const updateMutation = useUpdateModel();
 
   const handleSave = () => {
     if (selectedModel) {
       updateMutation.mutate({
         name: selectedModel,
-        confidence: confidenceThreshold,
+        data: { confidence_threshold: confidenceThreshold },
       });
     }
   };

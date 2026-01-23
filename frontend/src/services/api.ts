@@ -1,7 +1,8 @@
 import axios from 'axios';
-import { Camera, Stream, Detection, Alarm, Model, RegionOfInterest } from '../types';
+import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest, StreamURLs } from '../types';
 
 const API_URL = 'http://localhost:8000/api/v1';
+export const GO2RTC_URL = 'http://localhost:1984';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -41,16 +42,19 @@ export const cameraApi = {
 
 // Stream endpoints
 export const streamApi = {
-  getAll: async () => {
-    const response = await api.get<ApiResponse<Stream[]>>('/streams/');
+  getAll: async (status?: string) => {
+    const params = status ? { status } : {};
+    const response = await api.get<ApiResponse<Stream[]>>('/streams/', { params });
     return response.data;
   },
   getById: (id: number) => api.get<Stream>(`/streams/${id}`),
-  create: (data: Omit<Stream, 'id' | 'created_at' | 'updated_at'>) =>
-    api.post<Stream>('/streams', data),
+  getUrls: (id: number) => api.get<StreamURLs>(`/streams/${id}/urls`),
+  create: (data: StreamCreate) => api.post<Stream>('/streams/', data),
   update: (id: number, data: Partial<Stream>) =>
     api.put<Stream>(`/streams/${id}`, data),
   delete: (id: number) => api.delete(`/streams/${id}`),
+  restart: (id: number) => api.post<Stream>(`/streams/${id}/restart`),
+  checkHealth: () => api.get('/streams/health/go2rtc'),
 };
 
 // Detection endpoints

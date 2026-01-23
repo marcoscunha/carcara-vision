@@ -33,6 +33,24 @@ class Settings(BaseSettings):
     CUDA_VISIBLE_DEVICES: Optional[str] = os.getenv("CUDA_VISIBLE_DEVICES", None)
     USE_GPU: bool = os.getenv("USE_GPU", "False").lower() == "true"
 
+    # GStreamer Configuration (replaces go2rtc)
+    GSTREAMER_API_URL: str = os.getenv("GSTREAMER_API_URL", "http://gstreamer:8085")
+
+    # MediaMTX Configuration (media server for RTSP/WebRTC/HLS)
+    MEDIAMTX_API_URL: str = os.getenv("MEDIAMTX_API_URL", "http://mediamtx:9997")
+    MEDIAMTX_RTSP_HOST: str = os.getenv("MEDIAMTX_RTSP_HOST", "localhost")
+    MEDIAMTX_RTSP_PORT: int = int(os.getenv("MEDIAMTX_RTSP_PORT", "8554"))
+    MEDIAMTX_WEBRTC_PORT: int = int(os.getenv("MEDIAMTX_WEBRTC_PORT", "8889"))
+    MEDIAMTX_HLS_PORT: int = int(os.getenv("MEDIAMTX_HLS_PORT", "8888"))
+
+    # Legacy go2rtc Configuration (deprecated - kept for backward compatibility)
+    GO2RTC_URL: str = os.getenv("GO2RTC_URL", "http://go2rtc:1984")
+    GO2RTC_RTSP_PORT: int = int(os.getenv("GO2RTC_RTSP_PORT", "8554"))
+    GO2RTC_RTSP_HOST: str = os.getenv("GO2RTC_RTSP_HOST", "localhost")
+
+    # Model path
+    MODEL_PATH: str = os.getenv("MODEL_PATH", "yolov8n.pt")
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.SQLALCHEMY_DATABASE_URI = (

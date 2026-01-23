@@ -1,6 +1,12 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import Boolean
+from sqlalchemy import Column
+from sqlalchemy import DateTime
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy.orm import relationship
 
 from ..db.base_class import Base
 
@@ -17,8 +23,8 @@ class Camera(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    streams = relationship("Stream", back_populates="camera")
-    detections = relationship("Detection", back_populates="camera")
-    alarms = relationship("Alarm", back_populates="camera")
-    rois = relationship("RegionOfInterest", back_populates="camera")
+    # Relationships - cascade delete all related records when camera is deleted
+    streams = relationship("Stream", back_populates="camera", cascade="all, delete-orphan")
+    detections = relationship("Detection", back_populates="camera", cascade="all, delete-orphan")
+    alarms = relationship("Alarm", back_populates="camera", cascade="all, delete-orphan")
+    rois = relationship("RegionOfInterest", back_populates="camera", cascade="all, delete-orphan")

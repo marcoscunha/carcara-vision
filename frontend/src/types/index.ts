@@ -12,14 +12,33 @@ export interface Camera {
   updated_at: string;
 }
 
+export interface StreamURLs {
+  rtsp: string;
+  webrtc: string;
+  hls: string;
+  mse: string;
+  mjpeg: string;
+  ws: string;
+}
+
 export interface Stream {
   id: number;
   camera_id: number;
+  stream_name: string;
   status: string;
   current_frame: number;
-  metadata: Record<string, any>;
+  urls: StreamURLs | null;
+  stream_metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+export interface StreamCreate {
+  camera_id: number;
+  width?: number;
+  height?: number;
+  codec?: string;
+  stream_metadata?: Record<string, any>;
 }
 
 export interface Detection {

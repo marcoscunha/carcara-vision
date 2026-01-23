@@ -2,7 +2,8 @@
 
 # Wait for the database to be ready
 echo "Waiting for database to be ready..."
-while ! nc -z db 5432; do
+DB_HOST="${POSTGRES_SERVER:-${DB_HOST:-localhost}}"
+while ! nc -z $DB_HOST 5432; do
   sleep 0.1
 done
 echo "Database is ready!"

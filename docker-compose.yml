@@ -4,12 +4,65 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "8221:80"
     environment:
       - REACT_APP_API_URL=http://localhost:8000/api/v1
     depends_on:
       - backend
 
+  # GStreamer Pipeline Manager - replaces go2rtc
+  gstreamer:
+    build:
+      context: ./gstreamer
+      dockerfile: Dockerfile
+    container_name: gstreamer
+    ports:
+      - "8085:8085"  # GStreamer API
+    environment:
+      - MEDIAMTX_HOST=mediamtx
+      - MEDIAMTX_RTSP_PORT=8554
+      - GSTREAMER_API_PORT=8085
+    volumes:
+      - ./gstreamer:/app
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video4:/dev/video4
+      - /dev/dri:/dev/dri  # For hardware acceleration (VAAPI)
+    depends_on:
+      - mediamtx
+    privileged: true
+    restart: unless-stopped
+
+  # MediaMTX - Media server for RTSP/WebRTC/HLS
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    ports:
+      - "8554:8554"   # RTSP
+      - "8889:8889"   # WebRTC
+      - "8888:8888"   # HLS
+      - "1935:1935"   # RTMP
+      - "9997:9997"   # API
+      - "9998:9998"   # Metrics
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml
+    restart: unless-stopped
+
+  # Legacy go2rtc - kept for reference, can be removed after migration
+  # go2rtc:
+  #   build:
+  #     context: ./go2rtc
+  #     dockerfile: Dockerfile
+  #   container_name: go2rtc
+  #   ports:
+  #     - "1984:1984" # HTTP API and WebRTC
+  #     - "8554:8554" # RTSP
+  #   volumes:
+  #     - ./go2rtc/go2rtc.yaml:/config/go2rtc.yaml
+  #   devices:
+  #     - /dev/video0:/dev/video0
+  #     - /dev/video4:/dev/video4
+  #   restart: unless-stopped
   backend:
     build:
       context: ./backend
@@ -26,6 +79,8 @@ services:
       - ./backend:/app
     depends_on:
       - db
+      - mediamtx
+      - gstreamer
     devices:
       - "/dev/video0:/dev/video0"
       - "/dev/video1:/dev/video1"
