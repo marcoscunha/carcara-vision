@@ -7,8 +7,11 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status](https://img.shields.io/badge/Status-Under%20Development-orange.svg)]()
 
 </div>
+
+> ⚠️ **Work in Progress**: This project is currently under active development. Features, APIs, and documentation may change without notice. Hardware acceleration support is implemented but pending validation on real hardware. Use in production at your own risk.
 
 ## 🎯 Overview
 
@@ -23,29 +26,56 @@ Carcara NVC is a robust backend system for managing IP camera streams with real-
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Carcara NVC                               │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │   FastAPI       │  │   WebSocket     │  │   REST API      │ │
-│  │   Backend       │  │   Streams       │  │   Endpoints     │ │
-│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘ │
-│           │                    │                    │           │
-│  ┌────────┴────────────────────┴────────────────────┴────────┐ │
-│  │                    ML Inference Layer                      │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │ │
-│  │  │   YOLO   │  │   VLM    │  │   ONNX   │  │ TensorRT │  │ │
-│  │  │  Engine  │  │  Engine  │  │  Engine  │  │  Engine  │  │ │
-│  │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │ │
-│  └───────┴─────────────┴─────────────┴─────────────┴────────┘ │
-│  ┌──────────────────────────────────────────────────────────┐ │
-│  │               Hardware Accelerator Layer                  │ │
-│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐  │ │
-│  │  │ CPU  │ │ CUDA │ │Jetson│ │  RPi │ │Coral │ │Hailo │  │ │
-│  │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘  │ │
-│  └──────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph CarcaraNVC["🎥 Carcara NVC"]
+        subgraph API["API Layer"]
+            FastAPI["FastAPI Backend"]
+            WebSocket["WebSocket Streams"]
+            REST["REST API Endpoints"]
+        end
+
+        subgraph ML["ML Inference Layer"]
+            YOLO["YOLO Engine"]
+            VLM["VLM Engine"]
+            ONNX["ONNX Engine"]
+            TensorRT["TensorRT Engine"]
+        end
+
+        subgraph HW["Hardware Accelerator Layer"]
+            CPU["CPU"]
+            CUDA["CUDA"]
+            Jetson["Jetson"]
+            RPi["Raspberry Pi"]
+            Coral["Coral TPU"]
+            Hailo["Hailo-8"]
+        end
+    end
+
+    subgraph External["External Services"]
+        go2rtc["go2rtc Stream Server"]
+        DB[(PostgreSQL)]
+        Cameras["IP Cameras / RTSP"]
+    end
+
+    FastAPI --> ML
+    WebSocket --> ML
+    REST --> ML
+
+    YOLO --> HW
+    VLM --> HW
+    ONNX --> HW
+    TensorRT --> HW
+
+    Cameras --> go2rtc
+    go2rtc --> FastAPI
+    FastAPI --> DB
+
+    style CarcaraNVC fill:#1a1a2e,stroke:#16213e,color:#fff
+    style API fill:#0f3460,stroke:#16213e,color:#fff
+    style ML fill:#533483,stroke:#16213e,color:#fff
+    style HW fill:#e94560,stroke:#16213e,color:#fff
+    style External fill:#2d4059,stroke:#16213e,color:#fff
 ```
 
 ## ✨ Features
@@ -68,16 +98,18 @@ Carcara NVC is a robust backend system for managing IP camera streams with real-
 
 ### Hardware Acceleration
 
-| Platform             | Accelerator      | Status          |
-| -------------------- | ---------------- | --------------- |
-| Desktop/Server       | CUDA (NVIDIA)    | ✅ Full Support |
-| Desktop/Server       | TensorRT         | ✅ Full Support |
-| Jetson Nano          | Jetson GPU       | ✅ Full Support |
-| Jetson Xavier/Orin   | Jetson GPU + DLA | ✅ Full Support |
-| Raspberry Pi 4/5     | CPU (ARM NEON)   | ✅ Full Support |
-| Raspberry Pi + Coral | Edge TPU         | ✅ Full Support |
-| Raspberry Pi + Hailo | Hailo-8/8L       | ✅ Full Support |
-| Intel CPUs           | OpenVINO         | 🚧 Planned      |
+> **Note**: Hardware acceleration backends are implemented but require validation on actual hardware. Status reflects implementation state, not production readiness.
+
+| Platform             | Accelerator      | Implementation | Hardware Tested |
+| -------------------- | ---------------- | -------------- | --------------- |
+| Desktop/Server       | CUDA (NVIDIA)    | ✅ Implemented | ⏳ Pending      |
+| Desktop/Server       | TensorRT         | ✅ Implemented | ⏳ Pending      |
+| Jetson Nano          | Jetson GPU       | ✅ Implemented | ⏳ Pending      |
+| Jetson Xavier/Orin   | Jetson GPU + DLA | ✅ Implemented | ⏳ Pending      |
+| Raspberry Pi 4/5     | CPU (ARM NEON)   | ✅ Implemented | ⏳ Pending      |
+| Raspberry Pi + Coral | Edge TPU         | ✅ Implemented | ⏳ Pending      |
+| Raspberry Pi + Hailo | Hailo-8/8L       | ✅ Implemented | ⏳ Pending      |
+| Intel CPUs           | OpenVINO         | 🚧 Planned     | ⏳ Pending      |
 
 ### Video Management
 
@@ -403,9 +435,25 @@ docker compose restart backend
 docker compose restart frontend
 ```
 
+## 🚧 Development Roadmap
+
+- [x] Core API structure (FastAPI backend)
+- [x] Database models and migrations
+- [x] ML inference layer architecture
+- [x] Hardware accelerator abstraction layer
+- [x] VLM integration (Ollama, OpenAI)
+- [x] Frontend basic structure (React)
+- [ ] Hardware acceleration validation on real devices
+- [ ] End-to-end testing on Jetson devices
+- [ ] End-to-end testing on Raspberry Pi
+- [ ] Coral TPU integration testing
+- [ ] Hailo-8 integration testing
+- [ ] Production deployment guide
+- [ ] Performance benchmarks
+
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+Contributions are welcome! As this project is under active development, please open an issue first to discuss proposed changes.
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
