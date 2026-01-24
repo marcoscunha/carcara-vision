@@ -16,11 +16,17 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Chip,
+  alpha,
+  useTheme,
+  Skeleton,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Videocam as VideocamIcon,
+  Circle as CircleIcon,
 } from '@mui/icons-material';
 import { useCameras, useCreateCamera, useUpdateCamera, useDeleteCamera } from '../hooks/useQueries';
 import { Camera } from '../types';
@@ -38,6 +44,7 @@ const Cameras: React.FC = () => {
     fps: 0,
     is_available: false,
   });
+  const theme = useTheme();
 
   // TanStack Query hooks for server state management
   const { data: cameras, isLoading } = useCameras();
@@ -100,66 +107,206 @@ const Cameras: React.FC = () => {
   };
 
   if (isLoading) {
-    return <Typography>Loading...</Typography>;
+    return (
+      <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+          <Skeleton variant="text" width={150} height={40} />
+          <Skeleton variant="rounded" width={140} height={40} />
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} variant="rounded" height={180} />
+          ))}
+        </Box>
+      </Box>
+    );
   }
 
   const cameraList = Array.isArray(cameras) ? cameras : [];
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">Cameras</Typography>
+    <Box className="fade-in">
+      {/* Page Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 4,
+          pb: 2,
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Cameras
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Manage your video surveillance cameras
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpen()}
+          sx={{
+            px: 3,
+            py: 1.25,
+          }}
         >
           Add Camera
         </Button>
       </Box>
 
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" sx={{ mb: 2 }}>Local Cameras</Typography>
+      {/* Local Cameras Section */}
+      <Box sx={{ mb: 5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 4,
+              height: 24,
+              borderRadius: 2,
+              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+            }}
+          />
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>Local Cameras</Typography>
+        </Box>
         <CameraScanner />
       </Box>
 
       <Divider sx={{ my: 4 }} />
 
+      {/* IP Cameras Section */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" sx={{ mb: 2 }}>IP Cameras</Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
-          {cameraList.map((camera: Camera) => (
-            <Box key={camera.id}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6">{camera.name}</Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    {camera.rtsp_url}
-                  </Typography>
-                  <Typography
-                    color={camera.is_active ? 'success.main' : 'error.main'}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 4,
+              height: 24,
+              borderRadius: 2,
+              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+            }}
+          />
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>IP Cameras</Typography>
+          <Chip
+            label={cameraList.length}
+            size="small"
+            sx={{
+              ml: 1,
+              backgroundColor: alpha(theme.palette.primary.main, 0.15),
+              color: theme.palette.primary.main,
+              fontWeight: 600,
+            }}
+          />
+        </Box>
+
+        {cameraList.length === 0 ? (
+          <Box
+            sx={{
+              textAlign: 'center',
+              py: 6,
+              px: 2,
+              borderRadius: 3,
+              border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+              backgroundColor: alpha(theme.palette.background.paper, 0.3),
+            }}
+          >
+            <VideocamIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
+              No IP cameras configured
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              Click "Add Camera" to add your first IP camera
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+            {cameraList.map((camera: Camera) => (
+              <Card key={camera.id}>
+                <CardContent sx={{ p: 2.5 }}>
+                  {/* Camera Preview Placeholder */}
+                  <Box
+                    sx={{
+                      aspectRatio: '16/9',
+                      backgroundColor: alpha(theme.palette.background.default, 0.5),
+                      borderRadius: 2,
+                      mb: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                    }}
                   >
-                    {camera.is_active ? 'Active' : 'Inactive'}
+                    <VideocamIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
+                  </Box>
+
+                  {/* Camera Info */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{camera.name}</Typography>
+                    <Chip
+                      icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                      label={camera.is_active ? 'Active' : 'Inactive'}
+                      size="small"
+                      color={camera.is_active ? 'success' : 'error'}
+                      sx={{
+                        '& .MuiChip-icon': {
+                          color: 'inherit',
+                          animation: camera.is_active ? 'pulse 2s ease-in-out infinite' : 'none',
+                        },
+                      }}
+                    />
+                  </Box>
+
+                  <Typography
+                    color="text.secondary"
+                    variant="body2"
+                    sx={{
+                      mb: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {camera.rtsp_url || 'No URL configured'}
                   </Typography>
-                  <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+
+                  {/* Actions */}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                     <IconButton
-                      color="primary"
+                      size="small"
                       onClick={() => handleOpen(camera)}
+                      sx={{
+                        color: 'primary.main',
+                        '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
+                      }}
                     >
-                      <EditIcon />
+                      <EditIcon fontSize="small" />
                     </IconButton>
                     <IconButton
-                      color="error"
+                      size="small"
                       onClick={() => deleteMutation.mutate(camera.id)}
+                      sx={{
+                        color: 'error.main',
+                        '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
+                      }}
                     >
-                      <DeleteIcon />
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Box>
                 </CardContent>
               </Card>
-            </Box>
-          ))}
-        </Box>
+            ))}
+          </Box>
+        )}
       </Box>
 
       <Dialog open={open} onClose={handleClose}>

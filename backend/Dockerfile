@@ -1,35 +1,26 @@
 # syntax=docker/dockerfile:1.4
 # Build stage
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies needed for building
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    dos2unix
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Copy requirements first for better caching
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml uv.lock* ./
 
-# Install Python dependencies with cache mounts
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/pypoetry \
-    pip install poetry && \
-    poetry config virtualenvs.create false && \
-    poetry config installer.max-workers 10 && \
-    poetry install --only main --no-root --no-interaction
+# Create virtual environment and install Python dependencies
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv /app/.venv && \
+    uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
 COPY . .
 
-# Fix line endings and make scripts executable in one layer
-RUN dos2unix scripts/migrate.sh scripts/start.sh && \
-    chmod +x scripts/migrate.sh scripts/start.sh
-
 # Final stage
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -42,18 +33,24 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     netcat-traditional \
     v4l-utils
 
-# Copy Python packages from builder (already cleaned)
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Install uv for runtime
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Copy the virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy only necessary application files
 COPY --from=builder /app/src /app/src
-COPY --from=builder /app/scripts /app/scripts
 COPY --from=builder /app/alembic.ini /app/alembic.ini
 COPY --from=builder /app/migrations /app/migrations
 
-# Add application directory to PYTHONPATH
+# Add virtual environment to PATH
+ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
+ENV VIRTUAL_ENV=/app/.venv
+
+# Expose port
+EXPOSE 8000
 
 # Run migrations and start the application
-CMD ["/bin/bash", "./scripts/start.sh"]
+CMD sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --log-level debug --reload --reload-dir src"

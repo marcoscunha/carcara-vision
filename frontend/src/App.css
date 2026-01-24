@@ -1,42 +1,185 @@
+/* CARCARA-NVC App Styles */
+
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Page header styling */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(72, 79, 87, 0.2);
+}
+
+.page-header h4 {
+  background: linear-gradient(135deg, #F9FAFB 0%, #E3D3B0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+/* Card grid */
+.card-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+/* Status indicators */
+.status-active {
+  color: #10B981;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-active::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10B981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.status-inactive {
+  color: #EF4444;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-inactive::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #EF4444;
+}
+
+/* Camera card specific */
+.camera-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.camera-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #F5A45A 0%, #D26A27 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.camera-card:hover::before {
+  opacity: 1;
+}
+
+/* Stream preview */
+.stream-preview {
+  aspect-ratio: 16/9;
+  background: linear-gradient(135deg, #1a1c20 0%, #0D0E10 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.stream-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(72, 79, 87, 0.2);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(72, 79, 87, 0.1) 25%,
+    rgba(72, 79, 87, 0.2) 50%,
+    rgba(72, 79, 87, 0.1) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Pulse animation for live indicators */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.live-indicator {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Accent gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #F5A45A 0%, #D26A27 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Empty state */
+.empty-state {
   text-align: center;
+  padding: 4rem 2rem;
+  color: #9CA3AF;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.empty-state svg {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  color: #484F57;
 }
 
-@keyframes logo-spin {
+/* Transitions */
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
   from {
-    transform: rotate(0deg);
+    opacity: 0;
+    transform: translateY(10px);
   }
   to {
-    transform: rotate(360deg);
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+/* Focus ring for accessibility */
+.focus-ring:focus-visible {
+  outline: 2px solid #F5A45A;
+  outline-offset: 2px;
 }

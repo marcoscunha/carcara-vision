@@ -117,19 +117,19 @@ open http://localhost:8000/docs
 ```bash
 # Backend setup
 cd backend
-poetry install
+uv sync
 
 # Install with GPU support
-poetry install -E cuda
+uv sync --extra cuda
 
 # Install with VLM support
-poetry install -E vlm
+uv sync --extra vlm
 
 # Install everything
-poetry install -E full
+uv sync --extra full
 
 # Run development server
-poetry run uvicorn src.main:app --reload
+uv run uvicorn src.main:app --reload
 
 # Frontend setup
 cd ../frontend

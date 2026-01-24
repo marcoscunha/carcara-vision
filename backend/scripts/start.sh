@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Activate the virtual environment
+source /app/.venv/bin/activate
+
 # Run migrations
 if [ -f "./scripts/migrate.sh" ]; then
     echo "Running migrations"
@@ -18,5 +21,5 @@ fi
 # Start the application
 echo "Starting application"
 echo "--------------------------------"
-exec uvicorn src.main:app --host 0.0.0.0 --port 8000 --log-level debug --reload --reload-dir src
+exec /app/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --log-level debug --reload --reload-dir src
 echo "--------------------------------"

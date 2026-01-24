@@ -76,7 +76,8 @@ services:
       - POSTGRES_DB=carcara_nvc
       - USE_GPU=false
     volumes:
-      - ./backend:/app
+      - ./backend/src:/app/src
+      - ./backend/migrations:/app/migrations
     depends_on:
       - db
       - mediamtx

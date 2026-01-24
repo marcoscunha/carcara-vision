@@ -16,12 +16,17 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
+  Chip,
+  alpha,
+  useTheme,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
+  PlayCircle as PlayCircleIcon,
+  Circle as CircleIcon,
 } from '@mui/icons-material';
 import { useStreams, useCreateStream, useUpdateStream, useDeleteStream, useCameras } from '../hooks/useQueries';
 import { Stream, Camera } from '../types';
@@ -36,6 +41,7 @@ const Streams: React.FC = () => {
     current_frame: 0,
     stream_metadata: {},
   });
+  const theme = useTheme();
 
   // TanStack Query hooks for server state management
   const {
@@ -103,14 +109,21 @@ const Streams: React.FC = () => {
   if (streamsLoading || camerasLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
+        <CircularProgress sx={{ color: 'primary.main' }} />
       </Box>
     );
   }
 
   if (streamsError || camerasError) {
     return (
-      <Alert severity="error" sx={{ m: 2 }}>
+      <Alert
+        severity="error"
+        sx={{
+          m: 2,
+          backgroundColor: alpha(theme.palette.error.main, 0.1),
+          border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+        }}
+      >
         Error loading data: {streamsErrorData?.message || 'Unknown error'}
       </Alert>
     );
@@ -119,15 +132,50 @@ const Streams: React.FC = () => {
   const streamList = Array.isArray(streams) ? streams : [];
   const cameraList = Array.isArray(cameras) ? cameras : [];
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'success';
+      case 'stopped': return 'error';
+      default: return 'warning';
+    }
+  };
+
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">Streams</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+    <Box className="fade-in">
+      {/* Page Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 4,
+          pb: 2,
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Streams
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Monitor active video streams
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={() => refetchStreams()}
+            sx={{ px: 2.5 }}
           >
             Refresh
           </Button>
@@ -135,46 +183,120 @@ const Streams: React.FC = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => handleOpen()}
+            sx={{ px: 3 }}
           >
             Add Stream
           </Button>
         </Box>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
-        {streamList.map((stream: Stream) => {
-          const camera = cameraList.find((c: Camera) => c.id === stream.camera_id);
-          return (
-            <Box key={stream.id}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6">{camera?.name || 'Unknown Camera'}</Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    Status: {stream.status}
-                  </Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    Frame: {stream.current_frame}
-                  </Typography>
-                  <CameraStream stream={stream} />
-                  <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                    <IconButton
-                      color="primary"
-                      onClick={() => handleOpen(stream)}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      color="error"
-                      onClick={() => deleteMutation.mutate(stream.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Box>
-          );
-        })}
+      {/* Streams Section */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 4,
+              height: 24,
+              borderRadius: 2,
+              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+            }}
+          />
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>Active Streams</Typography>
+          <Chip
+            label={streamList.length}
+            size="small"
+            sx={{
+              ml: 1,
+              backgroundColor: alpha(theme.palette.primary.main, 0.15),
+              color: theme.palette.primary.main,
+              fontWeight: 600,
+            }}
+          />
+        </Box>
+
+        {streamList.length === 0 ? (
+          <Box
+            sx={{
+              textAlign: 'center',
+              py: 6,
+              px: 2,
+              borderRadius: 3,
+              border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+              backgroundColor: alpha(theme.palette.background.paper, 0.3),
+            }}
+          >
+            <PlayCircleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
+              No active streams
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              Click "Add Stream" to start streaming from a camera
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+            {streamList.map((stream: Stream) => {
+              const camera = cameraList.find((c: Camera) => c.id === stream.camera_id);
+              return (
+                <Card key={stream.id}>
+                  <CardContent sx={{ p: 2.5 }}>
+                    {/* Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{camera?.name || 'Unknown Camera'}</Typography>
+                      <Chip
+                        icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                        label={stream.status}
+                        size="small"
+                        color={getStatusColor(stream.status) as any}
+                        sx={{
+                          textTransform: 'capitalize',
+                          '& .MuiChip-icon': {
+                            color: 'inherit',
+                            animation: stream.status === 'running' ? 'pulse 2s ease-in-out infinite' : 'none',
+                          },
+                        }}
+                      />
+                    </Box>
+
+                    {/* Stream Preview */}
+                    <Box sx={{ mb: 2 }}>
+                      <CameraStream stream={stream} />
+                    </Box>
+
+                    {/* Frame Counter */}
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Frame: {stream.current_frame.toLocaleString()}
+                    </Typography>
+
+                    {/* Actions */}
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpen(stream)}
+                        sx={{
+                          color: 'primary.main',
+                          '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => deleteMutation.mutate(stream.id)}
+                        sx={{
+                          color: 'error.main',
+                          '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </Box>
+        )}
       </Box>
 
       <Dialog open={open} onClose={handleClose}>

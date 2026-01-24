@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Activate the virtual environment
+source /app/.venv/bin/activate
+
 # Wait for the database to be ready
 echo "Waiting for database to be ready..."
 DB_HOST="${POSTGRES_SERVER:-${DB_HOST:-localhost}}"
@@ -23,6 +26,6 @@ echo "Database is ready!"
 
 # Run migration
 echo "Running migration..."
-alembic upgrade head
+/app/.venv/bin/alembic upgrade head
 
 echo "Migration completed!"

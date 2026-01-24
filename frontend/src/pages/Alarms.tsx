@@ -15,11 +15,17 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Chip,
+  alpha,
+  useTheme,
+  Skeleton,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Notifications as NotificationsIcon,
+  Circle as CircleIcon,
 } from '@mui/icons-material';
 import { useAlarms, useCreateAlarm, useUpdateAlarm, useDeleteAlarm, useCameras, useModels } from '../hooks/useQueries';
 import { Alarm, Camera, Model } from '../types';
@@ -35,6 +41,7 @@ const Alarms: React.FC = () => {
     region_of_interest: [0, 0, 0, 0],
     is_active: true,
   });
+  const theme = useTheme();
 
   // TanStack Query hooks for server state management
   const { data: alarms, isLoading: alarmsLoading } = useAlarms();
@@ -96,7 +103,19 @@ const Alarms: React.FC = () => {
   };
 
   if (alarmsLoading || camerasLoading || modelsLoading) {
-    return <Typography>Loading...</Typography>;
+    return (
+      <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+          <Skeleton variant="text" width={120} height={40} />
+          <Skeleton variant="rounded" width={130} height={40} />
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} variant="rounded" height={180} />
+          ))}
+        </Box>
+      </Box>
+    );
   }
 
   const alarmList = alarms?.data || [];
@@ -104,59 +123,170 @@ const Alarms: React.FC = () => {
   const modelList = models?.data || [];
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">Alarms</Typography>
+    <Box className="fade-in">
+      {/* Page Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 4,
+          pb: 2,
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Alarms
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Configure detection alerts and notifications
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpen()}
+          sx={{
+            px: 3,
+            py: 1.25,
+          }}
         >
           Add Alarm
         </Button>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
-        {alarmList.map((alarm: Alarm) => {
-          const camera = cameraList.find((c: Camera) => c.id === alarm.camera_id);
-          return (
-            <Box key={alarm.id}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6">{alarm.name}</Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    Camera: {camera?.name || 'Unknown'}
-                  </Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    Class: {alarm.class_name}
-                  </Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    Confidence: {alarm.confidence_threshold}
-                  </Typography>
-                  <Typography
-                    color={alarm.is_active ? 'success.main' : 'error.main'}
-                  >
-                    {alarm.is_active ? 'Active' : 'Inactive'}
-                  </Typography>
-                  <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                    <IconButton
-                      color="primary"
-                      onClick={() => handleOpen(alarm)}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      color="error"
-                      onClick={() => deleteMutation.mutate(alarm.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Box>
-          );
-        })}
+      {/* Alarms Grid */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 4,
+              height: 24,
+              borderRadius: 2,
+              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+            }}
+          />
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>Configured Alarms</Typography>
+          <Chip
+            label={alarmList.length}
+            size="small"
+            sx={{
+              ml: 1,
+              backgroundColor: alpha(theme.palette.primary.main, 0.15),
+              color: theme.palette.primary.main,
+              fontWeight: 600,
+            }}
+          />
+        </Box>
+
+        {alarmList.length === 0 ? (
+          <Box
+            sx={{
+              textAlign: 'center',
+              py: 6,
+              px: 2,
+              borderRadius: 3,
+              border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+              backgroundColor: alpha(theme.palette.background.paper, 0.3),
+            }}
+          >
+            <NotificationsIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
+              No alarms configured
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              Click "Add Alarm" to create your first detection alert
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+            {alarmList.map((alarm: Alarm) => {
+              const camera = cameraList.find((c: Camera) => c.id === alarm.camera_id);
+              return (
+                <Card key={alarm.id}>
+                  <CardContent sx={{ p: 2.5 }}>
+                    {/* Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{alarm.name}</Typography>
+                      <Chip
+                        icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                        label={alarm.is_active ? 'Active' : 'Inactive'}
+                        size="small"
+                        color={alarm.is_active ? 'success' : 'error'}
+                        sx={{
+                          '& .MuiChip-icon': {
+                            color: 'inherit',
+                            animation: alarm.is_active ? 'pulse 2s ease-in-out infinite' : 'none',
+                          },
+                        }}
+                      />
+                    </Box>
+
+                    {/* Info Grid */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">Camera</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{camera?.name || 'Unknown'}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">Detection Class</Typography>
+                        <Chip
+                          label={alarm.class_name}
+                          size="small"
+                          sx={{
+                            height: 22,
+                            backgroundColor: alpha(theme.palette.secondary.main, 0.15),
+                            color: theme.palette.secondary.main,
+                          }}
+                        />
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="text.secondary">Confidence</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {(alarm.confidence_threshold * 100).toFixed(0)}%
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* Actions */}
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpen(alarm)}
+                        sx={{
+                          color: 'primary.main',
+                          '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => deleteMutation.mutate(alarm.id)}
+                        sx={{
+                          color: 'error.main',
+                          '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </Box>
+        )}
       </Box>
 
       <Dialog open={open} onClose={handleClose}>
