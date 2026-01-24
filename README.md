@@ -22,7 +22,7 @@ Carcara NVC is a robust backend system for managing IP camera streams with real-
 - **🤖 Multi-Model ML Support**: YOLO (v5, v8, v11) for object detection + Vision Language Models (VLMs) for intelligent scene understanding
 - **⚡ Hardware Acceleration**: Native support for CUDA, TensorRT, Jetson, Raspberry Pi, Coral TPU, and Hailo accelerators
 - **🔌 Modular Architecture**: Pluggable inference engines and accelerator backends
-- **📹 Flexible Streaming**: Integration with go2rtc for efficient stream handling
+- **📹 Flexible Streaming**: GStreamer pipelines with MediaMTX for RTSP/WebRTC stream handling
 
 ## 🏗️ Architecture
 
@@ -31,7 +31,6 @@ flowchart TB
     subgraph CarcaraNVC["🎥 Carcara NVC"]
         subgraph API["API Layer"]
             FastAPI["FastAPI Backend"]
-            WebSocket["WebSocket Streams"]
             REST["REST API Endpoints"]
         end
 
@@ -52,14 +51,17 @@ flowchart TB
         end
     end
 
+    subgraph Streaming["Streaming Layer"]
+        GStreamer["GStreamer Pipeline Manager"]
+        MediaMTX["MediaMTX RTSP Server"]
+    end
+
     subgraph External["External Services"]
-        go2rtc["go2rtc Stream Server"]
         DB[(PostgreSQL)]
         Cameras["IP Cameras / RTSP"]
     end
 
     FastAPI --> ML
-    WebSocket --> ML
     REST --> ML
 
     YOLO --> HW
@@ -67,15 +69,17 @@ flowchart TB
     ONNX --> HW
     TensorRT --> HW
 
-    Cameras --> go2rtc
-    go2rtc --> FastAPI
+    Cameras --> GStreamer
+    GStreamer --> MediaMTX
+    MediaMTX --> FastAPI
     FastAPI --> DB
 
-    style CarcaraNVC fill:#1a1a2e,stroke:#16213e,color:#fff
-    style API fill:#0f3460,stroke:#16213e,color:#fff
-    style ML fill:#533483,stroke:#16213e,color:#fff
-    style HW fill:#e94560,stroke:#16213e,color:#fff
-    style External fill:#2d4059,stroke:#16213e,color:#fff
+    style CarcaraNVC fill:#181A1F,stroke:#484F57,color:#F9FAFB
+    style API fill:#D26A27,stroke:#484F57,color:#F9FAFB
+    style ML fill:#F5A45A,stroke:#484F57,color:#181A1F
+    style HW fill:#E3D3B0,stroke:#484F57,color:#181A1F
+    style Streaming fill:#D26A27,stroke:#484F57,color:#F9FAFB
+    style External fill:#484F57,stroke:#181A1F,color:#F9FAFB
 ```
 
 ## ✨ Features
@@ -113,9 +117,9 @@ flowchart TB
 
 ### Video Management
 
-- Camera discovery (local USB, RTSP, ONVIF)
-- Stream transcoding via go2rtc
-- WebSocket live streaming
+- Camera discovery (RTSP, ONVIF)
+- GStreamer pipeline management for video processing
+- MediaMTX for RTSP/WebRTC/HLS streaming
 - Alarm/event system
 
 ## 🚀 Quick Start
@@ -241,7 +245,7 @@ Once running, access the interactive API documentation:
 - `POST /api/v1/streams/` - Create a new stream
 - `GET /api/v1/streams/` - List all streams
 - `GET /api/v1/streams/{stream_id}` - Get stream details
-- `WS /api/v1/ws/stream/{id}` - WebSocket live stream
+- `GET /api/v1/streams/{stream_id}/rtsp` - Get RTSP stream URL
 
 ### Detections
 
@@ -367,7 +371,8 @@ carcara-nvc/
 │   ├── pyproject.toml
 │   └── Dockerfile
 ├── frontend/                    # React frontend
-├── go2rtc/                      # Stream server config
+├── gstreamer/                   # GStreamer pipeline manager
+├── mediamtx/                    # MediaMTX RTSP server config
 ├── docker-compose.yml
 └── README.md
 ```
@@ -378,13 +383,13 @@ carcara-nvc/
 cd backend
 
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run with coverage
-poetry run pytest --cov=src --cov-report=html
+uv run pytest --cov=src --cov-report=html
 
 # Run specific test file
-poetry run pytest tests/src/services/test_detection_service.py
+uv run pytest tests/src/services/test_detection_service.py -v
 ```
 
 ## Docker Commands
@@ -468,7 +473,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🙏 Acknowledgments
 
 - [Ultralytics](https://ultralytics.com/) for YOLO models
-- [go2rtc](https://github.com/AlexxIT/go2rtc) for stream handling
+- [GStreamer](https://gstreamer.freedesktop.org/) for video pipeline processing
+- [MediaMTX](https://github.com/bluenviron/mediamtx) for RTSP/WebRTC streaming
 - [Ollama](https://ollama.com/) for local VLM inference
 - The FastAPI and Pydantic teams
 

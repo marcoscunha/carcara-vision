@@ -22,7 +22,6 @@ from .api.endpoints import detections
 from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
 from .api.endpoints import streams
-from .api.endpoints import ws_streams  # Deprecated: kept for backward compatibility
 from .core.config import settings
 from .core.logging import setup_logging
 from .db.init_db import init_db
@@ -107,7 +106,6 @@ app.include_router(
 )
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(roi_endpoints.router, prefix=f"{settings.API_V1_STR}/roi", tags=["roi"])
-app.include_router(ws_streams.router, prefix=f"{settings.API_V1_STR}/ws/streams", tags=["ws_streams"])
 
 
 @app.get("/")
