@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Button, List, ListItem, ListItemText, Typography, Box, CircularProgress } from '@mui/material';
 import { cameraApi, CameraInfo } from '../services/api';
-import { useCreateCamera } from '../hooks/useQueries';
+import { useCreateCamera, useCameras } from '../hooks/useQueries';
+import { Camera } from '../types';
 
 export const CameraScanner: React.FC = () => {
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: registeredCameras } = useCameras();
   const createCameraMutation = useCreateCamera();
 
   const handleScan = async () => {
@@ -15,7 +17,15 @@ export const CameraScanner: React.FC = () => {
     setError(null);
     try {
       const response = await cameraApi.scan();
-      setCameras(response.data);
+      // Filter out cameras that are already registered
+      const registeredDeviceIds = new Set(
+        (Array.isArray(registeredCameras) ? registeredCameras : [])
+          .map((c: Camera) => c.device_id)
+      );
+      const availableCameras = response.data.filter(
+        (camera) => !registeredDeviceIds.has(camera.device_id)
+      );
+      setCameras(availableCameras);
     } catch (err) {
       setError('Failed to scan for cameras');
       console.error('Error scanning cameras:', err);

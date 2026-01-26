@@ -2,24 +2,20 @@ import React, { useState } from 'react';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
-  TextField,
   Typography,
   Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
   alpha,
   useTheme,
   Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -31,19 +27,13 @@ import {
 import { useCameras, useCreateCamera, useUpdateCamera, useDeleteCamera } from '../hooks/useQueries';
 import { Camera } from '../types';
 import { CameraScanner } from '../components/CameraScanner';
+import { ConfirmDeleteDialog, CameraFormDialog, CameraFormData } from '../components/dialogs';
 
 const Cameras: React.FC = () => {
-  const [open, setOpen] = useState(false);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    rtsp_url: '',
-    is_active: true,
-    device_id: 0,
-    resolution: [0, 0] as [number, number],
-    fps: 0,
-    is_available: false,
-  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
   const theme = useTheme();
 
   // TanStack Query hooks for server state management
@@ -53,56 +43,42 @@ const Cameras: React.FC = () => {
   const updateMutation = useUpdateCamera();
   const deleteMutation = useDeleteCamera();
 
-  const handleOpen = (camera?: Camera) => {
-    if (camera) {
-      setSelectedCamera(camera);
-      setFormData({
-        name: camera.name,
-        rtsp_url: camera.rtsp_url,
-        is_active: camera.is_active,
-        device_id: camera.device_id,
-        resolution: camera.resolution,
-        fps: camera.fps,
-        is_available: camera.is_available,
-      });
-    } else {
-      setSelectedCamera(null);
-      setFormData({
-        name: '',
-        rtsp_url: '',
-        is_active: true,
-        device_id: 0,
-        resolution: [0, 0],
-        fps: 0,
-        is_available: false,
+  const handleOpenFormDialog = (camera?: Camera) => {
+    setSelectedCamera(camera || null);
+    setFormDialogOpen(true);
+  };
+
+  const handleCloseFormDialog = () => {
+    setFormDialogOpen(false);
+    setSelectedCamera(null);
+  };
+
+  const handleOpenDeleteDialog = (camera: Camera) => {
+    setCameraToDelete(camera);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setCameraToDelete(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (cameraToDelete) {
+      deleteMutation.mutate(cameraToDelete.id, {
+        onSuccess: () => handleCloseDeleteDialog(),
       });
     }
-    setOpen(true);
   };
 
-  const handleClose = () => {
-    setOpen(false);
-    setSelectedCamera(null);
-    setFormData({
-      name: '',
-      rtsp_url: '',
-      is_active: true,
-      device_id: 0,
-      resolution: [0, 0],
-      fps: 0,
-      is_available: false,
-    });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFormSubmit = (formData: CameraFormData) => {
     if (selectedCamera) {
       updateMutation.mutate(
         { id: selectedCamera.id, data: formData },
-        { onSuccess: () => handleClose() }
+        { onSuccess: () => handleCloseFormDialog() }
       );
     } else {
-      createMutation.mutate(formData, { onSuccess: () => handleClose() });
+      createMutation.mutate(formData, { onSuccess: () => handleCloseFormDialog() });
     }
   };
 
@@ -113,11 +89,7 @@ const Cameras: React.FC = () => {
           <Skeleton variant="text" width={150} height={40} />
           <Skeleton variant="rounded" width={140} height={40} />
         </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rounded" height={180} />
-          ))}
-        </Box>
+        <Skeleton variant="rounded" height={200} />
       </Box>
     );
   }
@@ -157,7 +129,7 @@ const Cameras: React.FC = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => handleOpen()}
+          onClick={() => handleOpenFormDialog()}
           sx={{
             px: 3,
             py: 1.25,
@@ -196,7 +168,7 @@ const Cameras: React.FC = () => {
               background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
             }}
           />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>IP Cameras</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>Registered Cameras</Typography>
           <Chip
             label={cameraList.length}
             size="small"
@@ -222,175 +194,135 @@ const Cameras: React.FC = () => {
           >
             <VideocamIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
             <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
-              No IP cameras configured
+              No cameras configured
             </Typography>
             <Typography color="text.secondary" variant="body2">
-              Click "Add Camera" to add your first IP camera
+              Click "Add Camera" or scan for local cameras to add your first camera
             </Typography>
           </Box>
         ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
-            {cameraList.map((camera: Camera) => (
-              <Card key={camera.id}>
-                <CardContent sx={{ p: 2.5 }}>
-                  {/* Camera Preview Placeholder */}
-                  <Box
+          <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.08) }}>
+                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>URL / Device</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Resolution</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>FPS</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {cameraList.map((camera: Camera) => (
+                  <TableRow
+                    key={camera.id}
                     sx={{
-                      aspectRatio: '16/9',
-                      backgroundColor: alpha(theme.palette.background.default, 0.5),
-                      borderRadius: 2,
-                      mb: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                      '&:hover': { backgroundColor: alpha(theme.palette.action.hover, 0.5) },
                     }}
                   >
-                    <VideocamIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
-                  </Box>
-
-                  {/* Camera Info */}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{camera.name}</Typography>
-                    <Chip
-                      icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
-                      label={camera.is_active ? 'Active' : 'Inactive'}
-                      size="small"
-                      color={camera.is_active ? 'success' : 'error'}
-                      sx={{
-                        '& .MuiChip-icon': {
-                          color: 'inherit',
-                          animation: camera.is_active ? 'pulse 2s ease-in-out infinite' : 'none',
-                        },
-                      }}
-                    />
-                  </Box>
-
-                  <Typography
-                    color="text.secondary"
-                    variant="body2"
-                    sx={{
-                      mb: 2,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {camera.rtsp_url || 'No URL configured'}
-                  </Typography>
-
-                  {/* Actions */}
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpen(camera)}
-                      sx={{
-                        color: 'primary.main',
-                        '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
-                      }}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => deleteMutation.mutate(camera.id)}
-                      sx={{
-                        color: 'error.main',
-                        '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
-                      }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-          </Box>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <VideocamIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {camera.name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={camera.camera_type || 'IP'}
+                        size="small"
+                        variant="outlined"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          maxWidth: 200,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {camera.rtsp_url || `Device ${camera.device_id}`}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {camera.resolution ? `${camera.resolution[0]}x${camera.resolution[1]}` : '-'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{camera.fps || '-'}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                        label={camera.is_active ? 'Active' : 'Inactive'}
+                        size="small"
+                        color={camera.is_active ? 'success' : 'error'}
+                        sx={{
+                          '& .MuiChip-icon': {
+                            color: 'inherit',
+                            animation: camera.is_active ? 'pulse 2s ease-in-out infinite' : 'none',
+                          },
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenFormDialog(camera)}
+                        sx={{
+                          color: 'primary.main',
+                          '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDeleteDialog(camera)}
+                        sx={{
+                          color: 'error.main',
+                          '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
       </Box>
 
-      <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>
-          {selectedCamera ? 'Edit Camera' : 'Add Camera'}
-        </DialogTitle>
-        <form onSubmit={handleSubmit}>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Name"
-              fullWidth
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-            />
-            <TextField
-              margin="dense"
-              label="RTSP URL"
-              fullWidth
-              value={formData.rtsp_url}
-              onChange={(e) =>
-                setFormData({ ...formData, rtsp_url: e.target.value })
-              }
-            />
-            <TextField
-              margin="dense"
-              label="Device ID"
-              type="number"
-              fullWidth
-              value={formData.device_id}
-              onChange={(e) =>
-                setFormData({ ...formData, device_id: Number(e.target.value) })
-              }
-            />
-            <TextField
-              margin="dense"
-              label="FPS"
-              type="number"
-              fullWidth
-              value={formData.fps}
-              onChange={(e) =>
-                setFormData({ ...formData, fps: Number(e.target.value) })
-              }
-            />
-            <FormControl fullWidth margin="dense">
-              <InputLabel>Resolution</InputLabel>
-              <Select
-                value={formData.resolution?.join('x')}
-                label="Resolution"
-                onChange={(e) => {
-                  const [width, height] = e.target.value.split('x').map(Number);
-                  setFormData({ ...formData, resolution: [width, height] });
-                }}
-              >
-                <MenuItem value="640x480">640x480</MenuItem>
-                <MenuItem value="1280x720">1280x720</MenuItem>
-                <MenuItem value="1920x1080">1920x1080</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth margin="dense">
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={formData.is_active}
-                label="Status"
-                onChange={(e) =>
-                  setFormData({ ...formData, is_active: e.target.value === 'true' })
-                }
-              >
-                <MenuItem value="true">Active</MenuItem>
-                <MenuItem value="false">Inactive</MenuItem>
-              </Select>
-            </FormControl>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClose}>Cancel</Button>
-            <Button type="submit" variant="contained" color="primary">
-              {selectedCamera ? 'Update' : 'Create'}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
+      {/* Camera Form Dialog */}
+      <CameraFormDialog
+        open={formDialogOpen}
+        onClose={handleCloseFormDialog}
+        onSubmit={handleFormSubmit}
+        camera={selectedCamera}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onClose={handleCloseDeleteDialog}
+        onConfirm={handleConfirmDelete}
+        title="Delete Camera"
+        itemName={cameraToDelete?.name || ''}
+        warningMessage="Warning: All streams associated with this camera will also be permanently deleted."
+        isLoading={deleteMutation.isPending}
+      />
     </Box>
   );
 };
