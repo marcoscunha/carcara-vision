@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { Button, List, ListItem, ListItemText, Typography, Box, CircularProgress } from '@mui/material';
 import { cameraApi, CameraInfo } from '../services/api';
+import { useCreateCamera } from '../hooks/useQueries';
 
 export const CameraScanner: React.FC = () => {
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const createCameraMutation = useCreateCamera();
 
   const handleScan = async () => {
     setLoading(true);
@@ -22,8 +25,8 @@ export const CameraScanner: React.FC = () => {
   };
 
   const handleAddCamera = async (camera: CameraInfo) => {
-    try {
-      await cameraApi.create({
+    createCameraMutation.mutate(
+      {
         name: camera.name,
         device_id: camera.device_id,
         camera_type: 'local',
@@ -31,12 +34,17 @@ export const CameraScanner: React.FC = () => {
         resolution: camera.resolution,
         fps: camera.fps,
         is_available: camera.is_available,
-      });
-      // Refresh the camera list
-      handleScan();
-    } catch (err) {
-      console.error('Error adding camera:', err);
-    }
+      },
+      {
+        onSuccess: () => {
+          // Remove the added camera from the scanned list
+          setCameras((prev) => prev.filter((c) => c.device_id !== camera.device_id));
+        },
+        onError: (err) => {
+          console.error('Error adding camera:', err);
+        },
+      }
+    );
   };
 
   return (
@@ -65,8 +73,9 @@ export const CameraScanner: React.FC = () => {
                 <Button
                   variant="outlined"
                   onClick={() => handleAddCamera(camera)}
+                  disabled={createCameraMutation.isPending}
                 >
-                  Add Camera
+                  {createCameraMutation.isPending ? <CircularProgress size={20} /> : 'Add Camera'}
                 </Button>
               }
             >
