@@ -28,58 +28,67 @@ Carcara NVC is a robust backend system for managing IP camera streams with real-
 
 ```mermaid
 flowchart TB
-    subgraph CarcaraNVC["🎥 Carcara NVC"]
-        subgraph API["API Layer"]
+    subgraph External["📡 External Sources"]
+        direction LR
+        Cameras["IP Cameras / RTSP"]
+        DB[(PostgreSQL)]
+    end
+
+    subgraph Services["🌐 Services Layer"]
+        direction LR
+        subgraph Streaming["Streaming"]
+            direction LR
+            GStreamer["GStreamer Pipeline Manager"]
+            MediaMTX["MediaMTX RTSP Server"]
+        end
+
+        subgraph API["API"]
+            direction LR
             FastAPI["FastAPI Backend"]
             REST["REST API Endpoints"]
         end
-
-        subgraph ML["ML Inference Layer"]
-            YOLO["YOLO Engine"]
-            VLM["VLM Engine"]
-            ONNX["ONNX Engine"]
-            TensorRT["TensorRT Engine"]
-        end
-
-        subgraph HW["Hardware Accelerator Layer"]
-            CPU["CPU"]
-            CUDA["CUDA"]
-            Jetson["Jetson"]
-            RPi["Raspberry Pi"]
-            Coral["Coral TPU"]
-            Hailo["Hailo-8"]
-        end
     end
 
-    subgraph Streaming["Streaming Layer"]
-        GStreamer["GStreamer Pipeline Manager"]
-        MediaMTX["MediaMTX RTSP Server"]
+    subgraph ML["🤖 ML Inference Layer"]
+        direction LR
+        YOLO["YOLO Engine"]
+        VLM["VLM Engine"]
+        ONNX["ONNX Engine"]
+        TensorRT["TensorRT Engine"]
     end
 
-    subgraph External["External Services"]
-        DB[(PostgreSQL)]
-        Cameras["IP Cameras / RTSP"]
+    subgraph HW["⚡ Hardware Accelerator Layer"]
+        direction LR
+        CPU["CPU"]
+        CUDA["CUDA"]
+        Jetson["Jetson"]
+        RPi["Raspberry Pi"]
+        Coral["Coral TPU"]
+        Hailo["Hailo-8"]
     end
 
-    FastAPI --> ML
-    REST --> ML
-
-    YOLO --> HW
-    VLM --> HW
-    ONNX --> HW
-    TensorRT --> HW
-
+    %% Data Flow
     Cameras --> GStreamer
     GStreamer --> MediaMTX
     MediaMTX --> FastAPI
     FastAPI --> DB
 
-    style CarcaraNVC fill:#181A1F,stroke:#484F57,color:#F9FAFB
-    style API fill:#D26A27,stroke:#484F57,color:#F9FAFB
+    %% API to ML
+    FastAPI --> ML
+    REST --> ML
+
+    %% ML to Hardware
+    YOLO --> HW
+    VLM --> HW
+    ONNX --> HW
+    TensorRT --> HW
+
+    style External fill:#484F57,stroke:#181A1F,color:#F9FAFB
+    style Services fill:#D26A27,stroke:#484F57,color:#F9FAFB
+    style Streaming fill:#E07830,stroke:#484F57,color:#F9FAFB
+    style API fill:#E07830,stroke:#484F57,color:#F9FAFB
     style ML fill:#F5A45A,stroke:#484F57,color:#181A1F
     style HW fill:#E3D3B0,stroke:#484F57,color:#181A1F
-    style Streaming fill:#D26A27,stroke:#484F57,color:#F9FAFB
-    style External fill:#484F57,stroke:#181A1F,color:#F9FAFB
 ```
 
 ## ✨ Features
