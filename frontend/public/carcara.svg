@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Carcara bird silhouette - a Brazilian hawk -->
+  <defs>
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A4A4A"/>
+      <stop offset="100%" style="stop-color:#2D2D2D"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35"/>
+      <stop offset="100%" style="stop-color:#E85D2E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="#1a1a2e"/>
+
+  <!-- Bird body -->
+  <path d="M20 38 Q18 32 22 26 Q26 20 34 18 Q42 16 48 22 Q52 26 50 34 Q48 42 40 46 Q32 50 24 46 Q20 44 20 38" fill="url(#bodyGradient)"/>
+
+  <!-- Wing -->
+  <path d="M28 28 Q32 24 40 22 Q44 22 46 26 Q44 30 38 32 Q32 34 28 32 Q26 30 28 28" fill="#5C5C5C"/>
+
+  <!-- Head -->
+  <ellipse cx="44" cy="24" rx="8" ry="7" fill="url(#bodyGradient)"/>
+
+  <!-- Eye ring (characteristic of Carcara) -->
+  <circle cx="46" cy="23" r="4" fill="url(#accentGradient)"/>
+  <circle cx="46" cy="23" r="2" fill="#1a1a2e"/>
+  <circle cx="47" cy="22" r="0.8" fill="white"/>
+
+  <!-- Beak -->
+  <path d="M50 24 Q54 25 56 28 Q54 29 50 27 Q49 26 50 24" fill="url(#accentGradient)"/>
+
+  <!-- Camera lens element (NVC - video surveillance) -->
+  <circle cx="24" cy="44" r="8" fill="#333" stroke="#555" stroke-width="1"/>
+  <circle cx="24" cy="44" r="5" fill="#222"/>
+  <circle cx="24" cy="44" r="3" fill="#444"/>
+  <circle cx="22" cy="42" r="1" fill="#666"/>
+
+  <!-- Surveillance indicator -->
+  <circle cx="24" cy="44" r="1.5" fill="#00ff88"/>
+</svg>
