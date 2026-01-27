@@ -13,7 +13,6 @@ interface CameraStreamProps {
     stream: Stream;
     protocol?: 'webrtc' | 'mse' | 'hls' | 'mjpeg';
     width?: number;
-    height?: number;
     autoPlay?: boolean;
     muted?: boolean;
     showStats?: boolean;
@@ -34,7 +33,6 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     stream,
     protocol = 'webrtc',
     width = 640,
-    height = 480,
     autoPlay = true,
     muted = true,
     showStats = true,
@@ -158,7 +156,11 @@ const CameraStream: React.FC<CameraStreamProps> = ({
         };
     }, []);
 
-    // WebRTC connection setup
+    const retryCountRef = useRef(0);
+    const maxRetries = 5;
+    const retryDelayMs = 1500;
+
+    // WebRTC connection setup with retry logic
     const connectWebRTC = useCallback(async () => {
         if (!stream.stream_name || !videoRef.current) return;
 
@@ -181,6 +183,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
                     videoRef.current.srcObject = event.streams[0];
                     // Start playing immediately
                     videoRef.current.play().catch(() => {});
+                    retryCountRef.current = 0; // Reset retry count on success
                     onConnected?.();
                 }
             };
@@ -233,6 +236,10 @@ const CameraStream: React.FC<CameraStreamProps> = ({
             });
 
             if (!response.ok) {
+                // If 404, the stream might not be ready yet - throw to trigger retry
+                if (response.status === 404 && retryCountRef.current < maxRetries) {
+                    throw new Error('Stream not ready yet');
+                }
                 throw new Error(`Failed to connect: ${response.statusText}`);
             }
 
@@ -240,13 +247,31 @@ const CameraStream: React.FC<CameraStreamProps> = ({
             await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
             setIsConnecting(false);
+            retryCountRef.current = 0; // Reset retry count on success
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+
+            // Close failed connection
+            if (pcRef.current) {
+                pcRef.current.close();
+                pcRef.current = null;
+            }
+
+            // Retry logic for stream not ready
+            if (errorMsg === 'Stream not ready yet' && retryCountRef.current < maxRetries) {
+                retryCountRef.current++;
+                console.log(`Stream not ready, retrying in ${retryDelayMs}ms (attempt ${retryCountRef.current}/${maxRetries})`);
+                setTimeout(() => {
+                    connectWebRTC();
+                }, retryDelayMs);
+                return;
+            }
+
             setError(errorMsg);
             onError?.(errorMsg);
             setIsConnecting(false);
 
-            // Fallback to MSE if WebRTC fails
+            // Fallback to MSE if WebRTC fails after retries
             if (currentProtocol === 'webrtc') {
                 console.warn('WebRTC failed, falling back to MSE');
                 setCurrentProtocol('mse');
@@ -321,37 +346,56 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     // Render MJPEG as image
     if (currentProtocol === 'mjpeg' && stream.urls?.mjpeg) {
         return (
-            <div className="camera-stream" style={{ position: 'relative', width, height }}>
-                {isConnecting && <div className="loading">Connecting...</div>}
-                {error && <div className="error">{error}</div>}
-                <img
-                    src={stream.urls.mjpeg}
-                    alt={`Stream ${stream.stream_name}`}
-                    width={width}
-                    height={height}
-                    style={{ objectFit: 'contain' }}
-                />
-                {showStats && (
-                    <div style={{
-                        position: 'absolute',
-                        top: '10px',
-                        left: '10px',
-                        color: '#00ff00',
-                        backgroundColor: 'rgba(0,0,0,0.6)',
-                        padding: '8px 12px',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        fontFamily: 'monospace',
-                        lineHeight: '1.6',
-                        pointerEvents: 'none'
-                    }}>
-                        <div>⏱ {stats.time}</div>
-                        <div>📐 {stats.resolution}</div>
-                        <div>🎬 {stats.fps} fps</div>
-                        <div>🎞 MJPEG</div>
-                        <div>📶 {stats.throughput}</div>
-                    </div>
-                )}
+            <div className="camera-stream" style={{ width, maxWidth: '100%' }}>
+                <div
+                    style={{
+                        position: 'relative',
+                        width: '100%',
+                        paddingTop: '56.25%', // 16:9 aspect ratio
+                        background: '#18191c',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                    }}
+                >
+                    {isConnecting && <div className="loading">Connecting...</div>}
+                    {error && <div className="error">{error}</div>}
+                    <img
+                        src={stream.urls.mjpeg}
+                        alt={`Stream ${stream.stream_name}`}
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                            background: '#000',
+                        }}
+                    />
+                    {showStats && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '10px',
+                            left: '10px',
+                            color: '#00ff00',
+                            backgroundColor: 'rgba(0,0,0,0.6)',
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            lineHeight: '1.6',
+                            pointerEvents: 'none',
+                            zIndex: 10,
+                        }}>
+                            <div>⏱ {stats.time}</div>
+                            <div>📐 {stats.resolution}</div>
+                            <div>🎬 {stats.fps} fps</div>
+                            <div>🎞 MJPEG</div>
+                            <div>📶 {stats.throughput}</div>
+                        </div>
+                    )}
+                </div>
             </div>
         );
     }
@@ -381,100 +425,116 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     ) : null;
 
     return (
-        <div className="camera-stream" style={{ position: 'relative', width, height }}>
-            {isConnecting && (
-                <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    color: 'white',
-                    backgroundColor: 'rgba(0,0,0,0.7)',
-                    padding: '10px',
-                    borderRadius: '5px',
-                    zIndex: 20
-                }}>
-                    Connecting...
-                </div>
-            )}
-            {error && (
-                <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    color: 'red',
-                    backgroundColor: 'rgba(0,0,0,0.7)',
-                    padding: '10px',
-                    borderRadius: '5px',
-                    zIndex: 20
-                }}>
-                    {error}
-                </div>
-            )}
-            <video
-                ref={videoRef}
-                width={width}
-                height={height}
-                autoPlay={autoPlay}
-                muted={muted}
-                playsInline
-                controls
-                disablePictureInPicture
-                // @ts-ignore - disableRemotePlayback is valid but not in types
-                disableRemotePlayback
-                // Low-latency optimizations
-                preload="none"
-                onLoadedData={(e) => {
-                    // Seek to live edge to minimize latency
-                    const video = e.currentTarget;
-                    if (video.buffered.length > 0) {
-                        video.currentTime = video.buffered.end(video.buffered.length - 1);
-                    }
-                    // Set playback rate slightly faster to catch up if behind
-                    video.playbackRate = 1.0;
-                }}
-                onWaiting={(e) => {
-                    // When buffering, jump to live edge
-                    const video = e.currentTarget;
-                    if (video.buffered.length > 0) {
-                        const liveEdge = video.buffered.end(video.buffered.length - 1);
-                        if (liveEdge - video.currentTime > 0.5) {
-                            video.currentTime = liveEdge;
-                        }
-                    }
-                }}
-                onTimeUpdate={(e) => {
-                    // Keep close to live edge - if more than 1 second behind, catch up
-                    const video = e.currentTarget;
-                    if (video.buffered.length > 0) {
-                        const liveEdge = video.buffered.end(video.buffered.length - 1);
-                        const delay = liveEdge - video.currentTime;
-                        if (delay > 1.0) {
-                            video.currentTime = liveEdge - 0.1;
-                        }
-                    }
-                }}
+        <div className="camera-stream" style={{ width, maxWidth: '100%' }}>
+            <div
                 style={{
-                    backgroundColor: '#000',
-                    objectFit: 'contain'
+                    position: 'relative',
+                    width: '100%',
+                    paddingTop: '56.25%', // 16:9 aspect ratio
+                    background: '#18191c',
+                    borderRadius: 12,
+                    overflow: 'hidden',
                 }}
-            />
-            <StatsOverlay />
-            {stream.status !== 'active' && (
-                <div style={{
-                    position: 'absolute',
-                    bottom: '10px',
-                    left: '10px',
-                    color: 'orange',
-                    backgroundColor: 'rgba(0,0,0,0.7)',
-                    padding: '5px 10px',
-                    borderRadius: '3px',
-                    fontSize: '12px'
-                }}>
-                    Stream: {stream.status}
-                </div>
-            )}
+            >
+                {isConnecting && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        color: 'white',
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        padding: '10px',
+                        borderRadius: '5px',
+                        zIndex: 20
+                    }}>
+                        Connecting...
+                    </div>
+                )}
+                {error && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        color: 'red',
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        padding: '10px',
+                        borderRadius: '5px',
+                        zIndex: 20
+                    }}>
+                        {error}
+                    </div>
+                )}
+                <video
+                    ref={videoRef}
+                    autoPlay={autoPlay}
+                    muted={muted}
+                    playsInline
+                    controls
+                    disablePictureInPicture
+                    // @ts-ignore - disableRemotePlayback is valid but not in types
+                    disableRemotePlayback
+                    // Low-latency optimizations
+                    preload="none"
+                    onLoadedData={(e) => {
+                        // Seek to live edge to minimize latency
+                        const video = e.currentTarget;
+                        if (video.buffered.length > 0) {
+                            video.currentTime = video.buffered.end(video.buffered.length - 1);
+                        }
+                        // Set playback rate slightly faster to catch up if behind
+                        video.playbackRate = 1.0;
+                    }}
+                    onWaiting={(e) => {
+                        // When buffering, jump to live edge
+                        const video = e.currentTarget;
+                        if (video.buffered.length > 0) {
+                            const liveEdge = video.buffered.end(video.buffered.length - 1);
+                            if (liveEdge - video.currentTime > 0.5) {
+                                video.currentTime = liveEdge;
+                            }
+                        }
+                    }}
+                    onTimeUpdate={(e) => {
+                        // Keep close to live edge - if more than 1 second behind, catch up
+                        const video = e.currentTarget;
+                        if (video.buffered.length > 0) {
+                            const liveEdge = video.buffered.end(video.buffered.length - 1);
+                            const delay = liveEdge - video.currentTime;
+                            if (delay > 1.0) {
+                                video.currentTime = liveEdge - 0.1;
+                            }
+                        }
+                    }}
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                        background: '#000',
+                    }}
+                />
+                <StatsOverlay />
+                {stream.status !== 'active' && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '10px',
+                        left: '10px',
+                        color: 'orange',
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        padding: '5px 10px',
+                        borderRadius: '3px',
+                        fontSize: '12px',
+                        zIndex: 10,
+                    }}>
+                        Stream: {stream.status}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

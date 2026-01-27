@@ -6,6 +6,7 @@ import {
   alarmApi,
   modelApi,
   roiApi,
+  hardwareApi,
 } from '../services/api';
 import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest } from '../types';
 
@@ -40,6 +41,14 @@ export const queryKeys = {
   roi: {
     byCamera: (cameraId: number) => ['roi', cameraId] as const,
     detail: (id: number) => ['roi', 'detail', id] as const,
+  },
+  hardware: {
+    all: ['hardware'] as const,
+    detect: ['hardware', 'detect'] as const,
+    cpu: ['hardware', 'cpu'] as const,
+    platform: ['hardware', 'platform'] as const,
+    accelerators: ['hardware', 'accelerators'] as const,
+    recommended: ['hardware', 'recommended'] as const,
   },
 };
 
@@ -144,9 +153,15 @@ export const useCreateStream = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: StreamCreate) => streamApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streams.all });
+    mutationFn: async (data: StreamCreate) => {
+      const response = await streamApi.create(data);
+      return response.data; // Extract data from axios response
+    },
+    onSuccess: async () => {
+      // Invalidate and wait for refetch to complete before returning
+      // This ensures the UI has fresh data with proper URLs
+      await queryClient.invalidateQueries({ queryKey: ['streams'] });
+      await queryClient.refetchQueries({ queryKey: ['streams'] });
     },
   });
 };
@@ -157,9 +172,9 @@ export const useUpdateStream = () => {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Stream> }) =>
       streamApi.update(id, data),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streams.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.streams.detail(variables.id) });
+    onSuccess: () => {
+      // Invalidate all stream queries (including byStatus variants)
+      queryClient.invalidateQueries({ queryKey: ['streams'] });
     },
   });
 };
@@ -170,7 +185,8 @@ export const useDeleteStream = () => {
   return useMutation({
     mutationFn: (id: number) => streamApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streams.all });
+      // Invalidate all stream queries (including byStatus variants)
+      queryClient.invalidateQueries({ queryKey: ['streams'] });
     },
   });
 };
@@ -180,8 +196,9 @@ export const useRestartStream = () => {
 
   return useMutation({
     mutationFn: (id: number) => streamApi.restart(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streams.detail(id) });
+    onSuccess: () => {
+      // Invalidate all stream queries (including byStatus variants)
+      queryClient.invalidateQueries({ queryKey: ['streams'] });
     },
   });
 };
@@ -359,5 +376,46 @@ export const useDeleteROI = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roi'] });
     },
+  });
+};
+
+// ============ HARDWARE HOOKS ============
+
+export const useHardwareDetection = (enabled: boolean = false) => {
+  return useQuery({
+    queryKey: queryKeys.hardware.detect,
+    queryFn: () => hardwareApi.detect(false),
+    enabled,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    gcTime: 30 * 60 * 1000, // 30 minutes
+  });
+};
+
+export const useDetectHardware = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (refresh: boolean = true) => hardwareApi.detect(refresh),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.hardware.detect, data);
+      queryClient.invalidateQueries({ queryKey: queryKeys.hardware.all });
+    },
+  });
+};
+
+export const useHardwareAccelerators = (enabled: boolean = false) => {
+  return useQuery({
+    queryKey: queryKeys.hardware.accelerators,
+    queryFn: () => hardwareApi.getAccelerators(false),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+export const useRecommendedAccelerator = () => {
+  return useQuery({
+    queryKey: queryKeys.hardware.recommended,
+    queryFn: hardwareApi.getRecommended,
+    staleTime: 5 * 60 * 1000,
   });
 };

@@ -74,7 +74,9 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=carcara_nvc
-      - USE_GPU=false
+      - USE_GPU=true
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
     volumes:
       - ./backend/src:/app/src
       - ./backend/migrations:/app/migrations
@@ -88,6 +90,13 @@ services:
       - "/dev/video2:/dev/video2"
       - "/dev/video3:/dev/video3"
     privileged: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility, video]
 
   db:
     image: postgres:15

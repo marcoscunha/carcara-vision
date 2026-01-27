@@ -81,3 +81,100 @@ export interface RegionOfInterest {
   created_at: string;
   updated_at: string;
 }
+
+// ============================================================================
+// Hardware Detection Types
+// ============================================================================
+
+export type CPUArchitecture =
+  | 'x86_64'
+  | 'x86'
+  | 'arm64'
+  | 'armv7'
+  | 'armv8'
+  | 'unknown';
+
+export type PlatformVendor =
+  | 'intel'
+  | 'amd'
+  | 'nvidia_jetson'
+  | 'raspberry_pi'
+  | 'orange_pi'
+  | 'aetina'
+  | 'rock_pi'
+  | 'khadas'
+  | 'generic_arm'
+  | 'generic_x86'
+  | 'unknown';
+
+export type AcceleratorType =
+  | 'nvidia_gpu'
+  | 'nvidia_tensorrt'
+  | 'nvidia_jetson'
+  | 'google_coral_usb'
+  | 'google_coral_pcie'
+  | 'google_coral_m2'
+  | 'hailo_8'
+  | 'hailo_8l'
+  | 'hailo_10'
+  | 'intel_openvino'
+  | 'intel_movidius'
+  | 'axelera_m2'
+  | 'amd_rocm'
+  | 'cpu';
+
+export type AcceleratorStatus =
+  | 'available'
+  | 'unavailable'
+  | 'driver_missing'
+  | 'not_detected'
+  | 'error';
+
+export interface CPUInfo {
+  architecture: CPUArchitecture;
+  model_name: string;
+  vendor: string;
+  cores: number;
+  threads: number;
+  max_frequency_mhz?: number;
+  features: string[];
+}
+
+export interface MemoryInfo {
+  total_gb: number;
+  available_gb: number;
+  used_percent: number;
+}
+
+export interface PlatformInfo {
+  vendor: PlatformVendor;
+  board_name: string;
+  board_model?: string;
+  serial_number?: string;
+  os_name: string;
+  os_version: string;
+  kernel_version: string;
+}
+
+export interface AcceleratorInfo {
+  type: AcceleratorType;
+  name: string;
+  status: AcceleratorStatus;
+  driver_version?: string;
+  firmware_version?: string;
+  memory_mb?: number;
+  compute_capability?: string;
+  device_path?: string;
+  pcie_address?: string;
+  details: Record<string, unknown>;
+}
+
+export interface HardwareDetectionResult {
+  cpu: CPUInfo;
+  memory: MemoryInfo;
+  platform: PlatformInfo;
+  accelerators: AcceleratorInfo[];
+  recommended_accelerator?: AcceleratorType;
+  detection_timestamp: string;
+  detection_duration_ms: number;
+}

@@ -31,7 +31,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libgl1 \
     libglib2.0-0 \
     netcat-traditional \
-    v4l-utils
+    v4l-utils \
+    pciutils \
+    usbutils
 
 # Install uv for runtime
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

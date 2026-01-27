@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest, StreamURLs } from '../types';
+import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest, StreamURLs, HardwareDetectionResult, AcceleratorInfo } from '../types';
 
 const API_URL = 'http://localhost:8000/api/v1';
 export const GO2RTC_URL = 'http://localhost:1984';
@@ -106,4 +106,34 @@ export const roiApi = {
   update: (id: number, data: Partial<RegionOfInterest>) =>
     api.put<RegionOfInterest>(`/roi/${id}`, data),
   delete: (id: number) => api.delete(`/roi/${id}`),
+};
+
+// Hardware Detection endpoints
+export const hardwareApi = {
+  detect: async (refresh: boolean = false) => {
+    const response = await api.get<HardwareDetectionResult>('/hardware/detect', {
+      params: { refresh },
+    });
+    return response.data;
+  },
+  getCpu: async () => {
+    const response = await api.get<HardwareDetectionResult['cpu']>('/hardware/cpu');
+    return response.data;
+  },
+  getPlatform: async () => {
+    const response = await api.get<HardwareDetectionResult['platform']>('/hardware/platform');
+    return response.data;
+  },
+  getAccelerators: async (refresh: boolean = false) => {
+    const response = await api.get<AcceleratorInfo[]>('/hardware/accelerators', {
+      params: { refresh },
+    });
+    return response.data;
+  },
+  getRecommended: async () => {
+    const response = await api.get<{ recommended: string; available_accelerators: string[] }>(
+      '/hardware/recommended'
+    );
+    return response.data;
+  },
 };

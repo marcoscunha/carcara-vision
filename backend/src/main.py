@@ -19,6 +19,7 @@ from src.services.cameras import camera_stream_managers
 from .api.endpoints import alarms
 from .api.endpoints import cameras
 from .api.endpoints import detections
+from .api.endpoints import hardware
 from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
 from .api.endpoints import streams
@@ -106,6 +107,11 @@ app.include_router(
 )
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(roi_endpoints.router, prefix=f"{settings.API_V1_STR}/roi", tags=["roi"])
+app.include_router(
+    hardware.router,
+    prefix=f"{settings.API_V1_STR}/hardware",
+    tags=["hardware"]
+)
 
 
 @app.get("/")
