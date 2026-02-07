@@ -14,9 +14,9 @@ from .raspberry import RaspberryPiBackend
 
 __all__ = [
     "AcceleratorBackend",
-    "HardwareDetector",
+    "CPUBackend",
     "CUDABackend",
+    "HardwareDetector",
     "JetsonBackend",
     "RaspberryPiBackend",
-    "CPUBackend",
 ]

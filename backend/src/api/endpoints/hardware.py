@@ -4,16 +4,9 @@ Hardware Detection API Endpoints.
 Provides REST API for hardware detection and accelerator information.
 """
 
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Query
-
-from ...schemas.hardware import AcceleratorInfo
-from ...schemas.hardware import CPUInfo
-from ...schemas.hardware import HardwareDetectionResult
-from ...schemas.hardware import PlatformInfo
+from ...schemas.hardware import AcceleratorInfo, CPUInfo, HardwareDetectionResult, PlatformInfo
 from ...services.hardware import hardware_detection_service
 
 router = APIRouter()
@@ -35,10 +28,7 @@ router = APIRouter()
     """,
 )
 async def detect_hardware(
-    refresh: bool = Query(
-        False,
-        description="Force refresh detection (bypass cache)"
-    )
+    refresh: bool = Query(False, description="Force refresh detection (bypass cache)"),
 ) -> HardwareDetectionResult:
     """
     Trigger hardware auto-detection process.
@@ -50,10 +40,7 @@ async def detect_hardware(
         result = hardware_detection_service.detect_all(force_refresh=refresh)
         return result
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Hardware detection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Hardware detection failed: {e!s}")
 
 
 @router.get(
@@ -68,10 +55,7 @@ async def get_cpu_info() -> CPUInfo:
         result = hardware_detection_service.detect_all()
         return result.cpu
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"CPU detection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"CPU detection failed: {e!s}")
 
 
 @router.get(
@@ -86,10 +70,7 @@ async def get_platform_info() -> PlatformInfo:
         result = hardware_detection_service.detect_all()
         return result.platform
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Platform detection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Platform detection failed: {e!s}")
 
 
 @router.get(
@@ -109,17 +90,14 @@ async def get_platform_info() -> PlatformInfo:
     """,
 )
 async def get_accelerators(
-    refresh: bool = Query(False, description="Force refresh detection")
+    refresh: bool = Query(False, description="Force refresh detection"),
 ) -> list[AcceleratorInfo]:
     """Get list of available hardware accelerators."""
     try:
         result = hardware_detection_service.detect_all(force_refresh=refresh)
         return result.accelerators
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Accelerator detection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Accelerator detection failed: {e!s}")
 
 
 @router.get(
@@ -134,13 +112,7 @@ async def get_recommended_accelerator() -> dict:
         result = hardware_detection_service.detect_all()
         return {
             "recommended": result.recommended_accelerator,
-            "available_accelerators": [
-                acc.type for acc in result.accelerators
-                if acc.status.value == "available"
-            ],
+            "available_accelerators": [acc.type for acc in result.accelerators if acc.status.value == "available"],
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Recommendation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Recommendation failed: {e!s}")

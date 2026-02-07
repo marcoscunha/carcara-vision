@@ -4,22 +4,13 @@ Stream management endpoints.
 This module provides REST API endpoints for managing camera streams via GStreamer
 and MediaMTX, supporting RTSP, WebRTC, HLS, and other streaming protocols.
 """
-import logging
-from typing import List
-from typing import Optional
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ...api.models.stream import StreamCreate
-from ...api.models.stream import StreamResponse
-from ...api.models.stream import StreamUpdate
-from ...api.models.stream import StreamURLs
+from ...api.models.stream import StreamCreate, StreamResponse, StreamUpdate, StreamURLs
 from ...db.session import get_db
 from ...models.camera import Camera
 from ...models.stream import Stream
@@ -36,10 +27,7 @@ def _generate_stream_name(camera: Camera, stream_id: int) -> str:
     return f"camera_{camera.id}_{safe_name}"
 
 
-def _build_stream_response(
-    stream: Stream,
-    host: Optional[str] = None
-) -> StreamResponse:
+def _build_stream_response(stream: Stream, host: str | None = None) -> StreamResponse:
     """Build a StreamResponse with URLs from MediaMTX."""
     urls = None
     if stream.stream_name:
@@ -55,16 +43,12 @@ def _build_stream_response(
         urls=urls,
         stream_metadata=stream.stream_metadata,
         created_at=stream.created_at,
-        updated_at=stream.updated_at
+        updated_at=stream.updated_at,
     )
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=StreamResponse)
-async def create_stream(
-    stream: StreamCreate,
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def create_stream(stream: StreamCreate, request: Request, db: Session = Depends(get_db)):
     """
     Create a new stream for a camera.
 
@@ -79,16 +63,10 @@ async def create_stream(
         raise HTTPException(status_code=404, detail="Camera not found")
 
     # Generate unique stream name
-    existing_stream = db.query(Stream).filter(
-        Stream.camera_id == stream.camera_id,
-        Stream.status == "active"
-    ).first()
+    existing_stream = db.query(Stream).filter(Stream.camera_id == stream.camera_id, Stream.status == "active").first()
 
     if existing_stream:
-        raise HTTPException(
-            status_code=400,
-            detail="An active stream already exists for this camera"
-        )
+        raise HTTPException(status_code=400, detail="An active stream already exists for this camera")
 
     # Create stream name for GStreamer/MediaMTX
     stream_name = _generate_stream_name(camera, 0)  # Will update after commit
@@ -99,9 +77,10 @@ async def create_stream(
             camera_type=camera.camera_type,
             rtsp_url=camera.rtsp_url,
             device_id=camera.device_id,
+            device_path=camera.device_path,
             width=stream.width or 640,
             height=stream.height or 360,
-            codec=stream.codec or "h264"
+            codec=stream.codec or "h264",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -116,8 +95,8 @@ async def create_stream(
             "width": stream.width or 640,
             "height": stream.height or 360,
             "codec": stream.codec or "h264",
-            **(stream.stream_metadata or {})
-        }
+            **(stream.stream_metadata or {}),
+        },
     )
     db.add(db_stream)
     db.commit()
@@ -133,9 +112,10 @@ async def create_stream(
         source_type=source_config["source_type"],
         source_uri=source_config.get("source_uri"),
         device_id=source_config.get("device_id"),
+        device_path=source_config.get("device_path"),
         width=source_config["width"],
         height=source_config["height"],
-        codec=source_config["codec"]
+        codec=source_config["codec"],
     )
 
     if success:
@@ -154,13 +134,13 @@ async def create_stream(
     return _build_stream_response(db_stream, host=host)
 
 
-@router.get("/", response_model=List[StreamResponse])
+@router.get("/", response_model=list[StreamResponse])
 async def list_streams(
     request: Request,
     skip: int = 0,
     limit: int = 100,
-    status_filter: Optional[str] = Query(None, alias="status"),
-    db: Session = Depends(get_db)
+    status_filter: str | None = Query(None, alias="status"),
+    db: Session = Depends(get_db),
 ):
     """List all streams with their RTSP URLs."""
     query = db.query(Stream)
@@ -175,11 +155,7 @@ async def list_streams(
 
 
 @router.get("/{stream_id}", response_model=StreamResponse)
-async def get_stream(
-    stream_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def get_stream(stream_id: int, request: Request, db: Session = Depends(get_db)):
     """Get a specific stream by ID with its RTSP URLs."""
     stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if stream is None:
@@ -190,11 +166,7 @@ async def get_stream(
 
 
 @router.get("/{stream_id}/urls")
-async def get_stream_urls(
-    stream_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def get_stream_urls(stream_id: int, request: Request, db: Session = Depends(get_db)):
     """Get all available URLs for a stream."""
     stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if stream is None:
@@ -208,12 +180,7 @@ async def get_stream_urls(
 
 
 @router.put("/{stream_id}", response_model=StreamResponse)
-async def update_stream(
-    stream_id: int,
-    stream_update: StreamUpdate,
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def update_stream(stream_id: int, stream_update: StreamUpdate, request: Request, db: Session = Depends(get_db)):
     """Update a stream's status or metadata."""
     db_stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if db_stream is None:
@@ -230,11 +197,7 @@ async def update_stream(
 
 
 @router.post("/{stream_id}/restart", response_model=StreamResponse)
-async def restart_stream(
-    stream_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def restart_stream(stream_id: int, request: Request, db: Session = Depends(get_db)):
     """Restart a stream by re-registering it with GStreamer."""
     db_stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if db_stream is None:
@@ -255,9 +218,10 @@ async def restart_stream(
         source_type=source_config["source_type"],
         source_uri=source_config.get("source_uri"),
         device_id=source_config.get("device_id"),
+        device_path=source_config.get("device_path"),
         width=source_config.get("width", 640),
         height=source_config.get("height", 360),
-        codec=source_config.get("codec", "h264")
+        codec=source_config.get("codec", "h264"),
     )
 
     if success:
@@ -275,10 +239,7 @@ async def restart_stream(
 
 
 @router.delete("/{stream_id}")
-async def delete_stream(
-    stream_id: int,
-    db: Session = Depends(get_db)
-):
+async def delete_stream(stream_id: int, db: Session = Depends(get_db)):
     """Delete a stream and remove it from GStreamer."""
     db_stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if db_stream is None:
@@ -309,13 +270,10 @@ async def check_gstreamer_health():
             "gstreamer_streams": len(stream_names),
             "mediamtx_paths": len(mediamtx_paths.get("items", [])),
             "streams": stream_names,
-            "paths": [p.get("name") for p in mediamtx_paths.get("items", [])]
+            "paths": [p.get("name") for p in mediamtx_paths.get("items", [])],
         }
     else:
-        raise HTTPException(
-            status_code=503,
-            detail="GStreamer or MediaMTX service is not available"
-        )
+        raise HTTPException(status_code=503, detail="GStreamer or MediaMTX service is not available")
 
 
 # Legacy endpoint for backward compatibility

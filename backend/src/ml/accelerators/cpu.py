@@ -5,11 +5,9 @@ CPU Backend - Fallback accelerator using standard CPU inference.
 import logging
 import os
 import platform
-from typing import Optional
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend
-from .base import DeviceInfo
+from .base import AcceleratorBackend, DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +30,7 @@ class CPUBackend(AcceleratorBackend):
         """Get CPU information."""
         try:
             import psutil
+
             memory_total = psutil.virtual_memory().total // (1024 * 1024)
             memory_available = psutil.virtual_memory().available // (1024 * 1024)
         except ImportError:
@@ -49,7 +48,7 @@ class CPUBackend(AcceleratorBackend):
             metadata={
                 "cpu_count": cpu_count,
                 "architecture": platform.machine(),
-            }
+            },
         )
 
     def get_device_count(self) -> int:
@@ -69,19 +68,14 @@ class CPUBackend(AcceleratorBackend):
         # Set number of inter-op parallelism threads
         try:
             import torch
+
             torch.set_num_threads(cpu_count)
         except ImportError:
             pass
 
         logger.info(f"CPU backend configured with {cpu_count} threads")
 
-    def optimize_model(
-        self,
-        model_path: str,
-        output_path: str,
-        quantize: bool = False,
-        **kwargs
-    ) -> Optional[str]:
+    def optimize_model(self, model_path: str, output_path: str, quantize: bool = False, **kwargs) -> str | None:
         """
         Optimize model for CPU inference.
 
@@ -97,14 +91,9 @@ class CPUBackend(AcceleratorBackend):
             try:
                 # For ONNX models, apply quantization
                 if model_path.endswith(".onnx"):
-                    from onnxruntime.quantization import QuantType
-                    from onnxruntime.quantization import quantize_dynamic
+                    from onnxruntime.quantization import QuantType, quantize_dynamic
 
-                    quantize_dynamic(
-                        model_path,
-                        output_path,
-                        weight_type=QuantType.QInt8
-                    )
+                    quantize_dynamic(model_path, output_path, weight_type=QuantType.QInt8)
                     logger.info(f"Quantized model saved to {output_path}")
                     return output_path
             except Exception as e:

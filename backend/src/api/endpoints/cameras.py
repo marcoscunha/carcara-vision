@@ -1,37 +1,34 @@
-from typing import List
-from typing import Optional
-from typing import Tuple
-
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ...api.models.camera import CameraCreate
-from ...api.models.camera import CameraResponse
-from ...api.models.camera import CameraUpdate
+from ...api.models.camera import CameraCreate, CameraResponse, CameraUpdate
 from ...db.session import get_db
 from ...models.camera import Camera
-from ...services.detection import CameraService
-from ...services.detection import ObjectDetectionService
+from ...services.detection import CameraService, ObjectDetectionService
 
 router = APIRouter()
 detection_service = ObjectDetectionService()
 
 
 @router.post("/", response_model=CameraResponse)
-def create_camera(
-    camera: CameraCreate,
-    db: Session = Depends(get_db)
-):
-    """Create a new IP camera."""
+def create_camera(camera: CameraCreate, db: Session = Depends(get_db)):
+    """Create a new camera."""
+    # For local cameras, resolve the current device_id from device_path
+    device_id = camera.device_id
+    device_path = camera.device_path
+    if camera.camera_type in ("local", "usb") and device_path:
+        resolved_id = CameraService.resolve_device_index(device_path)
+        if resolved_id is not None:
+            device_id = resolved_id
+
     db_camera = Camera(
         name=camera.name,
         camera_type=camera.camera_type,
-        device_id=camera.device_id,
+        device_id=device_id,
+        device_path=device_path,
         rtsp_url=camera.rtsp_url,
-        is_active=camera.is_active
+        is_active=camera.is_active,
     )
     db.add(db_camera)
     db.commit()
@@ -39,12 +36,8 @@ def create_camera(
     return db_camera
 
 
-@router.get("/", response_model=List[CameraResponse])
-def list_cameras(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
+@router.get("/", response_model=list[CameraResponse])
+def list_cameras(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """List all cameras."""
     cameras = db.query(Camera).offset(skip).limit(limit).all()
     return cameras
@@ -52,23 +45,21 @@ def list_cameras(
 
 class CameraInfo(BaseModel):
     device_id: int
-    physical_address: Optional[str]
-    usb_id: Optional[str]
+    device_path: str  # Persistent path (e.g. /dev/v4l/by-id/...)
+    physical_address: str | None
+    usb_id: str | None
     name: str
-    friendly_name: Optional[str]
-    resolution: List[int]
+    friendly_name: str | None
+    resolution: list[int]
     fps: float
     is_available: bool
-    supported_resolutions: List[Tuple[int, int]]
+    supported_resolutions: list[tuple[int, int]]
 
 
-@router.get("/scan", response_model=List[CameraInfo])
+@router.get("/scan", response_model=list[CameraInfo])
 async def scan_local_cameras(
-    max_devices: int = 10,
-    camera_service: CameraService = Depends(
-        lambda: CameraService()
-    )
-) -> List[CameraInfo]:
+    max_devices: int = 10, camera_service: CameraService = Depends(lambda: CameraService())
+) -> list[CameraInfo]:
     """
     Scan for available local camera devices.
 
@@ -85,17 +76,11 @@ async def scan_local_cameras(
                 camera["resolution"] = list(camera["resolution"])
         return [CameraInfo(**camera) for camera in cameras]
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to scan for cameras: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to scan for cameras: {e!s}")
 
 
 @router.get("/{camera_id}", response_model=CameraResponse)
-def get_camera(
-    camera_id: int,
-    db: Session = Depends(get_db)
-):
+def get_camera(camera_id: int, db: Session = Depends(get_db)):
     """Get a specific camera by ID."""
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if camera is None:
@@ -104,10 +89,7 @@ def get_camera(
 
 
 @router.get("/{camera_id}/status", response_model=dict)
-def get_camera_status(
-    camera_id: int,
-    db: Session = Depends(get_db)
-):
+def get_camera_status(camera_id: int, db: Session = Depends(get_db)):
     """
     Get the status of a specific camera by ID.
 
@@ -127,11 +109,7 @@ def get_camera_status(
 
 
 @router.put("/{camera_id}", response_model=CameraResponse)
-def update_camera(
-    camera_id: int,
-    camera_update: CameraUpdate,
-    db: Session = Depends(get_db)
-):
+def update_camera(camera_id: int, camera_update: CameraUpdate, db: Session = Depends(get_db)):
     """Update a camera's information."""
     db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if db_camera is None:
@@ -146,10 +124,7 @@ def update_camera(
 
 
 @router.delete("/{camera_id}")
-async def delete_camera(
-    camera_id: int,
-    db: Session = Depends(get_db)
-):
+async def delete_camera(camera_id: int, db: Session = Depends(get_db)):
     """Delete a camera and all associated streams, detections, alarms, and ROIs."""
     from ...models.stream import Stream
     from ...services.gstreamer import gstreamer_service
@@ -167,6 +142,11 @@ async def delete_camera(
             except Exception as e:
                 # Log but don't fail if GStreamer cleanup fails
                 print(f"Warning: Failed to remove stream {stream.stream_name} from GStreamer: {e}")
+
+    # Delete camera (cascade will delete related streams, detections, alarms, ROIs)
+    db.delete(db_camera)
+    db.commit()
+    return {"message": "Camera deleted successfully"}
 
     # Delete camera (cascade will delete related streams, detections, alarms, ROIs)
     db.delete(db_camera)

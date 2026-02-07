@@ -10,23 +10,19 @@ import platform
 import re
 import subprocess
 import time
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
+from datetime import UTC, datetime
 
-from ..schemas.hardware import AcceleratorInfo
-from ..schemas.hardware import AcceleratorStatus
-from ..schemas.hardware import AcceleratorType
-from ..schemas.hardware import CPUArchitecture
-from ..schemas.hardware import CPUInfo
-from ..schemas.hardware import HardwareDetectionResult
-from ..schemas.hardware import MemoryInfo
-from ..schemas.hardware import PlatformInfo
-from ..schemas.hardware import PlatformVendor
+from ..schemas.hardware import (
+    AcceleratorInfo,
+    AcceleratorStatus,
+    AcceleratorType,
+    CPUArchitecture,
+    CPUInfo,
+    HardwareDetectionResult,
+    MemoryInfo,
+    PlatformInfo,
+    PlatformVendor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +38,8 @@ class HardwareDetectionService:
     """
 
     def __init__(self):
-        self._cache: Optional[HardwareDetectionResult] = None
-        self._cache_time: Optional[float] = None
+        self._cache: HardwareDetectionResult | None = None
+        self._cache_time: float | None = None
         self._cache_ttl = 300  # 5 minutes
 
     def detect_all(self, force_refresh: bool = False) -> HardwareDetectionResult:
@@ -79,7 +75,7 @@ class HardwareDetectionService:
             platform=platform_info,
             accelerators=accelerators,
             recommended_accelerator=recommended,
-            detection_timestamp=datetime.now(timezone.utc).isoformat(),
+            detection_timestamp=datetime.now(UTC).isoformat(),
             detection_duration_ms=round(detection_duration, 2),
         )
 
@@ -115,12 +111,12 @@ class HardwareDetectionService:
         vendor = "Unknown"
         cores = os.cpu_count() or 0
         threads = cores
-        features: List[str] = []
-        max_freq: Optional[float] = None
+        features: list[str] = []
+        max_freq: float | None = None
 
         try:
             if os.path.exists("/proc/cpuinfo"):
-                with open("/proc/cpuinfo", "r") as f:
+                with open("/proc/cpuinfo") as f:
                     content = f.read()
 
                 # Model name
@@ -168,7 +164,7 @@ class HardwareDetectionService:
         try:
             freq_path = "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
             if os.path.exists(freq_path):
-                with open(freq_path, "r") as f:
+                with open(freq_path) as f:
                     max_freq = float(f.read().strip()) / 1000  # Convert kHz to MHz
         except Exception:
             pass
@@ -194,7 +190,7 @@ class HardwareDetectionService:
 
         try:
             if os.path.exists("/proc/meminfo"):
-                with open("/proc/meminfo", "r") as f:
+                with open("/proc/meminfo") as f:
                     content = f.read()
 
                 match = re.search(r"MemTotal:\s*(\d+)\s*kB", content)
@@ -235,7 +231,7 @@ class HardwareDetectionService:
         try:
             # Try to get OS info
             if os.path.exists("/etc/os-release"):
-                with open("/etc/os-release", "r") as f:
+                with open("/etc/os-release") as f:
                     content = f.read()
                 match = re.search(r'NAME="?([^"\n]+)"?', content)
                 if match:
@@ -252,10 +248,10 @@ class HardwareDetectionService:
         # Try to get serial number
         try:
             if os.path.exists("/proc/device-tree/serial-number"):
-                with open("/proc/device-tree/serial-number", "r") as f:
-                    serial_number = f.read().strip().rstrip('\x00')
+                with open("/proc/device-tree/serial-number") as f:
+                    serial_number = f.read().strip().rstrip("\x00")
             elif os.path.exists("/sys/class/dmi/id/product_serial"):
-                with open("/sys/class/dmi/id/product_serial", "r") as f:
+                with open("/sys/class/dmi/id/product_serial") as f:
                     serial_number = f.read().strip()
         except Exception:
             pass
@@ -270,7 +266,7 @@ class HardwareDetectionService:
             kernel_version=kernel_version,
         )
 
-    def _identify_platform_vendor(self) -> Tuple[PlatformVendor, str, Optional[str]]:
+    def _identify_platform_vendor(self) -> tuple[PlatformVendor, str, str | None]:
         """Identify the platform vendor and board information."""
 
         # Check for Raspberry Pi
@@ -304,7 +300,7 @@ class HardwareDetectionService:
         # Check CPU vendor for x86 systems
         try:
             if os.path.exists("/proc/cpuinfo"):
-                with open("/proc/cpuinfo", "r") as f:
+                with open("/proc/cpuinfo") as f:
                     content = f.read().lower()
 
                 if "genuineintel" in content:
@@ -327,12 +323,12 @@ class HardwareDetectionService:
         """Check if running on Raspberry Pi."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
                     if "raspberry pi" in model:
                         return True
             if os.path.exists("/proc/cpuinfo"):
-                with open("/proc/cpuinfo", "r") as f:
+                with open("/proc/cpuinfo") as f:
                     content = f.read().lower()
                     if "raspberry" in content or "bcm2" in content:
                         return True
@@ -340,12 +336,12 @@ class HardwareDetectionService:
             pass
         return False
 
-    def _get_raspberry_pi_model(self) -> Optional[str]:
+    def _get_raspberry_pi_model(self) -> str | None:
         """Get Raspberry Pi model name."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
-                    return f.read().strip().rstrip('\x00')
+                with open("/proc/device-tree/model") as f:
+                    return f.read().strip().rstrip("\x00")
         except Exception:
             pass
         return None
@@ -364,12 +360,12 @@ class HardwareDetectionService:
             pass
         return False
 
-    def _get_jetson_model(self) -> Optional[str]:
+    def _get_jetson_model(self) -> str | None:
         """Get Jetson model name."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
-                    return f.read().strip().rstrip('\x00')
+                with open("/proc/device-tree/model") as f:
+                    return f.read().strip().rstrip("\x00")
         except Exception:
             pass
         return None
@@ -378,7 +374,7 @@ class HardwareDetectionService:
         """Check if running on Orange Pi."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
                     if "orange pi" in model or "orangepi" in model:
                         return True
@@ -389,12 +385,12 @@ class HardwareDetectionService:
             pass
         return False
 
-    def _get_orange_pi_model(self) -> Optional[str]:
+    def _get_orange_pi_model(self) -> str | None:
         """Get Orange Pi model name."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
-                    return f.read().strip().rstrip('\x00')
+                with open("/proc/device-tree/model") as f:
+                    return f.read().strip().rstrip("\x00")
         except Exception:
             pass
         return None
@@ -405,7 +401,9 @@ class HardwareDetectionService:
             # Aetina often uses Jetson modules with custom carriers
             result = subprocess.run(
                 ["dmidecode", "-s", "system-manufacturer"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if "aetina" in result.stdout.lower():
                 return True
@@ -416,12 +414,14 @@ class HardwareDetectionService:
             pass
         return False
 
-    def _get_aetina_model(self) -> Optional[str]:
+    def _get_aetina_model(self) -> str | None:
         """Get Aetina model name."""
         try:
             result = subprocess.run(
                 ["dmidecode", "-s", "system-product-name"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -433,7 +433,7 @@ class HardwareDetectionService:
         """Check if running on Rock Pi."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
                     if "rock pi" in model or "rockpi" in model:
                         return True
@@ -445,7 +445,7 @@ class HardwareDetectionService:
         """Check if running on Khadas board."""
         try:
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
                     if "khadas" in model:
                         return True
@@ -457,9 +457,9 @@ class HardwareDetectionService:
     # Accelerator Detection
     # =========================================================================
 
-    def _detect_accelerators(self) -> List[AcceleratorInfo]:
+    def _detect_accelerators(self) -> list[AcceleratorInfo]:
         """Detect all available hardware accelerators."""
-        accelerators: List[AcceleratorInfo] = []
+        accelerators: list[AcceleratorInfo] = []
 
         # NVIDIA GPU detection
         nvidia_gpus = self._detect_nvidia_gpu()
@@ -487,18 +487,20 @@ class HardwareDetectionService:
         accelerators.extend(amd_gpus)
 
         # Always add CPU as fallback
-        accelerators.append(AcceleratorInfo(
-            type=AcceleratorType.CPU,
-            name="CPU",
-            status=AcceleratorStatus.AVAILABLE,
-            details={"info": "Default CPU inference backend"},
-        ))
+        accelerators.append(
+            AcceleratorInfo(
+                type=AcceleratorType.CPU,
+                name="CPU",
+                status=AcceleratorStatus.AVAILABLE,
+                details={"info": "Default CPU inference backend"},
+            )
+        )
 
         return accelerators
 
-    def _detect_nvidia_gpu(self) -> List[AcceleratorInfo]:
+    def _detect_nvidia_gpu(self) -> list[AcceleratorInfo]:
         """Detect NVIDIA GPUs using multiple methods."""
-        gpus: List[AcceleratorInfo] = []
+        gpus: list[AcceleratorInfo] = []
 
         # Method 1: nvidia-smi (most reliable when available)
         gpus = self._detect_nvidia_via_smi()
@@ -522,15 +524,20 @@ class HardwareDetectionService:
 
         return gpus
 
-    def _detect_nvidia_via_smi(self) -> List[AcceleratorInfo]:
+    def _detect_nvidia_via_smi(self) -> list[AcceleratorInfo]:
         """Detect NVIDIA GPUs via nvidia-smi."""
-        gpus: List[AcceleratorInfo] = []
+        gpus: list[AcceleratorInfo] = []
 
         try:
             result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name,memory.total,driver_version,pci.bus_id,compute_cap",
-                 "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=10
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,memory.total,driver_version,pci.bus_id,compute_cap",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
 
             if result.returncode == 0:
@@ -543,30 +550,34 @@ class HardwareDetectionService:
                             # Check if TensorRT is available
                             tensorrt_available = self._check_tensorrt()
 
-                            gpus.append(AcceleratorInfo(
-                                type=AcceleratorType.NVIDIA_GPU,
-                                name=name,
-                                status=AcceleratorStatus.AVAILABLE,
-                                driver_version=driver,
-                                memory_mb=int(float(memory)) if memory else None,
-                                compute_capability=compute_cap,
-                                pcie_address=pcie,
-                                details={
-                                    "tensorrt_available": tensorrt_available,
-                                    "detection_method": "nvidia-smi",
-                                },
-                            ))
-
-                            # Add TensorRT as separate accelerator if available
-                            if tensorrt_available:
-                                gpus.append(AcceleratorInfo(
-                                    type=AcceleratorType.NVIDIA_TENSORRT,
-                                    name=f"TensorRT on {name}",
+                            gpus.append(
+                                AcceleratorInfo(
+                                    type=AcceleratorType.NVIDIA_GPU,
+                                    name=name,
                                     status=AcceleratorStatus.AVAILABLE,
                                     driver_version=driver,
                                     memory_mb=int(float(memory)) if memory else None,
-                                    details={"gpu_name": name},
-                                ))
+                                    compute_capability=compute_cap,
+                                    pcie_address=pcie,
+                                    details={
+                                        "tensorrt_available": tensorrt_available,
+                                        "detection_method": "nvidia-smi",
+                                    },
+                                )
+                            )
+
+                            # Add TensorRT as separate accelerator if available
+                            if tensorrt_available:
+                                gpus.append(
+                                    AcceleratorInfo(
+                                        type=AcceleratorType.NVIDIA_TENSORRT,
+                                        name=f"TensorRT on {name}",
+                                        status=AcceleratorStatus.AVAILABLE,
+                                        driver_version=driver,
+                                        memory_mb=int(float(memory)) if memory else None,
+                                        details={"gpu_name": name},
+                                    )
+                                )
 
         except FileNotFoundError:
             pass
@@ -575,15 +586,12 @@ class HardwareDetectionService:
 
         return gpus
 
-    def _detect_nvidia_via_lspci(self) -> List[AcceleratorInfo]:
+    def _detect_nvidia_via_lspci(self) -> list[AcceleratorInfo]:
         """Detect NVIDIA GPUs via lspci."""
-        gpus: List[AcceleratorInfo] = []
+        gpus: list[AcceleratorInfo] = []
 
         try:
-            result = subprocess.run(
-                ["lspci", "-nn"],
-                capture_output=True, text=True, timeout=10
-            )
+            result = subprocess.run(["lspci", "-nn"], capture_output=True, text=True, timeout=10)
 
             if result.returncode == 0:
                 for line in result.stdout.split("\n"):
@@ -604,17 +612,21 @@ class HardwareDetectionService:
                         # Check if driver is loaded
                         driver_loaded = self._check_nvidia_driver_loaded()
 
-                        gpus.append(AcceleratorInfo(
-                            type=AcceleratorType.NVIDIA_GPU,
-                            name=name,
-                            status=AcceleratorStatus.AVAILABLE if driver_loaded else AcceleratorStatus.DRIVER_MISSING,
-                            pcie_address=pcie_addr,
-                            details={
-                                "detection_method": "lspci",
-                                "driver_loaded": driver_loaded,
-                                "raw_info": line.strip(),
-                            },
-                        ))
+                        gpus.append(
+                            AcceleratorInfo(
+                                type=AcceleratorType.NVIDIA_GPU,
+                                name=name,
+                                status=AcceleratorStatus.AVAILABLE
+                                if driver_loaded
+                                else AcceleratorStatus.DRIVER_MISSING,
+                                pcie_address=pcie_addr,
+                                details={
+                                    "detection_method": "lspci",
+                                    "driver_loaded": driver_loaded,
+                                    "raw_info": line.strip(),
+                                },
+                            )
+                        )
 
         except FileNotFoundError:
             pass
@@ -623,27 +635,30 @@ class HardwareDetectionService:
 
         return gpus
 
-    def _detect_nvidia_via_cuda(self) -> List[AcceleratorInfo]:
+    def _detect_nvidia_via_cuda(self) -> list[AcceleratorInfo]:
         """Detect NVIDIA GPUs via CUDA Python bindings."""
-        gpus: List[AcceleratorInfo] = []
+        gpus: list[AcceleratorInfo] = []
 
         # Try torch first (commonly available)
         try:
             import torch
+
             if torch.cuda.is_available():
                 for i in range(torch.cuda.device_count()):
                     props = torch.cuda.get_device_properties(i)
-                    gpus.append(AcceleratorInfo(
-                        type=AcceleratorType.NVIDIA_GPU,
-                        name=props.name,
-                        status=AcceleratorStatus.AVAILABLE,
-                        memory_mb=props.total_memory // (1024 * 1024),
-                        compute_capability=f"{props.major}.{props.minor}",
-                        details={
-                            "detection_method": "torch.cuda",
-                            "multi_processor_count": props.multi_processor_count,
-                        },
-                    ))
+                    gpus.append(
+                        AcceleratorInfo(
+                            type=AcceleratorType.NVIDIA_GPU,
+                            name=props.name,
+                            status=AcceleratorStatus.AVAILABLE,
+                            memory_mb=props.total_memory // (1024 * 1024),
+                            compute_capability=f"{props.major}.{props.minor}",
+                            details={
+                                "detection_method": "torch.cuda",
+                                "multi_processor_count": props.multi_processor_count,
+                            },
+                        )
+                    )
                 if gpus:
                     return gpus
         except ImportError:
@@ -655,18 +670,21 @@ class HardwareDetectionService:
         try:
             import pycuda.autoinit  # noqa: F401
             import pycuda.driver as cuda
+
             for i in range(cuda.Device.count()):
                 dev = cuda.Device(i)
-                gpus.append(AcceleratorInfo(
-                    type=AcceleratorType.NVIDIA_GPU,
-                    name=dev.name(),
-                    status=AcceleratorStatus.AVAILABLE,
-                    memory_mb=dev.total_memory() // (1024 * 1024),
-                    compute_capability=f"{dev.compute_capability()[0]}.{dev.compute_capability()[1]}",
-                    details={
-                        "detection_method": "pycuda",
-                    },
-                ))
+                gpus.append(
+                    AcceleratorInfo(
+                        type=AcceleratorType.NVIDIA_GPU,
+                        name=dev.name(),
+                        status=AcceleratorStatus.AVAILABLE,
+                        memory_mb=dev.total_memory() // (1024 * 1024),
+                        compute_capability=f"{dev.compute_capability()[0]}.{dev.compute_capability()[1]}",
+                        details={
+                            "detection_method": "pycuda",
+                        },
+                    )
+                )
         except ImportError:
             pass
         except Exception as e:
@@ -674,9 +692,9 @@ class HardwareDetectionService:
 
         return gpus
 
-    def _detect_nvidia_via_proc(self) -> List[AcceleratorInfo]:
+    def _detect_nvidia_via_proc(self) -> list[AcceleratorInfo]:
         """Detect NVIDIA GPUs via /proc filesystem."""
-        gpus: List[AcceleratorInfo] = []
+        gpus: list[AcceleratorInfo] = []
 
         # Check /proc/driver/nvidia/gpus/
         nvidia_gpus_path = "/proc/driver/nvidia/gpus"
@@ -685,7 +703,7 @@ class HardwareDetectionService:
                 for gpu_dir in os.listdir(nvidia_gpus_path):
                     info_path = os.path.join(nvidia_gpus_path, gpu_dir, "information")
                     if os.path.exists(info_path):
-                        with open(info_path, "r") as f:
+                        with open(info_path) as f:
                             content = f.read()
 
                         name = "NVIDIA GPU"
@@ -694,43 +712,45 @@ class HardwareDetectionService:
                                 name = line.split(":", 1)[1].strip()
                                 break
 
-                        gpus.append(AcceleratorInfo(
-                            type=AcceleratorType.NVIDIA_GPU,
-                            name=name,
-                            status=AcceleratorStatus.AVAILABLE,
-                            pcie_address=gpu_dir,
-                            details={
-                                "detection_method": "/proc/driver/nvidia",
-                            },
-                        ))
+                        gpus.append(
+                            AcceleratorInfo(
+                                type=AcceleratorType.NVIDIA_GPU,
+                                name=name,
+                                status=AcceleratorStatus.AVAILABLE,
+                                pcie_address=gpu_dir,
+                                details={
+                                    "detection_method": "/proc/driver/nvidia",
+                                },
+                            )
+                        )
             except Exception as e:
                 logger.debug(f"/proc NVIDIA detection failed: {e}")
 
         # Also check /dev/nvidia* devices
         if not gpus:
-            nvidia_devices = [d for d in os.listdir("/dev") if d.startswith("nvidia")
-                              and d != "nvidiactl" and d != "nvidia-uvm"]
+            nvidia_devices = [
+                d for d in os.listdir("/dev") if d.startswith("nvidia") and d != "nvidiactl" and d != "nvidia-uvm"
+            ]
             for dev in nvidia_devices:
                 if dev.startswith("nvidia") and dev[6:].isdigit():
-                    gpus.append(AcceleratorInfo(
-                        type=AcceleratorType.NVIDIA_GPU,
-                        name=f"NVIDIA GPU {dev[6:]}",
-                        status=AcceleratorStatus.AVAILABLE,
-                        device_path=f"/dev/{dev}",
-                        details={
-                            "detection_method": "/dev device",
-                        },
-                    ))
+                    gpus.append(
+                        AcceleratorInfo(
+                            type=AcceleratorType.NVIDIA_GPU,
+                            name=f"NVIDIA GPU {dev[6:]}",
+                            status=AcceleratorStatus.AVAILABLE,
+                            device_path=f"/dev/{dev}",
+                            details={
+                                "detection_method": "/dev device",
+                            },
+                        )
+                    )
 
         return gpus
 
     def _check_nvidia_driver_loaded(self) -> bool:
         """Check if NVIDIA driver is loaded in kernel."""
         try:
-            result = subprocess.run(
-                ["lsmod"],
-                capture_output=True, text=True, timeout=5
-            )
+            result = subprocess.run(["lsmod"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 return "nvidia" in result.stdout.lower()
         except Exception:
@@ -738,7 +758,7 @@ class HardwareDetectionService:
 
         # Also check /proc/modules
         try:
-            with open("/proc/modules", "r") as f:
+            with open("/proc/modules") as f:
                 content = f.read().lower()
                 return "nvidia" in content
         except Exception:
@@ -749,7 +769,8 @@ class HardwareDetectionService:
     def _check_tensorrt(self) -> bool:
         """Check if TensorRT is available."""
         try:
-            import tensorrt
+            import tensorrt  # noqa: F401
+
             return True
         except ImportError:
             pass
@@ -763,15 +784,14 @@ class HardwareDetectionService:
 
         return False
 
-    def _detect_hailo(self) -> List[AcceleratorInfo]:
+    def _detect_hailo(self) -> list[AcceleratorInfo]:
         """Detect Hailo AI accelerators (Hailo-8, Hailo-8L, Hailo-10)."""
-        devices: List[AcceleratorInfo] = []
+        devices: list[AcceleratorInfo] = []
 
         try:
             # Try hailortcli
             result = subprocess.run(
-                ["hailortcli", "fw-control", "identify"],
-                capture_output=True, text=True, timeout=10
+                ["hailortcli", "fw-control", "identify"], capture_output=True, text=True, timeout=10
             )
 
             if result.returncode == 0:
@@ -795,27 +815,33 @@ class HardwareDetectionService:
                 if match:
                     fw_version = match.group(1)
 
-                devices.append(AcceleratorInfo(
-                    type=device_type,
-                    name=name,
-                    status=AcceleratorStatus.AVAILABLE,
-                    firmware_version=fw_version,
-                    details={"raw_output": output[:500]},
-                ))
+                devices.append(
+                    AcceleratorInfo(
+                        type=device_type,
+                        name=name,
+                        status=AcceleratorStatus.AVAILABLE,
+                        firmware_version=fw_version,
+                        details={"raw_output": output[:500]},
+                    )
+                )
         except FileNotFoundError:
             # hailortcli not installed - check for PCIe devices
             try:
                 result = subprocess.run(
                     ["lspci", "-d", "1e60:"],  # Hailo vendor ID
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if result.returncode == 0 and result.stdout.strip():
-                    devices.append(AcceleratorInfo(
-                        type=AcceleratorType.HAILO_8,
-                        name="Hailo Device (driver not installed)",
-                        status=AcceleratorStatus.DRIVER_MISSING,
-                        details={"pcie_info": result.stdout.strip()},
-                    ))
+                    devices.append(
+                        AcceleratorInfo(
+                            type=AcceleratorType.HAILO_8,
+                            name="Hailo Device (driver not installed)",
+                            status=AcceleratorStatus.DRIVER_MISSING,
+                            details={"pcie_info": result.stdout.strip()},
+                        )
+                    )
             except Exception:
                 pass
         except Exception as e:
@@ -823,23 +849,27 @@ class HardwareDetectionService:
 
         return devices
 
-    def _detect_coral(self) -> List[AcceleratorInfo]:
+    def _detect_coral(self) -> list[AcceleratorInfo]:
         """Detect Google Coral Edge TPU devices."""
-        devices: List[AcceleratorInfo] = []
+        devices: list[AcceleratorInfo] = []
 
         # Check for USB Coral
         try:
             result = subprocess.run(
                 ["lsusb", "-d", "1a6e:089a"],  # Coral USB Accelerator
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0 and result.stdout.strip():
-                devices.append(AcceleratorInfo(
-                    type=AcceleratorType.GOOGLE_CORAL_USB,
-                    name="Google Coral USB Accelerator",
-                    status=AcceleratorStatus.AVAILABLE,
-                    details={"usb_info": result.stdout.strip()},
-                ))
+                devices.append(
+                    AcceleratorInfo(
+                        type=AcceleratorType.GOOGLE_CORAL_USB,
+                        name="Google Coral USB Accelerator",
+                        status=AcceleratorStatus.AVAILABLE,
+                        details={"usb_info": result.stdout.strip()},
+                    )
+                )
         except Exception:
             pass
 
@@ -847,25 +877,26 @@ class HardwareDetectionService:
         try:
             result = subprocess.run(
                 ["lspci", "-d", "1ac1:089a"],  # Coral PCIe
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0 and result.stdout.strip():
-                devices.append(AcceleratorInfo(
-                    type=AcceleratorType.GOOGLE_CORAL_PCIE,
-                    name="Google Coral PCIe/M.2 Accelerator",
-                    status=AcceleratorStatus.AVAILABLE,
-                    details={"pcie_info": result.stdout.strip()},
-                ))
+                devices.append(
+                    AcceleratorInfo(
+                        type=AcceleratorType.GOOGLE_CORAL_PCIE,
+                        name="Google Coral PCIe/M.2 Accelerator",
+                        status=AcceleratorStatus.AVAILABLE,
+                        details={"pcie_info": result.stdout.strip()},
+                    )
+                )
         except Exception:
             pass
 
         # Verify Edge TPU runtime is installed
         if devices:
             try:
-                result = subprocess.run(
-                    ["dpkg", "-l", "libedgetpu1-std"],
-                    capture_output=True, text=True, timeout=5
-                )
+                result = subprocess.run(["dpkg", "-l", "libedgetpu1-std"], capture_output=True, text=True, timeout=5)
                 runtime_installed = result.returncode == 0
                 for device in devices:
                     device.details["runtime_installed"] = runtime_installed
@@ -876,52 +907,48 @@ class HardwareDetectionService:
 
         return devices
 
-    def _detect_axelera(self) -> List[AcceleratorInfo]:
+    def _detect_axelera(self) -> list[AcceleratorInfo]:
         """Detect Axelera AI accelerators."""
-        devices: List[AcceleratorInfo] = []
+        devices: list[AcceleratorInfo] = []
 
         try:
             # Check for Axelera PCIe device (Metis)
-            result = subprocess.run(
-                ["lspci"],
-                capture_output=True, text=True, timeout=5
-            )
+            result = subprocess.run(["lspci"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 # Look for Axelera in output
                 if "axelera" in result.stdout.lower() or "metis" in result.stdout.lower():
-                    devices.append(AcceleratorInfo(
-                        type=AcceleratorType.AXELERA_M2,
-                        name="Axelera Metis AI Accelerator",
-                        status=AcceleratorStatus.AVAILABLE,
-                    ))
+                    devices.append(
+                        AcceleratorInfo(
+                            type=AcceleratorType.AXELERA_M2,
+                            name="Axelera Metis AI Accelerator",
+                            status=AcceleratorStatus.AVAILABLE,
+                        )
+                    )
 
             # Check for axelera-runtime
-            result = subprocess.run(
-                ["which", "axelera-info"],
-                capture_output=True, timeout=5
-            )
+            result = subprocess.run(["which", "axelera-info"], capture_output=True, timeout=5)
             if result.returncode == 0:
                 # Get device info
-                info_result = subprocess.run(
-                    ["axelera-info"],
-                    capture_output=True, text=True, timeout=10
-                )
+                info_result = subprocess.run(["axelera-info"], capture_output=True, text=True, timeout=10)
                 if info_result.returncode == 0:
-                    devices.append(AcceleratorInfo(
-                        type=AcceleratorType.AXELERA_M2,
-                        name="Axelera AI Accelerator",
-                        status=AcceleratorStatus.AVAILABLE,
-                        details={"info": info_result.stdout[:500]},
-                    ))
+                    devices.append(
+                        AcceleratorInfo(
+                            type=AcceleratorType.AXELERA_M2,
+                            name="Axelera AI Accelerator",
+                            status=AcceleratorStatus.AVAILABLE,
+                            details={"info": info_result.stdout[:500]},
+                        )
+                    )
         except Exception as e:
             logger.warning(f"Error detecting Axelera: {e}")
 
         return devices
 
-    def _detect_openvino(self) -> Optional[AcceleratorInfo]:
+    def _detect_openvino(self) -> AcceleratorInfo | None:
         """Detect Intel OpenVINO availability."""
         try:
             import openvino
+
             return AcceleratorInfo(
                 type=AcceleratorType.INTEL_OPENVINO,
                 name="Intel OpenVINO",
@@ -935,7 +962,9 @@ class HardwareDetectionService:
         try:
             result = subprocess.run(
                 ["python3", "-c", "import openvino; print(openvino.__version__)"],
-                capture_output=True, text=True, timeout=10
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 return AcceleratorInfo(
@@ -949,26 +978,25 @@ class HardwareDetectionService:
 
         return None
 
-    def _detect_amd_rocm(self) -> List[AcceleratorInfo]:
+    def _detect_amd_rocm(self) -> list[AcceleratorInfo]:
         """Detect AMD GPUs with ROCm support."""
-        gpus: List[AcceleratorInfo] = []
+        gpus: list[AcceleratorInfo] = []
 
         try:
-            result = subprocess.run(
-                ["rocm-smi", "--showproductname"],
-                capture_output=True, text=True, timeout=10
-            )
+            result = subprocess.run(["rocm-smi", "--showproductname"], capture_output=True, text=True, timeout=10)
 
             if result.returncode == 0:
                 # Parse ROCm output
                 for line in result.stdout.split("\n"):
                     if "GPU" in line and ":" in line:
                         name = line.split(":")[-1].strip()
-                        gpus.append(AcceleratorInfo(
-                            type=AcceleratorType.AMD_ROCM,
-                            name=f"AMD {name}",
-                            status=AcceleratorStatus.AVAILABLE,
-                        ))
+                        gpus.append(
+                            AcceleratorInfo(
+                                type=AcceleratorType.AMD_ROCM,
+                                name=f"AMD {name}",
+                                status=AcceleratorStatus.AVAILABLE,
+                            )
+                        )
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -980,10 +1008,7 @@ class HardwareDetectionService:
     # Recommendation Logic
     # =========================================================================
 
-    def _get_recommended_accelerator(
-        self,
-        accelerators: List[AcceleratorInfo]
-    ) -> Optional[AcceleratorType]:
+    def _get_recommended_accelerator(self, accelerators: list[AcceleratorInfo]) -> AcceleratorType | None:
         """Determine the recommended accelerator based on available hardware."""
 
         # Priority order for recommendation
@@ -1003,10 +1028,7 @@ class HardwareDetectionService:
             AcceleratorType.CPU,
         ]
 
-        available_types = {
-            acc.type for acc in accelerators
-            if acc.status == AcceleratorStatus.AVAILABLE
-        }
+        available_types = {acc.type for acc in accelerators if acc.status == AcceleratorStatus.AVAILABLE}
 
         for acc_type in priority:
             if acc_type in available_types:

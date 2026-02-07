@@ -8,22 +8,12 @@ import hashlib
 import json
 import logging
 import os
-import shutil
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Type
-from urllib.parse import urlparse
 
-from .base import BaseInferenceEngine
-from .base import HardwareAccelerator
-from .base import ModelConfig
-from .base import ModelType
+from .base import BaseInferenceEngine, HardwareAccelerator, ModelConfig, ModelType
 
 logger = logging.getLogger(__name__)
 
@@ -31,21 +21,22 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ModelInfo:
     """Information about a registered model."""
+
     name: str
     model_type: ModelType
     path: str
     version: str = "1.0.0"
     description: str = ""
-    supported_accelerators: List[HardwareAccelerator] = field(default_factory=list)
-    classes: List[str] = field(default_factory=list)
+    supported_accelerators: list[HardwareAccelerator] = field(default_factory=list)
+    classes: list[str] = field(default_factory=list)
     input_size: tuple = (640, 640)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
-    file_hash: Optional[str] = None
+    file_hash: str | None = None
     is_downloaded: bool = True
-    download_url: Optional[str] = None
+    download_url: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "model_type": self.model_type.value,
@@ -63,16 +54,14 @@ class ModelInfo:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ModelInfo":
+    def from_dict(cls, data: dict[str, Any]) -> "ModelInfo":
         return cls(
             name=data["name"],
             model_type=ModelType(data["model_type"]),
             path=data["path"],
             version=data.get("version", "1.0.0"),
             description=data.get("description", ""),
-            supported_accelerators=[
-                HardwareAccelerator(a) for a in data.get("supported_accelerators", [])
-            ],
+            supported_accelerators=[HardwareAccelerator(a) for a in data.get("supported_accelerators", [])],
             classes=data.get("classes", []),
             input_size=tuple(data.get("input_size", (640, 640))),
             metadata=data.get("metadata", {}),
@@ -168,8 +157,8 @@ class ModelRegistry:
     def __init__(self, models_dir: str = "./models", cache_dir: str = "./.model_cache"):
         self.models_dir = Path(models_dir)
         self.cache_dir = Path(cache_dir)
-        self._registry: Dict[str, ModelInfo] = {}
-        self._engine_classes: Dict[ModelType, Type[BaseInferenceEngine]] = {}
+        self._registry: dict[str, ModelInfo] = {}
+        self._engine_classes: dict[ModelType, type[BaseInferenceEngine]] = {}
 
         # Create directories
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -189,7 +178,7 @@ class ModelRegistry:
         registry_path = self._get_registry_path()
         if registry_path.exists():
             try:
-                with open(registry_path, "r") as f:
+                with open(registry_path) as f:
                     data = json.load(f)
                     for name, model_data in data.items():
                         self._registry[name] = ModelInfo.from_dict(model_data)
@@ -220,11 +209,7 @@ class ModelRegistry:
                     info.is_downloaded = False
                 self._registry[name] = info
 
-    def register_engine(
-        self,
-        model_type: ModelType,
-        engine_class: Type[BaseInferenceEngine]
-    ) -> None:
+    def register_engine(self, model_type: ModelType, engine_class: type[BaseInferenceEngine]) -> None:
         """Register an inference engine class for a model type."""
         self._engine_classes[model_type] = engine_class
         logger.info(f"Registered engine {engine_class.__name__} for {model_type.value}")
@@ -244,16 +229,16 @@ class ModelRegistry:
             return True
         return False
 
-    def get_model(self, name: str) -> Optional[ModelInfo]:
+    def get_model(self, name: str) -> ModelInfo | None:
         """Get model info by name."""
         return self._registry.get(name)
 
     def list_models(
         self,
-        model_type: Optional[ModelType] = None,
-        accelerator: Optional[HardwareAccelerator] = None,
-        downloaded_only: bool = False
-    ) -> List[ModelInfo]:
+        model_type: ModelType | None = None,
+        accelerator: HardwareAccelerator | None = None,
+        downloaded_only: bool = False,
+    ) -> list[ModelInfo]:
         """
         List registered models with optional filtering.
 
@@ -335,11 +320,8 @@ class ModelRegistry:
         return sha256.hexdigest()
 
     def create_engine(
-        self,
-        model_name: str,
-        accelerator: Optional[HardwareAccelerator] = None,
-        **config_overrides
-    ) -> Optional[BaseInferenceEngine]:
+        self, model_name: str, accelerator: HardwareAccelerator | None = None, **config_overrides
+    ) -> BaseInferenceEngine | None:
         """
         Create an inference engine for a model.
 
@@ -372,12 +354,12 @@ class ModelRegistry:
             model_name=model_info.name,
             input_size=model_info.input_size,
             preferred_accelerator=accelerator or HardwareAccelerator.CPU,
-            **config_overrides
+            **config_overrides,
         )
 
         return engine_class(config)
 
-    def discover_models(self, directory: Optional[str] = None) -> List[ModelInfo]:
+    def discover_models(self, directory: str | None = None) -> list[ModelInfo]:
         """
         Discover models in a directory.
 
@@ -409,14 +391,6 @@ class ModelRegistry:
                         model_type=model_type,
                         path=str(file_path),
                         is_downloaded=True,
-                    )
-                    discovered.append(info)
-                    self.register_model(info)
-
-        return discovered
-                        model_type = model_type,
-                        path = str(file_path),
-                        is_downloaded = True,
                     )
                     discovered.append(info)
                     self.register_model(info)

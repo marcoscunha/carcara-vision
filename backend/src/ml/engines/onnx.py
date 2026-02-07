@@ -11,20 +11,12 @@ Supports ONNX Runtime with various execution providers:
 
 import logging
 import time
-from pathlib import Path
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
 
 import cv2
 import numpy as np
 
-from ..base import BaseInferenceEngine
-from ..base import HardwareAccelerator
-from ..base import InferenceResult
-from ..base import ModelConfig
+from ..base import BaseInferenceEngine, HardwareAccelerator, InferenceResult, ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +40,11 @@ class ONNXEngine(BaseInferenceEngine):
     def __init__(self, config: ModelConfig):
         super().__init__(config)
         self._session = None
-        self._input_name: Optional[str] = None
-        self._output_names: List[str] = []
-        self._class_names: Dict[int, str] = {}
+        self._input_name: str | None = None
+        self._output_names: list[str] = []
+        self._class_names: dict[int, str] = {}
 
-    def get_supported_accelerators(self) -> List[HardwareAccelerator]:
+    def get_supported_accelerators(self) -> list[HardwareAccelerator]:
         """Return accelerators supported by ONNX Runtime."""
         try:
             import onnxruntime as ort
@@ -87,16 +79,10 @@ class ONNXEngine(BaseInferenceEngine):
 
             # Session options
             sess_options = ort.SessionOptions()
-            sess_options.graph_optimization_level = (
-                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            )
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
             # Create session
-            self._session = ort.InferenceSession(
-                self.config.model_path,
-                sess_options=sess_options,
-                providers=providers
-            )
+            self._session = ort.InferenceSession(self.config.model_path, sess_options=sess_options, providers=providers)
 
             # Get input/output info
             inputs = self._session.get_inputs()
@@ -121,7 +107,7 @@ class ONNXEngine(BaseInferenceEngine):
             logger.error(f"Failed to load ONNX model: {e}")
             return False
 
-    def _get_providers(self) -> List[str]:
+    def _get_providers(self) -> list[str]:
         """Get ordered list of execution providers to try."""
         import onnxruntime as ort
 
@@ -161,11 +147,7 @@ class ONNXEngine(BaseInferenceEngine):
         self._is_loaded = False
         logger.info("ONNX model unloaded")
 
-    def infer(
-        self,
-        image: np.ndarray,
-        **kwargs
-    ) -> InferenceResult:
+    def infer(self, image: np.ndarray, **kwargs) -> InferenceResult:
         """
         Run ONNX inference on an image.
 
@@ -185,10 +167,7 @@ class ONNXEngine(BaseInferenceEngine):
         input_tensor = self._preprocess(image)
 
         # Run inference
-        outputs = self._session.run(
-            self._output_names,
-            {self._input_name: input_tensor}
-        )
+        outputs = self._session.run(self._output_names, {self._input_name: input_tensor})
 
         inference_time = (time.perf_counter() - start_time) * 1000
 
@@ -230,11 +209,7 @@ class ONNXEngine(BaseInferenceEngine):
 
         return tensor.astype(np.float32)
 
-    def _parse_yolo_output(
-        self,
-        outputs: List[np.ndarray],
-        original_shape: Tuple[int, int]
-    ) -> List[Dict[str, Any]]:
+    def _parse_yolo_output(self, outputs: list[np.ndarray], original_shape: tuple[int, int]) -> list[dict[str, Any]]:
         """
         Parse YOLO-format ONNX output.
 
@@ -296,22 +271,21 @@ class ONNXEngine(BaseInferenceEngine):
             x2 = max(0, min(orig_w, x2))
             y2 = max(0, min(orig_h, y2))
 
-            detections.append({
-                "bbox": [float(x1), float(y1), float(x2), float(y2)],
-                "class_id": int(class_id),
-                "class_name": self._class_names.get(int(class_id), f"class_{class_id}"),
-                "confidence": float(confidence),
-            })
+            detections.append(
+                {
+                    "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                    "class_id": int(class_id),
+                    "class_name": self._class_names.get(int(class_id), f"class_{class_id}"),
+                    "confidence": float(confidence),
+                }
+            )
 
         # Apply NMS
         detections = self._apply_nms(detections)
 
         return detections
 
-    def _apply_nms(
-        self,
-        detections: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _apply_nms(self, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Apply Non-Maximum Suppression to detections."""
         if len(detections) == 0:
             return detections
@@ -324,7 +298,7 @@ class ONNXEngine(BaseInferenceEngine):
             boxes.tolist(),
             scores.tolist(),
             self.config.confidence_threshold,
-            self.config.iou_threshold
+            self.config.iou_threshold,
         )
 
         if len(indices) == 0:
@@ -333,11 +307,11 @@ class ONNXEngine(BaseInferenceEngine):
         indices = indices.flatten()
         return [detections[i] for i in indices]
 
-    def set_class_names(self, class_names: Dict[int, str]) -> None:
+    def set_class_names(self, class_names: dict[int, str]) -> None:
         """Set class names for detection output."""
         self._class_names = class_names
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get ONNX model information."""
         if not self._is_loaded or self._session is None:
             return {}
@@ -346,15 +320,7 @@ class ONNXEngine(BaseInferenceEngine):
         outputs = self._session.get_outputs()
 
         return {
-            "inputs": [
-                {"name": i.name, "shape": i.shape, "type": i.type}
-                for i in inputs
-            ],
-            "outputs": [
-                {"name": o.name, "shape": o.shape, "type": o.type}
-                for o in outputs
-            ],
+            "inputs": [{"name": i.name, "shape": i.shape, "type": i.type} for i in inputs],
+            "outputs": [{"name": o.name, "shape": o.shape, "type": o.type} for o in outputs],
             "providers": self._session.get_providers(),
-        }
-        "providers": self._session.get_providers(),
         }

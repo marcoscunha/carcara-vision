@@ -8,12 +8,9 @@ with TensorRT and DeepStream integration.
 import logging
 import os
 import subprocess
-from typing import Dict
-from typing import Optional
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend
-from .base import DeviceInfo
+from .base import AcceleratorBackend, DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +41,8 @@ class JetsonBackend(AcceleratorBackend):
     }
 
     def __init__(self):
-        self._jetson_type: Optional[str] = None
-        self._is_jetson: Optional[bool] = None
+        self._jetson_type: str | None = None
+        self._is_jetson: bool | None = None
 
     def is_available(self) -> bool:
         """Check if running on a Jetson platform."""
@@ -69,11 +66,7 @@ class JetsonBackend(AcceleratorBackend):
                         return True
 
             # Check for jtop
-            result = subprocess.run(
-                ["which", "jtop"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            result = subprocess.run(["which", "jtop"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode == 0:
                 self._is_jetson = True
                 self._detect_jetson_type()
@@ -90,7 +83,7 @@ class JetsonBackend(AcceleratorBackend):
         try:
             # Try reading from device tree
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
 
                     if "orin" in model:
@@ -114,12 +107,7 @@ class JetsonBackend(AcceleratorBackend):
                     return
 
             # Fallback: try jtop
-            result = subprocess.run(
-                ["jtop", "--version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            result = subprocess.run(["jtop", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode == 0:
                 # jtop is available, device type detection requires parsing
                 self._jetson_type = "nano"  # Default fallback
@@ -134,13 +122,10 @@ class JetsonBackend(AcceleratorBackend):
             return DeviceInfo(
                 name="Jetson (unavailable)",
                 accelerator_type=HardwareAccelerator.JETSON,
-                is_available=False
+                is_available=False,
             )
 
-        device_specs = self.DEVICE_TYPES.get(
-            self._jetson_type or "nano",
-            self.DEVICE_TYPES["nano"]
-        )
+        device_specs = self.DEVICE_TYPES.get(self._jetson_type or "nano", self.DEVICE_TYPES["nano"])
 
         # Get memory info
         memory_total, memory_available = self._get_memory_info()
@@ -159,7 +144,7 @@ class JetsonBackend(AcceleratorBackend):
                 "dla_cores": device_specs["dla_cores"],
                 "gpu_architecture": device_specs["gpu_arch"],
                 "power_mode": self._get_power_mode(),
-            }
+            },
         )
 
     def get_device_count(self) -> int:
@@ -170,6 +155,7 @@ class JetsonBackend(AcceleratorBackend):
         """Get GPU memory information."""
         try:
             import torch
+
             if torch.cuda.is_available():
                 device = torch.cuda.get_device_properties(0)
                 total = device.total_memory // (1024 * 1024)
@@ -180,12 +166,12 @@ class JetsonBackend(AcceleratorBackend):
 
         # Fallback: read from tegrastats
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: F841
                 ["tegrastats", "--once"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             # Parse tegrastats output for RAM info
             # Format varies by Jetson version
@@ -194,25 +180,20 @@ class JetsonBackend(AcceleratorBackend):
 
         return 0, 0
 
-    def _get_jetpack_version(self) -> Optional[str]:
+    def _get_jetpack_version(self) -> str | None:
         """Get JetPack version."""
         try:
             if os.path.exists("/etc/nv_tegra_release"):
-                with open("/etc/nv_tegra_release", "r") as f:
+                with open("/etc/nv_tegra_release") as f:
                     return f.read().strip().split(",")[0].replace("# R", "")
         except Exception:
             pass
         return None
 
-    def _get_power_mode(self) -> Optional[str]:
+    def _get_power_mode(self) -> str | None:
         """Get current power mode."""
         try:
-            result = subprocess.run(
-                ["nvpmodel", "-q"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            result = subprocess.run(["nvpmodel", "-q"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode == 0:
                 for line in result.stdout.split("\n"):
                     if "NV Power Mode" in line:
@@ -235,7 +216,7 @@ class JetsonBackend(AcceleratorBackend):
             result = subprocess.run(
                 ["sudo", "nvpmodel", "-m", str(mode)],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
             if result.returncode == 0:
                 logger.info(f"Set Jetson power mode to {mode}")
@@ -248,11 +229,7 @@ class JetsonBackend(AcceleratorBackend):
         """Set up Jetson-optimized environment."""
         # Enable max clocks for inference
         try:
-            subprocess.run(
-                ["sudo", "jetson_clocks"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            subprocess.run(["sudo", "jetson_clocks"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             logger.info("Enabled Jetson max clocks")
         except Exception:
             pass
@@ -272,8 +249,8 @@ class JetsonBackend(AcceleratorBackend):
         output_path: str,
         use_fp16: bool = True,
         use_dla: bool = False,
-        **kwargs
-    ) -> Optional[str]:
+        **kwargs,
+    ) -> str | None:
         """
         Optimize model for Jetson using TensorRT.
 
@@ -286,10 +263,7 @@ class JetsonBackend(AcceleratorBackend):
         Returns:
             Path to optimized engine
         """
-        device_specs = self.DEVICE_TYPES.get(
-            self._jetson_type or "nano",
-            self.DEVICE_TYPES["nano"]
-        )
+        device_specs = self.DEVICE_TYPES.get(self._jetson_type or "nano", self.DEVICE_TYPES["nano"])
 
         # Check DLA availability
         if use_dla and device_specs["dla_cores"] == 0:
@@ -297,18 +271,14 @@ class JetsonBackend(AcceleratorBackend):
             use_dla = False
 
         try:
-            import tensorrt as trt
+            import tensorrt as trt  # noqa: F401
 
             # For Jetson, use trtexec for best optimization
             if model_path.endswith(".onnx"):
-                return self._build_engine_trtexec(
-                    model_path, output_path, use_fp16, use_dla
-                )
+                return self._build_engine_trtexec(model_path, output_path, use_fp16, use_dla)
             elif model_path.endswith(".pt"):
                 # Export YOLO to engine directly
-                return self._export_yolo_tensorrt(
-                    model_path, output_path, use_fp16
-                )
+                return self._export_yolo_tensorrt(model_path, output_path, use_fp16)
 
         except ImportError:
             logger.error("TensorRT not available")
@@ -317,13 +287,7 @@ class JetsonBackend(AcceleratorBackend):
 
         return None
 
-    def _build_engine_trtexec(
-        self,
-        onnx_path: str,
-        engine_path: str,
-        use_fp16: bool,
-        use_dla: bool
-    ) -> Optional[str]:
+    def _build_engine_trtexec(self, onnx_path: str, engine_path: str, use_fp16: bool, use_dla: bool) -> str | None:
         """Build TensorRT engine using trtexec."""
         cmd = [
             "trtexec",
@@ -339,12 +303,7 @@ class JetsonBackend(AcceleratorBackend):
             cmd.extend(["--useDLACore=0", "--allowGPUFallback"])
 
         try:
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode == 0:
                 logger.info(f"TensorRT engine saved to {engine_path}")
                 return engine_path
@@ -355,12 +314,7 @@ class JetsonBackend(AcceleratorBackend):
 
         return None
 
-    def _export_yolo_tensorrt(
-        self,
-        pt_path: str,
-        engine_path: str,
-        use_fp16: bool
-    ) -> Optional[str]:
+    def _export_yolo_tensorrt(self, pt_path: str, engine_path: str, use_fp16: bool) -> str | None:
         """Export YOLO model directly to TensorRT."""
         try:
             from ultralytics import YOLO
@@ -388,4 +342,5 @@ class JetsonBackend(AcceleratorBackend):
 
         return None
 
+        return None
         return None

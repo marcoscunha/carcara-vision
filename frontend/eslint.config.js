@@ -19,9 +19,14 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': [
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // Downgrade to warnings for existing codebase
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/ban-ts-comment': 'warn',
+      'max-len': [
         'warn',
-        { allowConstantExport: true },
+        { code: 120, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true, ignoreComments: true },
       ],
     },
   },

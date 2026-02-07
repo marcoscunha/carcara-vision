@@ -3,20 +3,12 @@ Inference Engine Factory - Creates appropriate engines for models and hardware.
 """
 
 import logging
-from typing import Optional
-from typing import Type
 
 from .accelerators.detector import HardwareDetector
-from .base import BaseInferenceEngine
-from .base import HardwareAccelerator
-from .base import ModelConfig
-from .base import ModelType
+from .base import BaseInferenceEngine, HardwareAccelerator, ModelConfig, ModelType
 from .engines.onnx import ONNXEngine
 from .engines.tensorrt import TensorRTEngine
-from .engines.vlm import LocalVLMEngine
-from .engines.vlm import OllamaVLMEngine
-from .engines.vlm import OpenAIVLMEngine
-from .engines.vlm import VLMEngine
+from .engines.vlm import LocalVLMEngine, OllamaVLMEngine, OpenAIVLMEngine, VLMEngine
 from .engines.yolo import YOLOEngine
 
 logger = logging.getLogger(__name__)
@@ -48,9 +40,9 @@ class InferenceEngineFactory:
     def create(
         cls,
         config: ModelConfig,
-        engine_class: Optional[Type[BaseInferenceEngine]] = None,
+        engine_class: type[BaseInferenceEngine] | None = None,
         auto_select_hardware: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BaseInferenceEngine:
         """
         Create an inference engine for the given configuration.
@@ -67,8 +59,7 @@ class InferenceEngineFactory:
         # Auto-select hardware if requested
         if auto_select_hardware:
             config.preferred_accelerator = HardwareDetector.get_best_accelerator(
-                preferred=config.preferred_accelerator,
-                fallbacks=config.fallback_accelerators
+                preferred=config.preferred_accelerator, fallbacks=config.fallback_accelerators
             )
             logger.info(f"Selected accelerator: {config.preferred_accelerator}")
 
@@ -84,10 +75,7 @@ class InferenceEngineFactory:
         return engine_class(config, **kwargs)
 
     @classmethod
-    def _select_engine_class(
-        cls,
-        config: ModelConfig
-    ) -> Optional[Type[BaseInferenceEngine]]:
+    def _select_engine_class(cls, config: ModelConfig) -> type[BaseInferenceEngine] | None:
         """Select the best engine class for a model."""
         # Check model file extension for automatic type detection
         model_path = config.model_path.lower()
@@ -105,7 +93,8 @@ class InferenceEngineFactory:
                 HardwareAccelerator.JETSON,
             ]:
                 try:
-                    import tensorrt
+                    import tensorrt  # noqa: F401
+
                     return TensorRTEngine
                 except ImportError:
                     pass
@@ -123,10 +112,7 @@ class InferenceEngineFactory:
         return cls.ENGINE_MAP.get(config.model_type)
 
     @classmethod
-    def _select_vlm_engine(
-        cls,
-        config: ModelConfig
-    ) -> Type[VLMEngine]:
+    def _select_vlm_engine(cls, config: ModelConfig) -> type[VLMEngine]:
         """Select VLM engine based on configuration."""
         model_name = config.model_name.lower()
 
@@ -147,8 +133,8 @@ class InferenceEngineFactory:
         cls,
         model_path: str = "yolov8n.pt",
         confidence: float = 0.5,
-        accelerator: Optional[HardwareAccelerator] = None,
-        **kwargs
+        accelerator: HardwareAccelerator | None = None,
+        **kwargs,
     ) -> YOLOEngine:
         """
         Convenience method to create a YOLO engine.
@@ -168,18 +154,14 @@ class InferenceEngineFactory:
             model_name=model_path.split("/")[-1].replace(".pt", ""),
             confidence_threshold=confidence,
             preferred_accelerator=accelerator or HardwareAccelerator.CPU,
-            **kwargs
+            **kwargs,
         )
 
         return cls.create(config, engine_class=YOLOEngine)
 
     @classmethod
     def create_vlm(
-        cls,
-        model_name: str = "llava",
-        backend: str = "ollama",
-        prompt: Optional[str] = None,
-        **kwargs
+        cls, model_name: str = "llava", backend: str = "ollama", prompt: str | None = None, **kwargs
     ) -> VLMEngine:
         """
         Convenience method to create a VLM engine.
@@ -199,7 +181,7 @@ class InferenceEngineFactory:
             model_name=model_name,
             vlm_prompt=prompt,
             options={"vlm_backend": backend},
-            **kwargs
+            **kwargs,
         )
 
         engine_class = cls.VLM_BACKENDS.get(backend, OllamaVLMEngine)
@@ -212,7 +194,8 @@ class InferenceEngineFactory:
 
         # Check YOLO
         try:
-            from ultralytics import YOLO
+            from ultralytics import YOLO  # noqa: F401
+
             engines["yolo"] = {"available": True, "versions": ["v5", "v8", "v11"]}
         except ImportError:
             engines["yolo"] = {"available": False}
@@ -220,6 +203,7 @@ class InferenceEngineFactory:
         # Check ONNX Runtime
         try:
             import onnxruntime as ort
+
             providers = ort.get_available_providers()
             engines["onnx"] = {"available": True, "providers": providers}
         except ImportError:
@@ -228,35 +212,34 @@ class InferenceEngineFactory:
         # Check TensorRT
         try:
             import tensorrt
-            engines["tensorrt"] = {
-                "available": True,
-                "version": tensorrt.__version__
-            }
+
+            engines["tensorrt"] = {"available": True, "version": tensorrt.__version__}
         except ImportError:
             engines["tensorrt"] = {"available": False}
 
         # Check VLM backends
         vlm_backends = {}
         try:
-            import ollama
+            import ollama  # noqa: F401
+
             vlm_backends["ollama"] = True
         except ImportError:
             vlm_backends["ollama"] = False
 
         try:
-            import openai
+            import openai  # noqa: F401
+
             vlm_backends["openai"] = True
         except ImportError:
             vlm_backends["openai"] = False
 
         try:
-            import transformers
+            import transformers  # noqa: F401
+
             vlm_backends["local"] = True
         except ImportError:
             vlm_backends["local"] = False
 
         engines["vlm"] = {"available": any(vlm_backends.values()), "backends": vlm_backends}
-
-        return engines
 
         return engines

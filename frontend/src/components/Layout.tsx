@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'
 import {
   AppBar,
   Box,
@@ -14,34 +14,36 @@ import {
   Typography,
   alpha,
   useTheme,
-} from '@mui/material';
+} from '@mui/material'
 import {
   Menu as MenuIcon,
   Videocam as CameraIcon,
   PlayCircle as StreamIcon,
   Notifications as AlarmIcon,
   Settings as SettingsIcon,
-} from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+} from '@mui/icons-material'
+import { useNavigate, useLocation } from 'react-router-dom'
 
-const drawerWidth = 260;
+const drawerWidth = 260
 
 interface LayoutProps {
-  children: React.ReactNode;
+  children: React.ReactNode
 }
 
 // CARCARA Logo Component
 const CarcaraLogo: React.FC<{ size?: 'small' | 'large' }> = ({ size = 'large' }) => {
-  const theme = useTheme();
-  const isSmall = size === 'small';
+  const theme = useTheme()
+  const isSmall = size === 'small'
 
   return (
-    <Box sx={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: isSmall ? 1 : 1.5,
-      py: isSmall ? 0 : 1,
-    }}>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: isSmall ? 1 : 1.5,
+        py: isSmall ? 0 : 1,
+      }}
+    >
       {/* Logo Icon - Bird/Hawk silhouette representing Carcara */}
       <Box
         sx={{
@@ -109,27 +111,27 @@ const CarcaraLogo: React.FC<{ size?: 'small' | 'large' }> = ({ size = 'large' })
         </Typography>
       </Box>
     </Box>
-  );
-};
+  )
+}
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const [mobileOpen, setMobileOpen] = React.useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const theme = useTheme();
+  const [mobileOpen, setMobileOpen] = React.useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const theme = useTheme()
 
   const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+    setMobileOpen(!mobileOpen)
+  }
 
   const menuItems = [
     { text: 'Cameras', icon: <CameraIcon />, path: '/cameras' },
     { text: 'Streams', icon: <StreamIcon />, path: '/streams' },
     { text: 'Alarms', icon: <AlarmIcon />, path: '/alarms' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
-  ];
+  ]
 
-  const isActive = (path: string) => location.pathname === path || (path === '/cameras' && location.pathname === '/');
+  const isActive = (path: string) => location.pathname === path || (path === '/cameras' && location.pathname === '/')
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -215,15 +217,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           textAlign: 'center',
         }}
       >
-        <Typography
-          variant="caption"
-          sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem' }}
-        >
+        <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem' }}>
           Network Video Controller
         </Typography>
       </Box>
     </Box>
-  );
+  )
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -262,17 +261,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               color: theme.palette.text.primary,
             }}
           >
-            {menuItems.find(item => isActive(item.path))?.text || 'Dashboard'}
+            {menuItems.find((item) => isActive(item.path))?.text || 'Dashboard'}
           </Typography>
 
           {/* Placeholder for future actions */}
           <Box sx={{ width: 48 }} />
         </Toolbar>
       </AppBar>
-      <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-      >
+      <Box component="nav" sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -317,7 +313,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </Box>
     </Box>
-  );
-};
+  )
+}
 
-export default Layout;
+export default Layout

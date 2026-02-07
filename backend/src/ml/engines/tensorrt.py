@@ -9,18 +9,11 @@ import logging
 import time
 from pathlib import Path
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
 
 import cv2
 import numpy as np
 
-from ..base import BaseInferenceEngine
-from ..base import HardwareAccelerator
-from ..base import InferenceResult
-from ..base import ModelConfig
+from ..base import BaseInferenceEngine, HardwareAccelerator, InferenceResult, ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +34,9 @@ class TensorRTEngine(BaseInferenceEngine):
         self._context = None
         self._engine = None
         self._bindings = None
-        self._class_names: Dict[int, str] = {}
+        self._class_names: dict[int, str] = {}
 
-    def get_supported_accelerators(self) -> List[HardwareAccelerator]:
+    def get_supported_accelerators(self) -> list[HardwareAccelerator]:
         """TensorRT only supports NVIDIA GPUs."""
         return [
             HardwareAccelerator.CUDA,
@@ -54,8 +47,8 @@ class TensorRTEngine(BaseInferenceEngine):
     def load(self) -> bool:
         """Load TensorRT engine."""
         try:
-            import pycuda.autoinit
-            import pycuda.driver as cuda
+            import pycuda.autoinit  # noqa: F401
+            import pycuda.driver as cuda  # noqa: F401
             import tensorrt as trt
 
             TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
@@ -96,13 +89,14 @@ class TensorRTEngine(BaseInferenceEngine):
     def _allocate_buffers(self) -> None:
         """Allocate input/output buffers."""
         import pycuda.driver as cuda
+        import tensorrt as trt
 
         self._bindings = {
             "inputs": [],
             "outputs": [],
             "input_names": [],
             "output_names": [],
-            "stream": cuda.Stream()
+            "stream": cuda.Stream(),
         }
 
         for i in range(self._engine.num_bindings):
@@ -162,11 +156,7 @@ class TensorRTEngine(BaseInferenceEngine):
         self._is_loaded = False
         logger.info("TensorRT engine unloaded")
 
-    def infer(
-        self,
-        image: np.ndarray,
-        **kwargs
-    ) -> InferenceResult:
+    def infer(self, image: np.ndarray, **kwargs) -> InferenceResult:
         """
         Run TensorRT inference on an image.
 
@@ -190,29 +180,18 @@ class TensorRTEngine(BaseInferenceEngine):
         # Copy input to device
         input_binding = self._bindings["inputs"][0]
         np.copyto(input_binding["host"], input_tensor.ravel())
-        cuda.memcpy_htod_async(
-            input_binding["device"],
-            input_binding["host"],
-            self._bindings["stream"]
-        )
+        cuda.memcpy_htod_async(input_binding["device"], input_binding["host"], self._bindings["stream"])
 
         # Run inference
         bindings = [b["device"] for b in self._bindings["inputs"]]
         bindings += [b["device"] for b in self._bindings["outputs"]]
 
-        self._context.execute_async_v2(
-            bindings=bindings,
-            stream_handle=self._bindings["stream"].handle
-        )
+        self._context.execute_async_v2(bindings=bindings, stream_handle=self._bindings["stream"].handle)
 
         # Copy outputs to host
         outputs = []
         for output_binding in self._bindings["outputs"]:
-            cuda.memcpy_dtoh_async(
-                output_binding["host"],
-                output_binding["device"],
-                self._bindings["stream"]
-            )
+            cuda.memcpy_dtoh_async(output_binding["host"], output_binding["device"], self._bindings["stream"])
 
         # Synchronize
         self._bindings["stream"].synchronize()
@@ -262,11 +241,7 @@ class TensorRTEngine(BaseInferenceEngine):
 
         return np.ascontiguousarray(tensor, dtype=np.float32)
 
-    def _parse_yolo_output(
-        self,
-        outputs: List[np.ndarray],
-        original_shape: Tuple[int, int]
-    ) -> List[Dict[str, Any]]:
+    def _parse_yolo_output(self, outputs: list[np.ndarray], original_shape: tuple[int, int]) -> list[dict[str, Any]]:
         """Parse YOLO-format TensorRT output."""
         detections = []
 
@@ -312,22 +287,21 @@ class TensorRTEngine(BaseInferenceEngine):
             x2 = max(0, min(orig_w, x2))
             y2 = max(0, min(orig_h, y2))
 
-            detections.append({
-                "bbox": [float(x1), float(y1), float(x2), float(y2)],
-                "class_id": int(class_id),
-                "class_name": self._class_names.get(int(class_id), f"class_{class_id}"),
-                "confidence": float(confidence),
-            })
+            detections.append(
+                {
+                    "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                    "class_id": int(class_id),
+                    "class_name": self._class_names.get(int(class_id), f"class_{class_id}"),
+                    "confidence": float(confidence),
+                }
+            )
 
         # Apply NMS
         detections = self._apply_nms(detections)
 
         return detections
 
-    def _apply_nms(
-        self,
-        detections: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _apply_nms(self, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Apply Non-Maximum Suppression."""
         if len(detections) == 0:
             return detections
@@ -339,7 +313,7 @@ class TensorRTEngine(BaseInferenceEngine):
             boxes.tolist(),
             scores.tolist(),
             self.config.confidence_threshold,
-            self.config.iou_threshold
+            self.config.iou_threshold,
         )
 
         if len(indices) == 0:
@@ -348,7 +322,7 @@ class TensorRTEngine(BaseInferenceEngine):
         indices = indices.flatten()
         return [detections[i] for i in indices]
 
-    def set_class_names(self, class_names: Dict[int, str]) -> None:
+    def set_class_names(self, class_names: dict[int, str]) -> None:
         """Set class names for detection output."""
         self._class_names = class_names
 
@@ -359,7 +333,7 @@ class TensorRTEngine(BaseInferenceEngine):
         fp16: bool = True,
         int8: bool = False,
         max_batch_size: int = 1,
-        workspace_gb: int = 4
+        workspace_gb: int = 4,
     ) -> bool:
         """
         Build TensorRT engine from ONNX model.
@@ -381,9 +355,7 @@ class TensorRTEngine(BaseInferenceEngine):
             TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
             builder = trt.Builder(TRT_LOGGER)
-            network = builder.create_network(
-                1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-            )
+            network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
             parser = trt.OnnxParser(network, TRT_LOGGER)
 
             # Parse ONNX
@@ -422,6 +394,9 @@ class TensorRTEngine(BaseInferenceEngine):
 
         except Exception as e:
             logger.error(f"Engine build failed: {e}")
+            return False
+            logger.error(f"Engine build failed: {e}")
+            return False
             return False
             logger.error(f"Engine build failed: {e}")
             return False

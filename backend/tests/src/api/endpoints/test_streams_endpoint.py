@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from fastapi.testclient import TestClient
-from src.api.endpoints.streams import router
+
 from src.db.session import get_db
 from src.main import app
 from src.models.camera import Camera
@@ -9,7 +9,6 @@ from src.models.stream import Stream
 
 
 class StreamsEndpointTests(TestCase):
-
     @classmethod
     def setUpClass(cls) -> None:
         """Set up resources shared across all tests."""
@@ -44,10 +43,7 @@ class StreamsEndpointTests(TestCase):
 
         camera = self.db.query(Camera).filter_by(name="Camera 1").first()
 
-        payload = {
-            "camera_id": camera.id,
-            "stream_metadata": {}
-        }
+        payload = {"camera_id": camera.id, "stream_metadata": {}}
 
         # Act
         response = self.client.post("/api/v1/streams/", json=payload)

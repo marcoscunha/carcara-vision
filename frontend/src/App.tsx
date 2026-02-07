@@ -1,15 +1,15 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { ThemeProvider, createTheme, alpha } from '@mui/material';
-import CssBaseline from '@mui/material/CssBaseline';
+import React from 'react'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { ThemeProvider, createTheme, alpha } from '@mui/material'
+import CssBaseline from '@mui/material/CssBaseline'
 
-import Layout from './components/Layout';
-import Cameras from './pages/Cameras';
-import Alarms from './pages/Alarms';
-import Streams from './pages/Streams';
-import Settings from './pages/Settings';
+import Layout from './components/Layout'
+import Cameras from './pages/Cameras'
+import Alarms from './pages/Alarms'
+import Streams from './pages/Streams'
+import Settings from './pages/Settings'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +20,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
-});
+})
 
 // CARCARA-NVC Color Palette
 const colors = {
@@ -29,17 +29,17 @@ const colors = {
     cream: '#E3D3B0',
   },
   primary: {
-    main: '#F5A45A',    // Vibrant orange
-    dark: '#D26A27',    // Dark rust orange
+    main: '#F5A45A', // Vibrant orange
+    dark: '#D26A27', // Dark rust orange
     light: '#FFB97A',
     contrastText: '#181A1F',
   },
   neutral: {
-    dark: '#181A1F',    // Near black
-    gray: '#484F57',    // Dark gray
+    dark: '#181A1F', // Near black
+    gray: '#484F57', // Dark gray
     lightGray: '#6B7280',
   },
-};
+}
 
 const theme = createTheme({
   palette: {
@@ -175,8 +175,16 @@ const theme = createTheme({
         },
         contained: {
           background: `linear-gradient(135deg, ${colors.primary.main} 0%, ${colors.primary.dark} 100%)`,
+          color: colors.primary.contrastText,
           '&:hover': {
             background: `linear-gradient(135deg, ${colors.primary.light} 0%, ${colors.primary.main} 100%)`,
+          },
+        },
+        containedError: {
+          background: `linear-gradient(135deg, #EF4444 0%, #DC2626 100%)`,
+          color: '#fff',
+          '&:hover': {
+            background: `linear-gradient(135deg, #F87171 0%, #EF4444 100%)`,
           },
         },
         outlined: {
@@ -193,12 +201,21 @@ const theme = createTheme({
         root: {
           transition: 'all 0.2s ease-in-out',
           '&:hover': {
-            backgroundColor: alpha(colors.primary.main, 0.12),
+            backgroundColor: alpha(colors.neutral.gray, 0.2),
           },
         },
         colorPrimary: {
+          color: colors.primary.main,
           '&:hover': {
             color: colors.primary.light,
+            backgroundColor: alpha(colors.primary.main, 0.15),
+          },
+        },
+        colorError: {
+          color: '#EF4444',
+          '&:hover': {
+            color: '#F87171',
+            backgroundColor: alpha('#EF4444', 0.15),
           },
         },
       },
@@ -306,7 +323,7 @@ const theme = createTheme({
       },
     },
   },
-});
+})
 
 const App: React.FC = () => {
   return (
@@ -327,7 +344,7 @@ const App: React.FC = () => {
       </ThemeProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
-  );
-};
+  )
+}
 
-export default App;
+export default App

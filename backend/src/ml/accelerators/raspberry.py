@@ -11,13 +11,9 @@ Supports:
 import logging
 import os
 import subprocess
-from typing import Dict
-from typing import List
-from typing import Optional
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend
-from .base import DeviceInfo
+from .base import AcceleratorBackend, DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +41,10 @@ class RaspberryPiBackend(AcceleratorBackend):
     }
 
     def __init__(self):
-        self._is_rpi: Optional[bool] = None
-        self._pi_model: Optional[str] = None
-        self._has_coral: Optional[bool] = None
-        self._has_hailo: Optional[bool] = None
+        self._is_rpi: bool | None = None
+        self._pi_model: str | None = None
+        self._has_coral: bool | None = None
+        self._has_hailo: bool | None = None
 
     def is_available(self) -> bool:
         """Check if running on Raspberry Pi."""
@@ -58,7 +54,7 @@ class RaspberryPiBackend(AcceleratorBackend):
         try:
             # Check device tree model
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
                     if "raspberry pi" in model:
                         self._is_rpi = True
@@ -67,7 +63,7 @@ class RaspberryPiBackend(AcceleratorBackend):
 
             # Check cpuinfo
             if os.path.exists("/proc/cpuinfo"):
-                with open("/proc/cpuinfo", "r") as f:
+                with open("/proc/cpuinfo") as f:
                     content = f.read().lower()
                     if "raspberry" in content or "bcm2" in content:
                         self._is_rpi = True
@@ -102,13 +98,10 @@ class RaspberryPiBackend(AcceleratorBackend):
             return DeviceInfo(
                 name="Raspberry Pi (unavailable)",
                 accelerator_type=HardwareAccelerator.RPI,
-                is_available=False
+                is_available=False,
             )
 
-        pi_specs = self.PI_MODELS.get(
-            self._pi_model or "pi4",
-            self.PI_MODELS["pi4"]
-        )
+        pi_specs = self.PI_MODELS.get(self._pi_model or "pi4", self.PI_MODELS["pi4"])
 
         # Get actual memory info
         memory_total, memory_available = self._get_memory_info()
@@ -129,7 +122,7 @@ class RaspberryPiBackend(AcceleratorBackend):
                 "has_coral_tpu": accelerators.get("coral", False),
                 "has_hailo": accelerators.get("hailo", False),
                 "accelerators": list(accelerators.keys()),
-            }
+            },
         )
 
     def get_device_count(self) -> int:
@@ -139,7 +132,7 @@ class RaspberryPiBackend(AcceleratorBackend):
     def _get_memory_info(self) -> tuple:
         """Get system memory information."""
         try:
-            with open("/proc/meminfo", "r") as f:
+            with open("/proc/meminfo") as f:
                 content = f.read()
                 total = 0
                 available = 0
@@ -153,7 +146,7 @@ class RaspberryPiBackend(AcceleratorBackend):
             pass
         return 0, 0
 
-    def _detect_accelerators(self) -> Dict[str, bool]:
+    def _detect_accelerators(self) -> dict[str, bool]:
         """Detect available AI accelerators."""
         accelerators = {}
 
@@ -173,21 +166,12 @@ class RaspberryPiBackend(AcceleratorBackend):
         """Detect Google Coral Edge TPU."""
         try:
             # Check for Edge TPU USB device
-            result = subprocess.run(
-                ["lsusb"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            result = subprocess.run(["lsusb"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if "18d1:9302" in result.stdout or "google" in result.stdout.lower():
                 return True
 
             # Check for Edge TPU runtime
-            result = subprocess.run(
-                ["dpkg", "-l", "libedgetpu1-std"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            result = subprocess.run(["dpkg", "-l", "libedgetpu1-std"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode == 0:
                 return True
 
@@ -202,7 +186,7 @@ class RaspberryPiBackend(AcceleratorBackend):
             result = subprocess.run(
                 ["hailortcli", "fw-control", "identify"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
             if result.returncode == 0:
                 return True
@@ -249,8 +233,8 @@ class RaspberryPiBackend(AcceleratorBackend):
         output_path: str,
         target: str = "tflite",
         quantize: bool = True,
-        **kwargs
-    ) -> Optional[str]:
+        **kwargs,
+    ) -> str | None:
         """
         Optimize model for Raspberry Pi.
 
@@ -272,17 +256,13 @@ class RaspberryPiBackend(AcceleratorBackend):
 
         return None
 
-    def _convert_to_tflite(
-        self,
-        model_path: str,
-        output_path: str,
-        quantize: bool
-    ) -> Optional[str]:
+    def _convert_to_tflite(self, model_path: str, output_path: str, quantize: bool) -> str | None:
         """Convert model to TensorFlow Lite format."""
         try:
             if model_path.endswith(".pt"):
                 # YOLO to TFLite
                 from ultralytics import YOLO
+
                 model = YOLO(model_path)
                 model.export(format="tflite", int8=quantize)
 
@@ -314,11 +294,7 @@ class RaspberryPiBackend(AcceleratorBackend):
 
         return None
 
-    def _convert_for_edgetpu(
-        self,
-        model_path: str,
-        output_path: str
-    ) -> Optional[str]:
+    def _convert_for_edgetpu(self, model_path: str, output_path: str) -> str | None:
         """Compile model for Edge TPU."""
         try:
             # First convert to TFLite with full integer quantization
@@ -333,7 +309,7 @@ class RaspberryPiBackend(AcceleratorBackend):
                 ["edgetpu_compiler", "-s", "-o", os.path.dirname(output_path), tflite_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
 
             if result.returncode == 0:
@@ -350,11 +326,7 @@ class RaspberryPiBackend(AcceleratorBackend):
 
         return None
 
-    def _convert_for_hailo(
-        self,
-        model_path: str,
-        output_path: str
-    ) -> Optional[str]:
+    def _convert_for_hailo(self, model_path: str, output_path: str) -> str | None:
         """Compile model for Hailo accelerator."""
         try:
             # Hailo compilation requires their Dataflow Compiler (DFC)
@@ -364,14 +336,17 @@ class RaspberryPiBackend(AcceleratorBackend):
                 # Use Hailo Model Zoo or custom compilation
                 result = subprocess.run(
                     [
-                        "hailo", "compiler",
+                        "hailo",
+                        "compiler",
                         model_path,
-                        "--output", output_path,
-                        "--target", "hailo8"
+                        "--output",
+                        output_path,
+                        "--target",
+                        "hailo8",
                     ],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
                 )
 
                 if result.returncode == 0:
@@ -400,18 +375,14 @@ class CoralTPUBackend(AcceleratorBackend):
         """Check if Coral TPU is available."""
         try:
             # Check USB device
-            result = subprocess.run(
-                ["lsusb"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            result = subprocess.run(["lsusb"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if "18d1:9302" in result.stdout:
                 return True
 
             # Check runtime
             try:
                 from pycoral.utils import edgetpu
+
                 devices = edgetpu.list_edge_tpus()
                 return len(devices) > 0
             except ImportError:
@@ -427,11 +398,12 @@ class CoralTPUBackend(AcceleratorBackend):
             return DeviceInfo(
                 name="Coral TPU (unavailable)",
                 accelerator_type=HardwareAccelerator.CORAL_TPU,
-                is_available=False
+                is_available=False,
             )
 
         try:
             from pycoral.utils import edgetpu
+
             devices = edgetpu.list_edge_tpus()
             device_type = devices[0] if devices else "unknown"
         except Exception:
@@ -444,13 +416,14 @@ class CoralTPUBackend(AcceleratorBackend):
             metadata={
                 "type": device_type,
                 "runtime": "pycoral",
-            }
+            },
         )
 
     def get_device_count(self) -> int:
         """Get number of Coral TPU devices."""
         try:
             from pycoral.utils import edgetpu
+
             return len(edgetpu.list_edge_tpus())
         except Exception:
             return 0
@@ -469,7 +442,7 @@ class HailoBackend(AcceleratorBackend):
             result = subprocess.run(
                 ["hailortcli", "fw-control", "identify"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
             return result.returncode == 0
         except Exception:
@@ -483,7 +456,7 @@ class HailoBackend(AcceleratorBackend):
             return DeviceInfo(
                 name="Hailo (unavailable)",
                 accelerator_type=HardwareAccelerator.HAILO,
-                is_available=False
+                is_available=False,
             )
 
         try:
@@ -491,7 +464,7 @@ class HailoBackend(AcceleratorBackend):
                 ["hailortcli", "fw-control", "identify"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
             device_name = "Hailo-8"
             if "hailo8l" in result.stdout.lower():
@@ -505,7 +478,7 @@ class HailoBackend(AcceleratorBackend):
             is_available=True,
             metadata={
                 "driver": "hailort",
-            }
+            },
         )
 
     def get_device_count(self) -> int:

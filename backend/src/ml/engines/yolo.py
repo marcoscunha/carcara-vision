@@ -4,18 +4,10 @@ YOLO Inference Engine - Support for YOLOv5, YOLOv8, and YOLO11 models.
 
 import logging
 import time
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
 
-import cv2
 import numpy as np
 
-from ..base import BaseInferenceEngine
-from ..base import HardwareAccelerator
-from ..base import InferenceResult
-from ..base import ModelConfig
+from ..base import BaseInferenceEngine, HardwareAccelerator, InferenceResult, ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +24,9 @@ class YOLOEngine(BaseInferenceEngine):
 
     def __init__(self, config: ModelConfig):
         super().__init__(config)
-        self._class_names: Dict[int, str] = {}
+        self._class_names: dict[int, str] = {}
 
-    def get_supported_accelerators(self) -> List[HardwareAccelerator]:
+    def get_supported_accelerators(self) -> list[HardwareAccelerator]:
         """Return supported accelerators for YOLO models."""
         return [
             HardwareAccelerator.CPU,
@@ -86,6 +78,7 @@ class YOLOEngine(BaseInferenceEngine):
         ]:
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     return "cuda:0"
             except ImportError:
@@ -102,6 +95,7 @@ class YOLOEngine(BaseInferenceEngine):
         # Clear CUDA cache if available
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except ImportError:
@@ -110,12 +104,7 @@ class YOLOEngine(BaseInferenceEngine):
         self._is_loaded = False
         logger.info("YOLO model unloaded")
 
-    def infer(
-        self,
-        image: np.ndarray,
-        classes: Optional[List[int]] = None,
-        **kwargs
-    ) -> InferenceResult:
+    def infer(self, image: np.ndarray, classes: list[int] | None = None, **kwargs) -> InferenceResult:
         """
         Run YOLO inference on an image.
 
@@ -140,7 +129,7 @@ class YOLOEngine(BaseInferenceEngine):
             max_det=self.config.max_detections,
             classes=classes,
             verbose=False,
-            **kwargs
+            **kwargs,
         )
 
         inference_time = (time.perf_counter() - start_time) * 1000
@@ -163,12 +152,7 @@ class YOLOEngine(BaseInferenceEngine):
                     class_id = int(box.cls[0].cpu().numpy())
                     class_name = self._class_names.get(class_id, f"class_{class_id}")
 
-                    result.add_detection(
-                        bbox=bbox,
-                        class_name=class_name,
-                        class_id=class_id,
-                        confidence=confidence
-                    )
+                    result.add_detection(bbox=bbox, class_name=class_name, class_id=class_id, confidence=confidence)
 
             # Handle segmentation results
             if hasattr(yolo_result, "masks") and yolo_result.masks is not None:
@@ -182,11 +166,7 @@ class YOLOEngine(BaseInferenceEngine):
 
         return result
 
-    def infer_batch(
-        self,
-        images: List[np.ndarray],
-        **kwargs
-    ) -> List[InferenceResult]:
+    def infer_batch(self, images: list[np.ndarray], **kwargs) -> list[InferenceResult]:
         """
         Run batch inference on multiple images.
 
@@ -209,14 +189,14 @@ class YOLOEngine(BaseInferenceEngine):
             iou=self.config.iou_threshold,
             max_det=self.config.max_detections,
             verbose=False,
-            **kwargs
+            **kwargs,
         )
 
         total_time = (time.perf_counter() - start_time) * 1000
         time_per_image = total_time / len(images)
 
         results = []
-        for i, yolo_result in enumerate(batch_results):
+        for _i, yolo_result in enumerate(batch_results):
             result = InferenceResult(
                 model_name=self.config.model_name,
                 inference_time_ms=time_per_image,
@@ -230,23 +210,13 @@ class YOLOEngine(BaseInferenceEngine):
                     class_id = int(box.cls[0].cpu().numpy())
                     class_name = self._class_names.get(class_id, f"class_{class_id}")
 
-                    result.add_detection(
-                        bbox=bbox,
-                        class_name=class_name,
-                        class_id=class_id,
-                        confidence=confidence
-                    )
+                    result.add_detection(bbox=bbox, class_name=class_name, class_id=class_id, confidence=confidence)
 
             results.append(result)
 
         return results
 
-    def export(
-        self,
-        format: str = "onnx",
-        output_path: Optional[str] = None,
-        **kwargs
-    ) -> Optional[str]:
+    def export(self, format: str = "onnx", output_path: str | None = None, **kwargs) -> str | None:
         """
         Export model to different formats.
 
@@ -269,16 +239,12 @@ class YOLOEngine(BaseInferenceEngine):
             logger.error(f"Export failed: {e}")
             return None
 
-    def get_class_names(self) -> Dict[int, str]:
+    def get_class_names(self) -> dict[int, str]:
         """Get model class names."""
         return self._class_names.copy()
 
     def track(
-        self,
-        image: np.ndarray,
-        persist: bool = True,
-        tracker: str = "bytetrack.yaml",
-        **kwargs
+        self, image: np.ndarray, persist: bool = True, tracker: str = "bytetrack.yaml", **kwargs
     ) -> InferenceResult:
         """
         Run object tracking on an image.
@@ -304,7 +270,7 @@ class YOLOEngine(BaseInferenceEngine):
             persist=persist,
             tracker=tracker,
             verbose=False,
-            **kwargs
+            **kwargs,
         )
 
         inference_time = (time.perf_counter() - start_time) * 1000
@@ -335,8 +301,11 @@ class YOLOEngine(BaseInferenceEngine):
                         class_name=class_name,
                         class_id=class_id,
                         confidence=confidence,
-                        track_id=track_id
+                        track_id=track_id,
                     )
+
+        return result
+        return result
 
         return result
         return result

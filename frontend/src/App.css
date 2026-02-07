@@ -16,7 +16,7 @@
 }
 
 .page-header h4 {
-  background: linear-gradient(135deg, #F9FAFB 0%, #E3D3B0 100%);
+  background: linear-gradient(135deg, #f9fafb 0%, #e3d3b0 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -32,7 +32,7 @@
 
 /* Status indicators */
 .status-active {
-  color: #10B981;
+  color: #10b981;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -43,12 +43,12 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #10B981;
+  background-color: #10b981;
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
 .status-inactive {
-  color: #EF4444;
+  color: #ef4444;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -59,7 +59,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #EF4444;
+  background-color: #ef4444;
 }
 
 /* Camera card specific */
@@ -75,7 +75,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #F5A45A 0%, #D26A27 100%);
+  background: linear-gradient(90deg, #f5a45a 0%, #d26a27 100%);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -87,7 +87,7 @@
 /* Stream preview */
 .stream-preview {
   aspect-ratio: 16/9;
-  background: linear-gradient(135deg, #1a1c20 0%, #0D0E10 100%);
+  background: linear-gradient(135deg, #1a1c20 0%, #0d0e10 100%);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -107,12 +107,7 @@
 
 /* Loading skeleton */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(72, 79, 87, 0.1) 25%,
-    rgba(72, 79, 87, 0.2) 50%,
-    rgba(72, 79, 87, 0.1) 75%
-  );
+  background: linear-gradient(90deg, rgba(72, 79, 87, 0.1) 25%, rgba(72, 79, 87, 0.2) 50%, rgba(72, 79, 87, 0.1) 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s infinite;
   border-radius: 8px;
@@ -129,7 +124,8 @@
 
 /* Pulse animation for live indicators */
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -143,7 +139,7 @@
 
 /* Accent gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, #F5A45A 0%, #D26A27 100%);
+  background: linear-gradient(135deg, #f5a45a 0%, #d26a27 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -153,13 +149,13 @@
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
-  color: #9CA3AF;
+  color: #9ca3af;
 }
 
 .empty-state svg {
   font-size: 4rem;
   margin-bottom: 1rem;
-  color: #484F57;
+  color: #484f57;
 }
 
 /* Transitions */
@@ -180,6 +176,6 @@
 
 /* Focus ring for accessibility */
 .focus-ring:focus-visible {
-  outline: 2px solid #F5A45A;
+  outline: 2px solid #f5a45a;
   outline-offset: 2px;
 }

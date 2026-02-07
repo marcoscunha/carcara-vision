@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 import {
   Box,
   Card,
@@ -19,7 +19,7 @@ import {
   Alert,
   Tooltip,
   LinearProgress,
-} from '@mui/material';
+} from '@mui/material'
 import {
   Save as SaveIcon,
   Settings as SettingsIcon,
@@ -32,40 +32,47 @@ import {
   Computer as ComputerIcon,
   Storage as StorageIcon,
   Speed as SpeedIcon,
-} from '@mui/icons-material';
-import { useModels, useUpdateModel, useHardwareDetection, useDetectHardware } from '../hooks/useQueries';
-import type { Model, AcceleratorStatus, AcceleratorType } from '../types';
+} from '@mui/icons-material'
+import { useModels, useUpdateModel, useHardwareDetection, useDetectHardware } from '../hooks/useQueries'
+import type { Model, AcceleratorStatus, AcceleratorType } from '../types'
 
 // Helper functions for hardware display
 const getAcceleratorIcon = (type: AcceleratorType) => {
-  if (type.startsWith('nvidia')) return '🟢';
-  if (type.startsWith('hailo')) return '🔵';
-  if (type.startsWith('google_coral')) return '🟣';
-  if (type.startsWith('intel')) return '🔷';
-  if (type.startsWith('amd')) return '🔴';
-  if (type.startsWith('axelera')) return '🟡';
-  if (type === 'cpu') return '⚪';
-  return '⚫';
-};
+  if (type.startsWith('nvidia')) return '🟢'
+  if (type.startsWith('hailo')) return '🔵'
+  if (type.startsWith('google_coral')) return '🟣'
+  if (type.startsWith('intel')) return '🔷'
+  if (type.startsWith('amd')) return '🔴'
+  if (type.startsWith('axelera')) return '🟡'
+  if (type === 'cpu') return '⚪'
+  return '⚫'
+}
 
 const getStatusColor = (status: AcceleratorStatus) => {
   switch (status) {
-    case 'available': return 'success';
-    case 'driver_missing': return 'warning';
+    case 'available':
+      return 'success'
+    case 'driver_missing':
+      return 'warning'
     case 'unavailable':
     case 'not_detected':
-    case 'error': return 'error';
-    default: return 'default';
+    case 'error':
+      return 'error'
+    default:
+      return 'default'
   }
-};
+}
 
 const getStatusIcon = (status: AcceleratorStatus) => {
   switch (status) {
-    case 'available': return <CheckCircleIcon fontSize="small" />;
-    case 'driver_missing': return <WarningIcon fontSize="small" />;
-    default: return <ErrorIcon fontSize="small" />;
+    case 'available':
+      return <CheckCircleIcon fontSize="small" />
+    case 'driver_missing':
+      return <WarningIcon fontSize="small" />
+    default:
+      return <ErrorIcon fontSize="small" />
   }
-};
+}
 
 const formatAcceleratorName = (type: AcceleratorType): string => {
   const names: Record<string, string> = {
@@ -83,9 +90,9 @@ const formatAcceleratorName = (type: AcceleratorType): string => {
     axelera_m2: 'Axelera M.2',
     amd_rocm: 'AMD ROCm',
     cpu: 'CPU',
-  };
-  return names[type] || type;
-};
+  }
+  return names[type] || type
+}
 
 const formatPlatformVendor = (vendor: string): string => {
   const names: Record<string, string> = {
@@ -100,9 +107,9 @@ const formatPlatformVendor = (vendor: string): string => {
     generic_arm: 'Generic ARM',
     generic_x86: 'Generic x86',
     unknown: 'Unknown',
-  };
-  return names[vendor] || vendor;
-};
+  }
+  return names[vendor] || vendor
+}
 
 const formatArchitecture = (arch: string): string => {
   const names: Record<string, string> = {
@@ -112,35 +119,35 @@ const formatArchitecture = (arch: string): string => {
     armv7: 'ARMv7 (32-bit)',
     armv8: 'ARMv8',
     unknown: 'Unknown',
-  };
-  return names[arch] || arch;
-};
+  }
+  return names[arch] || arch
+}
 
 const Settings: React.FC = () => {
-  const [selectedModel, setSelectedModel] = useState<string>('');
-  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5);
-  const theme = useTheme();
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5)
+  const theme = useTheme()
 
   // TanStack Query hooks for server state management
-  const { data: models, isLoading } = useModels();
-  const updateMutation = useUpdateModel();
+  const { data: models, isLoading } = useModels()
+  const updateMutation = useUpdateModel()
 
   // Hardware detection hooks
-  const { data: hardwareData, isLoading: isHardwareLoading } = useHardwareDetection(true);
-  const detectHardwareMutation = useDetectHardware();
+  const { data: hardwareData, isLoading: isHardwareLoading } = useHardwareDetection(true)
+  const detectHardwareMutation = useDetectHardware()
 
   const handleSave = () => {
     if (selectedModel) {
       updateMutation.mutate({
         name: selectedModel,
         data: { confidence_threshold: confidenceThreshold },
-      });
+      })
     }
-  };
+  }
 
   const handleDetectHardware = () => {
-    detectHardwareMutation.mutate(true);
-  };
+    detectHardwareMutation.mutate(true)
+  }
 
   if (isLoading) {
     return (
@@ -148,10 +155,10 @@ const Settings: React.FC = () => {
         <Skeleton variant="text" width={120} height={40} sx={{ mb: 3 }} />
         <Skeleton variant="rounded" height={300} />
       </Box>
-    );
+    )
   }
 
-  const modelList = models?.data || [];
+  const modelList = models?.data || []
 
   return (
     <Box className="fade-in">
@@ -218,11 +225,7 @@ const Settings: React.FC = () => {
 
             <FormControl fullWidth sx={{ mb: 4 }}>
               <InputLabel>Detection Model</InputLabel>
-              <Select
-                value={selectedModel}
-                label="Detection Model"
-                onChange={(e) => setSelectedModel(e.target.value)}
-              >
+              <Select value={selectedModel} label="Detection Model" onChange={(e) => setSelectedModel(e.target.value)}>
                 {modelList.map((model: Model) => (
                   <MenuItem key={model.name} value={model.name}>
                     {model.name}
@@ -351,40 +354,58 @@ const Settings: React.FC = () => {
                       CPU Information
                     </Typography>
                   </Box>
-                  <Box sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.background.default, 0.5),
-                    border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                  }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.default, 0.5),
+                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                        gap: 2,
+                      }}
+                    >
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Architecture</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Architecture
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {formatArchitecture(hardwareData.cpu.architecture)}
                         </Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Vendor</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Vendor
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {hardwareData.cpu.vendor}
                         </Typography>
                       </Box>
                       <Box sx={{ gridColumn: { xs: '1', sm: '1 / -1' } }}>
-                        <Typography variant="caption" color="text.secondary">Model</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Model
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>
                           {hardwareData.cpu.model_name}
                         </Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Cores / Threads</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Cores / Threads
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {hardwareData.cpu.cores} / {hardwareData.cpu.threads}
                         </Typography>
                       </Box>
                       {hardwareData.cpu.max_frequency_mhz && (
                         <Box>
-                          <Typography variant="caption" color="text.secondary">Max Frequency</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Max Frequency
+                          </Typography>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {(hardwareData.cpu.max_frequency_mhz / 1000).toFixed(2)} GHz
                           </Typography>
@@ -402,15 +423,25 @@ const Settings: React.FC = () => {
                       Platform Information
                     </Typography>
                   </Box>
-                  <Box sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.background.default, 0.5),
-                    border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                  }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.default, 0.5),
+                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                        gap: 2,
+                      }}
+                    >
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Vendor</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Vendor
+                        </Typography>
                         <Chip
                           label={formatPlatformVendor(hardwareData.platform.vendor)}
                           size="small"
@@ -419,19 +450,25 @@ const Settings: React.FC = () => {
                         />
                       </Box>
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Board</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Board
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {hardwareData.platform.board_name}
                         </Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" color="text.secondary">OS</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          OS
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {hardwareData.platform.os_name} {hardwareData.platform.os_version}
                         </Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Kernel</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Kernel
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {hardwareData.platform.kernel_version}
                         </Typography>
@@ -448,15 +485,18 @@ const Settings: React.FC = () => {
                       Memory
                     </Typography>
                   </Box>
-                  <Box sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.background.default, 0.5),
-                    border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                  }}>
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.default, 0.5),
+                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                    }}
+                  >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                       <Typography variant="body2">
-                        {hardwareData.memory.available_gb.toFixed(1)} GB available of {hardwareData.memory.total_gb.toFixed(1)} GB
+                        {hardwareData.memory.available_gb.toFixed(1)} GB available of{' '}
+                        {hardwareData.memory.total_gb.toFixed(1)} GB
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
                         {hardwareData.memory.used_percent.toFixed(1)}% used
@@ -471,9 +511,10 @@ const Settings: React.FC = () => {
                         backgroundColor: alpha(theme.palette.primary.main, 0.2),
                         '& .MuiLinearProgress-bar': {
                           borderRadius: 4,
-                          background: hardwareData.memory.used_percent > 80
-                            ? `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.error.main} 100%)`
-                            : `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                          background:
+                            hardwareData.memory.used_percent > 80
+                              ? `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.error.main} 100%)`
+                              : `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
                         },
                       }}
                     />
@@ -482,7 +523,14 @@ const Settings: React.FC = () => {
 
                 {/* Accelerators Section */}
                 <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mb: 2,
+                    }}
+                  >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <SpeedIcon fontSize="small" color="warning" />
                       <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
@@ -505,9 +553,10 @@ const Settings: React.FC = () => {
                         sx={{
                           p: 2,
                           borderRadius: 2,
-                          backgroundColor: acc.status === 'available'
-                            ? alpha(theme.palette.success.main, 0.1)
-                            : alpha(theme.palette.background.default, 0.5),
+                          backgroundColor:
+                            acc.status === 'available'
+                              ? alpha(theme.palette.success.main, 0.1)
+                              : alpha(theme.palette.background.default, 0.5),
                           border: `1px solid ${
                             acc.status === 'available'
                               ? alpha(theme.palette.success.main, 0.3)
@@ -521,9 +570,7 @@ const Settings: React.FC = () => {
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                          <Typography sx={{ fontSize: '1.2rem' }}>
-                            {getAcceleratorIcon(acc.type)}
-                          </Typography>
+                          <Typography sx={{ fontSize: '1.2rem' }}>{getAcceleratorIcon(acc.type)}</Typography>
                           <Box>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
                               {acc.name}
@@ -551,8 +598,8 @@ const Settings: React.FC = () => {
 
                 {/* Detection Info */}
                 <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
-                  Detection completed in {hardwareData.detection_duration_ms.toFixed(0)}ms •
-                  Last updated: {new Date(hardwareData.detection_timestamp).toLocaleString()}
+                  Detection completed in {hardwareData.detection_duration_ms.toFixed(0)}ms • Last updated:{' '}
+                  {new Date(hardwareData.detection_timestamp).toLocaleString()}
                 </Typography>
               </Box>
             )}
@@ -603,23 +650,35 @@ const Settings: React.FC = () => {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Product Name</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>CARCARA-NVC</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Product Name
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                  CARCARA-NVC
+                </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Description</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>Network Video Controller</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Description
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Network Video Controller
+                </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Version</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>1.0.0</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Version
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  1.0.0
+                </Typography>
               </Box>
             </Box>
           </CardContent>
         </Card>
       </Box>
     </Box>
-  );
-};
+  )
+}
 
-export default Settings;
+export default Settings

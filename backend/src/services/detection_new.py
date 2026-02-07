@@ -6,24 +6,14 @@ VLM-based image analysis, with automatic hardware acceleration selection.
 """
 
 import logging
-import time
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Union
 
-import cv2
 import numpy as np
 
 from ..core.config import settings
 from ..ml import InferenceEngineFactory
-from ..ml import ModelConfig
-from ..ml import ModelRegistry
 from ..ml.accelerators.detector import HardwareDetector
 from ..ml.base import HardwareAccelerator
-from ..ml.base import InferenceResult
-from ..ml.base import ModelType
 from ..ml.engines.vlm import VLMEngine
 from ..ml.engines.yolo import YOLOEngine
 
@@ -46,7 +36,7 @@ class ObjectDetectionService:
         self,
         model_name: str = None,
         model_type: str = "yolo",
-        accelerator: Optional[HardwareAccelerator] = None,
+        accelerator: HardwareAccelerator | None = None,
     ):
         """
         Initialize the detection service.
@@ -108,7 +98,7 @@ class ObjectDetectionService:
             elif self.model_type == "vlm":
                 self._engine = InferenceEngineFactory.create_vlm(
                     model_name=self.model_name,
-                    backend=settings.VLM_BACKEND if hasattr(settings, 'VLM_BACKEND') else "ollama",
+                    backend=settings.VLM_BACKEND if hasattr(settings, "VLM_BACKEND") else "ollama",
                 )
             else:
                 raise ValueError(f"Unknown model type: {self.model_type}")
@@ -141,9 +131,9 @@ class ObjectDetectionService:
     def detect(
         self,
         frame: np.ndarray,
-        roi: Optional[Dict[str, Any]] = None,
-        classes: Optional[List[int]] = None,
-    ) -> List[Dict[str, Any]]:
+        roi: dict[str, Any] | None = None,
+        classes: list[int] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Perform object detection on a single frame.
 
@@ -165,7 +155,7 @@ class ObjectDetectionService:
         if roi:
             x, y = roi.get("x", 0), roi.get("y", 0)
             w, h = roi.get("width", frame.shape[1]), roi.get("height", frame.shape[0])
-            detection_frame = frame[y:y+h, x:x+w]
+            detection_frame = frame[y : y + h, x : x + w]
             roi_offset = (x, y)
 
         # Run inference
@@ -192,9 +182,9 @@ class ObjectDetectionService:
 
     def detect_batch(
         self,
-        frames: List[np.ndarray],
-        classes: Optional[List[int]] = None,
-    ) -> List[List[Dict[str, Any]]]:
+        frames: list[np.ndarray],
+        classes: list[int] | None = None,
+    ) -> list[list[dict[str, Any]]]:
         """
         Perform batch detection on multiple frames.
 
@@ -219,7 +209,7 @@ class ObjectDetectionService:
     def analyze_image(
         self,
         frame: np.ndarray,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
     ) -> str:
         """
         Analyze image using VLM (Vision Language Model).
@@ -234,7 +224,7 @@ class ObjectDetectionService:
         if not isinstance(self._engine, VLMEngine):
             # Create a temporary VLM engine for analysis
             vlm = InferenceEngineFactory.create_vlm(
-                model_name=settings.VLM_MODEL if hasattr(settings, 'VLM_MODEL') else "llava",
+                model_name=settings.VLM_MODEL if hasattr(settings, "VLM_MODEL") else "llava",
             )
             vlm.load()
             result = vlm.infer(frame, prompt=prompt)
@@ -248,7 +238,7 @@ class ObjectDetectionService:
         self,
         frame: np.ndarray,
         persist: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Perform object tracking on a frame.
 
@@ -268,7 +258,7 @@ class ObjectDetectionService:
     def switch_model(
         self,
         model_name: str,
-        model_type: Optional[str] = None,
+        model_type: str | None = None,
     ) -> None:
         """
         Switch to a different model.
@@ -297,11 +287,11 @@ class ObjectDetectionService:
         if self._engine:
             self._engine.config.confidence_threshold = threshold
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get list of available models from settings."""
         return settings.SUPPORTED_MODELS
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get inference statistics."""
         avg_time = 0.0
         if self._inference_count > 0:
@@ -332,19 +322,11 @@ class ObjectDetectionService:
 
 
 # Legacy compatibility - keep old interface working
-def detect_objects(frame: np.ndarray, model_name: str = None) -> List[Dict[str, Any]]:
+def detect_objects(frame: np.ndarray, model_name: str = None) -> list[dict[str, Any]]:
     """
     Legacy function for backward compatibility.
 
     Args:
-        frame: Input image
-        model_name: Optional model name
-
-    Returns:
-        List of detections
-    """
-    service = ObjectDetectionService(model_name=model_name)
-    return service.detect(frame)
         frame: Input image
         model_name: Optional model name
 

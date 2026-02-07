@@ -8,14 +8,9 @@ import logging
 import os
 import platform
 import subprocess
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Type
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend
-from .base import DeviceInfo
+from .base import AcceleratorBackend, DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +27,16 @@ class HardwareDetector:
     - Generic CPU fallback
     """
 
-    _backends: Dict[HardwareAccelerator, Type[AcceleratorBackend]] = {}
-    _cached_detection: Optional[Dict[HardwareAccelerator, bool]] = None
+    _backends: dict[HardwareAccelerator, type[AcceleratorBackend]] = {}
+    _cached_detection: dict[HardwareAccelerator, bool] | None = None
 
     @classmethod
-    def register_backend(
-        cls,
-        accelerator: HardwareAccelerator,
-        backend_class: Type[AcceleratorBackend]
-    ) -> None:
+    def register_backend(cls, accelerator: HardwareAccelerator, backend_class: type[AcceleratorBackend]) -> None:
         """Register a backend class for an accelerator type."""
         cls._backends[accelerator] = backend_class
 
     @classmethod
-    def detect_all(cls, refresh: bool = False) -> Dict[HardwareAccelerator, bool]:
+    def detect_all(cls, refresh: bool = False) -> dict[HardwareAccelerator, bool]:
         """
         Detect all available hardware accelerators.
 
@@ -78,8 +69,8 @@ class HardwareDetector:
     @classmethod
     def get_best_accelerator(
         cls,
-        preferred: Optional[HardwareAccelerator] = None,
-        fallbacks: Optional[List[HardwareAccelerator]] = None
+        preferred: HardwareAccelerator | None = None,
+        fallbacks: list[HardwareAccelerator] | None = None,
     ) -> HardwareAccelerator:
         """
         Get the best available accelerator.
@@ -122,7 +113,7 @@ class HardwareDetector:
         return HardwareAccelerator.CPU
 
     @classmethod
-    def get_backend(cls, accelerator: HardwareAccelerator) -> Optional[AcceleratorBackend]:
+    def get_backend(cls, accelerator: HardwareAccelerator) -> AcceleratorBackend | None:
         """Get a backend instance for an accelerator type."""
         backend_class = cls._backends.get(accelerator)
         if backend_class:
@@ -130,7 +121,7 @@ class HardwareDetector:
         return None
 
     @classmethod
-    def get_all_device_info(cls) -> Dict[HardwareAccelerator, DeviceInfo]:
+    def get_all_device_info(cls) -> dict[HardwareAccelerator, DeviceInfo]:
         """Get device info for all available accelerators."""
         info = {}
         available = cls.detect_all()
@@ -147,7 +138,7 @@ class HardwareDetector:
         return info
 
     @staticmethod
-    def detect_platform() -> Dict[str, str]:
+    def detect_platform() -> dict[str, str]:
         """Detect the current platform information."""
         return {
             "system": platform.system(),
@@ -173,11 +164,7 @@ class HardwareDetector:
                         return True
 
             # Check for jetson-stats
-            result = subprocess.run(
-                ["which", "jtop"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            result = subprocess.run(["which", "jtop"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode == 0:
                 return True
 
@@ -192,14 +179,14 @@ class HardwareDetector:
         try:
             # Check model file
             if os.path.exists("/proc/device-tree/model"):
-                with open("/proc/device-tree/model", "r") as f:
+                with open("/proc/device-tree/model") as f:
                     model = f.read().lower()
                     if "raspberry pi" in model:
                         return True
 
             # Check cpuinfo
             if os.path.exists("/proc/cpuinfo"):
-                with open("/proc/cpuinfo", "r") as f:
+                with open("/proc/cpuinfo") as f:
                     content = f.read().lower()
                     if "raspberry" in content or "bcm" in content:
                         return True
@@ -214,11 +201,7 @@ class HardwareDetector:
         """Check if Google Coral TPU is available."""
         try:
             # Check for Edge TPU runtime
-            result = subprocess.run(
-                ["dpkg", "-l", "libedgetpu1-std"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            result = subprocess.run(["dpkg", "-l", "libedgetpu1-std"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode == 0:
                 return True
 
@@ -227,7 +210,7 @@ class HardwareDetector:
                 import tflite_runtime.interpreter as tflite
 
                 # Check for Edge TPU delegate
-                delegates = tflite.load_delegate("libedgetpu.so.1")
+                delegates = tflite.load_delegate("libedgetpu.so.1")  # noqa: F841
                 return True
             except Exception:
                 pass
@@ -245,15 +228,11 @@ class HardwareDetector:
             result = subprocess.run(
                 ["hailortcli", "fw-control", "identify"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
             return result.returncode == 0
         except Exception:
             pass
 
         return False
-        return result.returncode == 0
-        except Exception:
-            pass
-
         return False

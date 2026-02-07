@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Button,
@@ -10,16 +10,16 @@ import {
   Typography,
   alpha,
   useTheme,
-} from '@mui/material';
+} from '@mui/material'
 
 export interface ConfirmDeleteDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title: string;
-  itemName: string;
-  warningMessage?: string;
-  isLoading?: boolean;
+  open: boolean
+  onClose: () => void
+  onConfirm: () => void
+  title: string
+  itemName: string
+  warningMessage?: string
+  isLoading?: boolean
 }
 
 export const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
@@ -31,40 +31,37 @@ export const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
   warningMessage,
   isLoading = false,
 }) => {
-  const theme = useTheme();
-  const [confirmText, setConfirmText] = useState('');
+  const theme = useTheme()
+  const [confirmText, setConfirmText] = useState('')
 
   // Reset confirmation text when dialog opens/closes
   useEffect(() => {
     if (!open) {
-      setConfirmText('');
+      setConfirmText('')
     }
-  }, [open]);
+  }, [open])
 
-  const isConfirmValid = confirmText.toLowerCase() === 'delete';
+  const isConfirmValid = confirmText.toLowerCase() === 'delete'
 
   const handleConfirm = () => {
     if (isConfirmValid) {
-      onConfirm();
+      onConfirm()
     }
-  };
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isConfirmValid && !isLoading) {
-      handleConfirm();
+      handleConfirm()
     }
-  };
+  }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>
-        {title}
-      </DialogTitle>
+      <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>{title}</DialogTitle>
       <DialogContent>
         <Box sx={{ mb: 2 }}>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            Are you sure you want to delete{' '}
-            <strong>"{itemName}"</strong>?
+            Are you sure you want to delete <strong>"{itemName}"</strong>?
           </Typography>
 
           {warningMessage && (
@@ -109,17 +106,12 @@ export const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
         <Button onClick={onClose} variant="outlined" disabled={isLoading}>
           Cancel
         </Button>
-        <Button
-          onClick={handleConfirm}
-          variant="contained"
-          color="error"
-          disabled={!isConfirmValid || isLoading}
-        >
+        <Button onClick={handleConfirm} variant="contained" color="error" disabled={!isConfirmValid || isLoading}>
           {isLoading ? 'Deleting...' : 'Delete'}
         </Button>
       </DialogActions>
     </Dialog>
-  );
-};
+  )
+}
 
-export default ConfirmDeleteDialog;
+export default ConfirmDeleteDialog

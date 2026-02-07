@@ -4,21 +4,31 @@
 /* CARCARA-NVC Theme Variables */
 :root {
   /* Color Palette */
-  --color-bg-light: #F9FAFB;
-  --color-cream: #E3D3B0;
-  --color-primary: #F5A45A;
-  --color-primary-dark: #D26A27;
-  --color-neutral-dark: #181A1F;
-  --color-neutral-gray: #484F57;
+  --color-bg-light: #f9fafb;
+  --color-cream: #e3d3b0;
+  --color-primary: #f5a45a;
+  --color-primary-dark: #d26a27;
+  --color-neutral-dark: #181a1f;
+  --color-neutral-gray: #484f57;
 
   /* Typography */
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    sans-serif;
   line-height: 1.6;
   font-weight: 400;
 
   color-scheme: dark;
   color: var(--color-bg-light);
-  background-color: #0D0E10;
+  background-color: #0d0e10;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -41,10 +51,15 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: linear-gradient(180deg, #0D0E10 0%, #151719 100%);
+  background: linear-gradient(180deg, #0d0e10 0%, #151719 100%);
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   color: var(--color-bg-light);
   font-weight: 600;
 }
@@ -64,28 +79,14 @@ h3 {
   font-size: 1.5em;
 }
 
+/*
+ * Note: Button styling is handled by MUI theme in App.tsx.
+ * Only set font-family and cursor globally to avoid overriding
+ * MUI's IconButton, outlined, and text button variants.
+ */
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.7em 1.4em;
-  font-size: 0.95em;
-  font-weight: 600;
   font-family: inherit;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-  color: var(--color-neutral-dark);
   cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 164, 90, 0.3);
-}
-
-button:focus,
-button:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
 }
 
 /* Custom scrollbar */

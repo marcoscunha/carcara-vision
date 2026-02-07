@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import {
   Button,
   Dialog,
@@ -10,17 +10,17 @@ import {
   InputLabel,
   Select,
   MenuItem,
-} from '@mui/material';
-import { Camera } from '../../types';
+} from '@mui/material'
+import { Camera } from '../../types'
 
 export interface CameraFormData {
-  name: string;
-  rtsp_url: string;
-  is_active: boolean;
-  device_id: number;
-  resolution: [number, number];
-  fps: number;
-  is_available: boolean;
+  name: string
+  rtsp_url: string
+  is_active: boolean
+  device_id: number
+  resolution: [number, number]
+  fps: number
+  is_available: boolean
 }
 
 const initialFormData: CameraFormData = {
@@ -31,14 +31,14 @@ const initialFormData: CameraFormData = {
   resolution: [0, 0],
   fps: 0,
   is_available: false,
-};
+}
 
 export interface CameraFormDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: CameraFormData) => void;
-  camera?: Camera | null;
-  isLoading?: boolean;
+  open: boolean
+  onClose: () => void
+  onSubmit: (data: CameraFormData) => void
+  camera?: Camera | null
+  isLoading?: boolean
 }
 
 export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
@@ -48,9 +48,9 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
   camera,
   isLoading = false,
 }) => {
-  const [formData, setFormData] = useState<CameraFormData>(initialFormData);
+  const [formData, setFormData] = useState<CameraFormData>(initialFormData)
 
-  const isEditMode = Boolean(camera);
+  const isEditMode = Boolean(camera)
 
   // Reset or populate form when dialog opens or camera changes
   useEffect(() => {
@@ -64,28 +64,26 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
           resolution: camera.resolution,
           fps: camera.fps,
           is_available: camera.is_available,
-        });
+        })
       } else {
-        setFormData(initialFormData);
+        setFormData(initialFormData)
       }
     }
-  }, [open, camera]);
+  }, [open, camera])
 
   const handleClose = () => {
-    setFormData(initialFormData);
-    onClose();
-  };
+    setFormData(initialFormData)
+    onClose()
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
+    e.preventDefault()
+    onSubmit(formData)
+  }
 
   return (
     <Dialog open={open} onClose={handleClose}>
-      <DialogTitle>
-        {isEditMode ? 'Edit Camera' : 'Add Camera'}
-      </DialogTitle>
+      <DialogTitle>{isEditMode ? 'Edit Camera' : 'Add Camera'}</DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent>
           <TextField
@@ -94,9 +92,7 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
             label="Name"
             fullWidth
             value={formData.name}
-            onChange={(e) =>
-              setFormData({ ...formData, name: e.target.value })
-            }
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             disabled={isLoading}
           />
           <TextField
@@ -104,9 +100,7 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
             label="RTSP URL"
             fullWidth
             value={formData.rtsp_url}
-            onChange={(e) =>
-              setFormData({ ...formData, rtsp_url: e.target.value })
-            }
+            onChange={(e) => setFormData({ ...formData, rtsp_url: e.target.value })}
             disabled={isLoading}
           />
           <TextField
@@ -115,9 +109,7 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
             type="number"
             fullWidth
             value={formData.device_id}
-            onChange={(e) =>
-              setFormData({ ...formData, device_id: Number(e.target.value) })
-            }
+            onChange={(e) => setFormData({ ...formData, device_id: Number(e.target.value) })}
             disabled={isLoading}
           />
           <TextField
@@ -126,9 +118,7 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
             type="number"
             fullWidth
             value={formData.fps}
-            onChange={(e) =>
-              setFormData({ ...formData, fps: Number(e.target.value) })
-            }
+            onChange={(e) => setFormData({ ...formData, fps: Number(e.target.value) })}
             disabled={isLoading}
           />
           <FormControl fullWidth margin="dense">
@@ -137,8 +127,8 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
               value={formData.resolution?.join('x')}
               label="Resolution"
               onChange={(e) => {
-                const [width, height] = e.target.value.split('x').map(Number);
-                setFormData({ ...formData, resolution: [width, height] });
+                const [width, height] = e.target.value.split('x').map(Number)
+                setFormData({ ...formData, resolution: [width, height] })
               }}
               disabled={isLoading}
             >
@@ -152,9 +142,7 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
             <Select
               value={formData.is_active}
               label="Status"
-              onChange={(e) =>
-                setFormData({ ...formData, is_active: e.target.value === 'true' })
-              }
+              onChange={(e) => setFormData({ ...formData, is_active: e.target.value === 'true' })}
               disabled={isLoading}
             >
               <MenuItem value="true">Active</MenuItem>
@@ -166,24 +154,13 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
           <Button onClick={handleClose} disabled={isLoading}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            disabled={isLoading}
-          >
-            {isLoading
-              ? isEditMode
-                ? 'Updating...'
-                : 'Creating...'
-              : isEditMode
-              ? 'Update'
-              : 'Create'}
+          <Button type="submit" variant="contained" color="primary" disabled={isLoading}>
+            {isLoading ? (isEditMode ? 'Updating...' : 'Creating...') : isEditMode ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
       </form>
     </Dialog>
-  );
-};
+  )
+}
 
-export default CameraFormDialog;
+export default CameraFormDialog

@@ -70,9 +70,7 @@ dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=6.0.0",
-    "black>=26.1.0",
-    "isort>=7.0.0",
-    "flake8>=7.3.0",
+    "ruff>=0.9.4",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
 ]
@@ -92,29 +90,57 @@ docs = [
 #   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu121 uv sync
 # Or set environment-specific overrides.
 
-[tool.black]
-line-length = 100
-target-version = ['py313']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  | migrations
-)/
-'''
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests"]
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "migrations",
+    "build",
+    "dist",
+]
 
-[tool.isort]
-profile = "black"
-line_length = 100
-skip = [".git", ".venv", "migrations"]
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function call in argument defaults (FastAPI depends on this)
+    "B027",   # empty method in abstract base class without abstract decorator
+    "B904",   # raise from within except (existing pattern in FastAPI endpoints)
+    "N805",   # first argument of method should be self (SQLAlchemy uses cls)
+    "N806",   # variable in function should be lowercase (TRT_LOGGER is conventional)
+    "N818",   # exception name should end with Error (existing naming)
+    "RUF012", # mutable class attributes without ClassVar (existing pattern)
+    "RUF013", # implicit Optional (existing pattern)
+    "UP022",  # prefer capture_output (existing subprocess calls)
+    "SIM102", # nested if statements (readability preference)
+    "SIM105", # contextlib.suppress (readability preference)
+    "SIM108", # ternary operator (readability preference)
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.13"

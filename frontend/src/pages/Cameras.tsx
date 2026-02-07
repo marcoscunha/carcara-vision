@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 import {
   Box,
   Button,
@@ -16,71 +16,68 @@ import {
   TableHead,
   TableRow,
   Paper,
-} from '@mui/material';
+} from '@mui/material'
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Videocam as VideocamIcon,
   Circle as CircleIcon,
-} from '@mui/icons-material';
-import { useCameras, useCreateCamera, useUpdateCamera, useDeleteCamera } from '../hooks/useQueries';
-import { Camera } from '../types';
-import { CameraScanner } from '../components/CameraScanner';
-import { ConfirmDeleteDialog, CameraFormDialog, CameraFormData } from '../components/dialogs';
+} from '@mui/icons-material'
+import { useCameras, useCreateCamera, useUpdateCamera, useDeleteCamera } from '../hooks/useQueries'
+import { Camera } from '../types'
+import { CameraScanner } from '../components/CameraScanner'
+import { ConfirmDeleteDialog, CameraFormDialog, CameraFormData } from '../components/dialogs'
 
 const Cameras: React.FC = () => {
-  const [formDialogOpen, setFormDialogOpen] = useState(false);
-  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
-  const theme = useTheme();
+  const [formDialogOpen, setFormDialogOpen] = useState(false)
+  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null)
+  const theme = useTheme()
 
   // TanStack Query hooks for server state management
-  const { data: cameras, isLoading } = useCameras();
+  const { data: cameras, isLoading } = useCameras()
 
-  const createMutation = useCreateCamera();
-  const updateMutation = useUpdateCamera();
-  const deleteMutation = useDeleteCamera();
+  const createMutation = useCreateCamera()
+  const updateMutation = useUpdateCamera()
+  const deleteMutation = useDeleteCamera()
 
   const handleOpenFormDialog = (camera?: Camera) => {
-    setSelectedCamera(camera || null);
-    setFormDialogOpen(true);
-  };
+    setSelectedCamera(camera || null)
+    setFormDialogOpen(true)
+  }
 
   const handleCloseFormDialog = () => {
-    setFormDialogOpen(false);
-    setSelectedCamera(null);
-  };
+    setFormDialogOpen(false)
+    setSelectedCamera(null)
+  }
 
   const handleOpenDeleteDialog = (camera: Camera) => {
-    setCameraToDelete(camera);
-    setDeleteDialogOpen(true);
-  };
+    setCameraToDelete(camera)
+    setDeleteDialogOpen(true)
+  }
 
   const handleCloseDeleteDialog = () => {
-    setDeleteDialogOpen(false);
-    setCameraToDelete(null);
-  };
+    setDeleteDialogOpen(false)
+    setCameraToDelete(null)
+  }
 
   const handleConfirmDelete = () => {
     if (cameraToDelete) {
       deleteMutation.mutate(cameraToDelete.id, {
         onSuccess: () => handleCloseDeleteDialog(),
-      });
+      })
     }
-  };
+  }
 
   const handleFormSubmit = (formData: CameraFormData) => {
     if (selectedCamera) {
-      updateMutation.mutate(
-        { id: selectedCamera.id, data: formData },
-        { onSuccess: () => handleCloseFormDialog() }
-      );
+      updateMutation.mutate({ id: selectedCamera.id, data: formData }, { onSuccess: () => handleCloseFormDialog() })
     } else {
-      createMutation.mutate(formData, { onSuccess: () => handleCloseFormDialog() });
+      createMutation.mutate(formData, { onSuccess: () => handleCloseFormDialog() })
     }
-  };
+  }
 
   if (isLoading) {
     return (
@@ -91,10 +88,10 @@ const Cameras: React.FC = () => {
         </Box>
         <Skeleton variant="rounded" height={200} />
       </Box>
-    );
+    )
   }
 
-  const cameraList = Array.isArray(cameras) ? cameras : [];
+  const cameraList = Array.isArray(cameras) ? cameras : []
 
   return (
     <Box className="fade-in">
@@ -150,7 +147,9 @@ const Cameras: React.FC = () => {
               background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
             }}
           />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>Local Cameras</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            Local Cameras
+          </Typography>
         </Box>
         <CameraScanner />
       </Box>
@@ -168,7 +167,9 @@ const Cameras: React.FC = () => {
               background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
             }}
           />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>Registered Cameras</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            Registered Cameras
+          </Typography>
           <Chip
             label={cameraList.length}
             size="small"
@@ -211,7 +212,9 @@ const Cameras: React.FC = () => {
                   <TableCell sx={{ fontWeight: 600 }}>Resolution</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>FPS</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }} align="right">
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -324,7 +327,7 @@ const Cameras: React.FC = () => {
         isLoading={deleteMutation.isPending}
       />
     </Box>
-  );
-};
+  )
+}
 
-export default Cameras;
+export default Cameras

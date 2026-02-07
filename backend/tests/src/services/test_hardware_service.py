@@ -10,22 +10,21 @@ These tests cover:
 - Recommendation logic
 """
 
-import os
 import time
 from unittest import TestCase
-from unittest.mock import MagicMock
-from unittest.mock import mock_open
-from unittest.mock import patch
+from unittest.mock import MagicMock, mock_open, patch
 
-from src.schemas.hardware import AcceleratorInfo
-from src.schemas.hardware import AcceleratorStatus
-from src.schemas.hardware import AcceleratorType
-from src.schemas.hardware import CPUArchitecture
-from src.schemas.hardware import CPUInfo
-from src.schemas.hardware import HardwareDetectionResult
-from src.schemas.hardware import MemoryInfo
-from src.schemas.hardware import PlatformInfo
-from src.schemas.hardware import PlatformVendor
+from src.schemas.hardware import (
+    AcceleratorInfo,
+    AcceleratorStatus,
+    AcceleratorType,
+    CPUArchitecture,
+    CPUInfo,
+    HardwareDetectionResult,
+    MemoryInfo,
+    PlatformInfo,
+    PlatformVendor,
+)
 from src.services.hardware import HardwareDetectionService
 
 
@@ -100,14 +99,18 @@ class TestCPUDetection(TestHardwareDetectionService):
         self.assertEqual(result.architecture, CPUArchitecture.UNKNOWN)
 
     @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data="""
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="""
 processor	: 0
 vendor_id	: GenuineIntel
 model name	: Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
 flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr
 core id		: 0
 physical id	: 0
-""")
+""",
+    )
     def test_detect_cpu_parses_cpuinfo(self, mock_file, mock_exists):
         """Test CPU info parsing from /proc/cpuinfo."""
         mock_exists.return_value = True
@@ -147,12 +150,16 @@ class TestMemoryDetection(TestHardwareDetectionService):
         self.assertLessEqual(result.used_percent, 100)
 
     @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data="""
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="""
 MemTotal:       16384000 kB
 MemFree:         2048000 kB
 MemAvailable:    8192000 kB
 Buffers:          512000 kB
-""")
+""",
+    )
     def test_detect_memory_parses_meminfo(self, mock_file, mock_exists):
         """Test memory info parsing from /proc/meminfo."""
         mock_exists.return_value = True
@@ -251,6 +258,7 @@ class TestPlatformDetection(TestHardwareDetectionService):
     @patch("os.path.exists")
     def test_is_jetson_from_tegra_release(self, mock_exists):
         """Test Jetson detection from tegra release file."""
+
         def exists_side_effect(path):
             return path == "/etc/nv_tegra_release"
 
@@ -277,7 +285,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
         """Test NVIDIA GPU detection when available."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="NVIDIA GeForce RTX 3080, 10240, 535.104.05, 00000000:01:00.0, 8.6\n"
+            stdout="NVIDIA GeForce RTX 3080, 10240, 535.104.05, 00000000:01:00.0, 8.6\n",
         )
 
         result = self.service._detect_nvidia_gpu()
@@ -299,10 +307,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
     @patch("subprocess.run")
     def test_detect_hailo_available(self, mock_run):
         """Test Hailo detection when available."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="Hailo-8\nFirmware Version: 4.17.0"
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="Hailo-8\nFirmware Version: 4.17.0")
 
         result = self.service._detect_hailo()
 
@@ -313,10 +318,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
     @patch("subprocess.run")
     def test_detect_hailo_8l(self, mock_run):
         """Test Hailo-8L detection."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="Hailo-8L\nFirmware Version: 4.17.0"
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="Hailo-8L\nFirmware Version: 4.17.0")
 
         result = self.service._detect_hailo()
 
@@ -326,12 +328,10 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
     @patch("subprocess.run")
     def test_detect_coral_usb(self, mock_run):
         """Test Google Coral USB detection."""
+
         def run_side_effect(*args, **kwargs):
             if "lsusb" in args[0]:
-                return MagicMock(
-                    returncode=0,
-                    stdout="Bus 001 Device 003: ID 1a6e:089a Global Unichip Corp."
-                )
+                return MagicMock(returncode=0, stdout="Bus 001 Device 003: ID 1a6e:089a Global Unichip Corp.")
             return MagicMock(returncode=1, stdout="")
 
         mock_run.side_effect = run_side_effect
@@ -503,8 +503,9 @@ class TestFullDetection(TestHardwareDetectionService):
 
         # Should be able to parse as ISO format
         from datetime import datetime
+
         try:
-            datetime.fromisoformat(result.detection_timestamp.replace('Z', '+00:00'))
+            datetime.fromisoformat(result.detection_timestamp.replace("Z", "+00:00"))
         except ValueError:
             self.fail("detection_timestamp is not valid ISO format")
 
@@ -541,7 +542,7 @@ class TestEdgeCases(TestHardwareDetectionService):
     def test_handles_file_read_errors_gracefully(self, mock_open, mock_exists):
         """Test that file read errors are handled gracefully."""
         mock_exists.return_value = True
-        mock_open.side_effect = IOError("Permission denied")
+        mock_open.side_effect = OSError("Permission denied")
 
         # Should not raise, should return valid (possibly default) values
         result = self.service._detect_cpu()
@@ -552,6 +553,7 @@ class TestEdgeCases(TestHardwareDetectionService):
     def test_handles_subprocess_timeout(self, mock_run):
         """Test that subprocess timeouts are handled gracefully."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=5)
 
         # Should not raise

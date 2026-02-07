@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
 
 
 class DetectionBase(BaseModel):
@@ -18,8 +19,8 @@ class DetectionResponse(DetectionBase):
     detection_model_name: str
     confidence: float
     class_name: str
-    bbox: List[float]
-    metadata: Dict[str, Any]
+    bbox: list[float]
+    metadata: dict[str, Any]
     timestamp: datetime
 
     class Config:

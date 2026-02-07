@@ -55,6 +55,7 @@ class StreamConfig:
     source_type: str  # 'v4l2', 'rtsp', 'test'
     source_uri: Optional[str] = None
     device_id: Optional[int] = None
+    device_path: Optional[str] = None  # Persistent path (e.g. /dev/v4l/by-id/...)
     width: int = 640
     height: int = 360
     framerate: int = 30
@@ -67,12 +68,26 @@ class StreamConfig:
             "source_type": self.source_type,
             "source_uri": self.source_uri,
             "device_id": self.device_id,
+            "device_path": self.device_path,
             "width": self.width,
             "height": self.height,
             "framerate": self.framerate,
             "codec": self.codec,
             "bitrate": self.bitrate,
         }
+
+    def get_v4l2_device(self) -> str:
+        """Return the device node to use for v4l2src.
+
+        Prefers ``device_path`` (persistent symlink) over constructing
+        ``/dev/video{device_id}``.  The symlink is resolved via
+        ``os.path.realpath`` so GStreamer always receives a real path.
+        """
+        if self.device_path:
+            return os.path.realpath(self.device_path)
+        if self.device_id is not None:
+            return f"/dev/video{self.device_id}"
+        raise ValueError("No device_path or device_id configured for V4L2 source")
 
 
 @dataclass
@@ -106,8 +121,9 @@ class GStreamerPipelineManager:
 
     def _build_v4l2_source(self, config: StreamConfig) -> str:
         """Build V4L2 source element string."""
+        device = config.get_v4l2_device()
         return (
-            f"v4l2src device=/dev/video{config.device_id} ! "
+            f"v4l2src device={device} ! "
             f"video/x-raw,width={config.width},height={config.height},"
             f"framerate={config.framerate}/1 ! "
             f"videoconvert ! videoscale"
@@ -394,6 +410,7 @@ class PipelineAPIHandler(BaseHTTPRequestHandler):
                     source_type=data.get('source_type', 'v4l2'),
                     source_uri=data.get('source_uri'),
                     device_id=data.get('device_id'),
+                    device_path=data.get('device_path'),
                     width=data.get('width', 640),
                     height=data.get('height', 360),
                     framerate=data.get('framerate', 30),

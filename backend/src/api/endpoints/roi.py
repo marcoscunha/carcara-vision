@@ -1,18 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from ...db.session import get_db
 from ...models.roi import RegionOfInterest
-from ...schemas.roi import ROICreate, ROIUpdate, ROIResponse
+from ...schemas.roi import ROICreate, ROIResponse, ROIUpdate
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ROIResponse])
-def read_rois(
-    camera_id: int = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
-):
+@router.get("/", response_model=list[ROIResponse])
+def read_rois(camera_id: int = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Get a list of regions of interest.
     """

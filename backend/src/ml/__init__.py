@@ -4,18 +4,14 @@
 # - Hardware acceleration (CUDA, TensorRT, Jetson, Raspberry Pi, OpenVINO)
 # - Model registry and lifecycle management
 
-from .base import BaseInferenceEngine
-from .base import InferenceResult
-from .base import ModelConfig
+from .base import BaseInferenceEngine, InferenceResult, ModelConfig
 from .factory import InferenceEngineFactory
 from .registry import ModelRegistry
 
 __all__ = [
     "BaseInferenceEngine",
+    "InferenceEngineFactory",
     "InferenceResult",
     "ModelConfig",
     "ModelRegistry",
-    "InferenceEngineFactory",
-]
-"InferenceEngineFactory",
 ]

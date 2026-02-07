@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libgl1 \
     libglib2.0-0 \
     netcat-traditional \
+    udev \
     v4l-utils \
     pciutils \
     usbutils

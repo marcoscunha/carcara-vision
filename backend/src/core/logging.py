@@ -1,10 +1,9 @@
 import logging
 import sys
 from typing import Any
-from typing import Dict
 
 # Logging configuration
-LOGGING_CONFIG: Dict[str, Any] = {
+LOGGING_CONFIG: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {

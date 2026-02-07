@@ -8,16 +8,11 @@ Supports:
 - Edge device settings (Jetson, RPi)
 """
 
-import os
 from enum import Enum
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
 
 from dotenv import load_dotenv
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 load_dotenv()
@@ -25,6 +20,7 @@ load_dotenv()
 
 class AcceleratorType(str, Enum):
     """Supported hardware accelerators."""
+
     AUTO = "auto"
     CPU = "cpu"
     CUDA = "cuda"
@@ -38,6 +34,7 @@ class AcceleratorType(str, Enum):
 
 class ModelBackend(str, Enum):
     """Supported model backends."""
+
     PYTORCH = "pytorch"
     ONNX = "onnx"
     TENSORRT = "tensorrt"
@@ -64,7 +61,7 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = Field(default="postgres", env="POSTGRES_PASSWORD")
     POSTGRES_DB: str = Field(default="carcara_nvc", env="POSTGRES_DB")
     POSTGRES_PORT: int = Field(default=5432, env="POSTGRES_PORT")
-    SQLALCHEMY_DATABASE_URI: Optional[str] = None
+    SQLALCHEMY_DATABASE_URI: str | None = None
 
     # Security
     SECRET_KEY: str = Field(default="your-secret-key-change-in-production", env="SECRET_KEY")
@@ -81,16 +78,16 @@ class Settings(BaseSettings):
     MAX_DETECTIONS: int = Field(default=100, env="MAX_DETECTIONS")
 
     # Supported YOLO models
-    SUPPORTED_MODELS: List[str] = [
-        "yolov8n.pt",   # Nano - fastest
-        "yolov8s.pt",   # Small
-        "yolov8m.pt",   # Medium
-        "yolov8l.pt",   # Large
-        "yolov8x.pt",   # Extra Large - most accurate
+    SUPPORTED_MODELS: list[str] = [
+        "yolov8n.pt",  # Nano - fastest
+        "yolov8s.pt",  # Small
+        "yolov8m.pt",  # Medium
+        "yolov8l.pt",  # Large
+        "yolov8x.pt",  # Extra Large - most accurate
         "yolov5n.pt",
         "yolov5s.pt",
         "yolov5m.pt",
-        "yolo11n.pt",   # YOLO11 models
+        "yolo11n.pt",  # YOLO11 models
         "yolo11s.pt",
     ]
 
@@ -104,7 +101,7 @@ class Settings(BaseSettings):
 
     # General GPU settings
     USE_GPU: bool = Field(default=False, env="USE_GPU")
-    CUDA_VISIBLE_DEVICES: Optional[str] = Field(default=None, env="CUDA_VISIBLE_DEVICES")
+    CUDA_VISIBLE_DEVICES: str | None = Field(default=None, env="CUDA_VISIBLE_DEVICES")
     ACCELERATOR: AcceleratorType = Field(default=AcceleratorType.AUTO, env="ACCELERATOR")
     MODEL_BACKEND: ModelBackend = Field(default=ModelBackend.PYTORCH, env="MODEL_BACKEND")
 
@@ -121,7 +118,7 @@ class Settings(BaseSettings):
     # Raspberry Pi settings
     RPI_USE_CORAL_TPU: bool = Field(default=False, env="RPI_USE_CORAL_TPU")
     RPI_USE_HAILO: bool = Field(default=False, env="RPI_USE_HAILO")
-    RPI_CPU_THREADS: Optional[int] = Field(default=None, env="RPI_CPU_THREADS")
+    RPI_CPU_THREADS: int | None = Field(default=None, env="RPI_CPU_THREADS")
 
     # ===================
     # VLM Configuration
@@ -137,7 +134,7 @@ class Settings(BaseSettings):
     OLLAMA_HOST: str = Field(default="http://localhost:11434", env="OLLAMA_HOST")
 
     # OpenAI settings (for GPT-4V)
-    OPENAI_API_KEY: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
+    OPENAI_API_KEY: str | None = Field(default=None, env="OPENAI_API_KEY")
     OPENAI_MODEL: str = Field(default="gpt-4o", env="OPENAI_MODEL")
 
     # ===================
@@ -167,10 +164,7 @@ class Settings(BaseSettings):
 
     # Alarm settings
     ALARM_COOLDOWN_SECONDS: int = Field(default=30, env="ALARM_COOLDOWN_SECONDS")
-    ALARM_CLASSES: List[str] = Field(
-        default=["person", "car", "truck", "dog", "cat"],
-        env="ALARM_CLASSES"
-    )
+    ALARM_CLASSES: list[str] = Field(default=["person", "car", "truck", "dog", "cat"], env="ALARM_CLASSES")
 
     # ROI settings
     ROI_DEFAULT_COLOR: str = Field(default="#00FF00", env="ROI_DEFAULT_COLOR")
@@ -181,11 +175,8 @@ class Settings(BaseSettings):
     # ===================
 
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
-    LOG_FORMAT: str = Field(
-        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        env="LOG_FORMAT"
-    )
-    LOG_FILE: Optional[str] = Field(default=None, env="LOG_FILE")
+    LOG_FORMAT: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", env="LOG_FORMAT")
+    LOG_FILE: str | None = Field(default=None, env="LOG_FILE")
 
     # ===================
     # Validators
@@ -221,7 +212,7 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    def get_accelerator_config(self) -> Dict[str, Any]:
+    def get_accelerator_config(self) -> dict[str, Any]:
         """Get hardware accelerator configuration."""
         return {
             "type": self.ACCELERATOR.value,
@@ -244,7 +235,7 @@ class Settings(BaseSettings):
             },
         }
 
-    def get_vlm_config(self) -> Dict[str, Any]:
+    def get_vlm_config(self) -> dict[str, Any]:
         """Get VLM configuration."""
         return {
             "enabled": self.VLM_ENABLED,

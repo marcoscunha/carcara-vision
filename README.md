@@ -126,10 +126,11 @@ flowchart TB
 
 ### Video Management
 
-- Camera discovery (RTSP, ONVIF)
-- GStreamer pipeline management for video processing
-- MediaMTX for RTSP/WebRTC/HLS streaming
-- Alarm/event system
+- **Local Camera Discovery**: Automatic V4L2 device scanning with persistent identification via `/dev/v4l/by-id/` symlinks — survives reboots and USB re-plug events (see [Local Camera Scan Architecture](docs/LOCAL_CAMERA_SCAN.md))
+- **Network Camera Discovery**: RTSP and ONVIF camera support
+- **GStreamer Pipelines**: Native GStreamer pipeline management for video processing
+- **MediaMTX Streaming**: RTSP/WebRTC/HLS streaming via MediaMTX
+- **Alarm/Event System**: Configurable detection-based alerts
 
 ## 🚀 Quick Start
 
@@ -243,11 +244,13 @@ Once running, access the interactive API documentation:
 
 #### Cameras
 
-- `POST /api/v1/cameras/` - Create a new camera
+- `GET /api/v1/cameras/scan` - Scan for local V4L2 cameras (returns persistent `device_path`)
+- `POST /api/v1/cameras/` - Create a new camera (accepts `device_path` for stable identification)
 - `GET /api/v1/cameras/` - List all cameras
 - `GET /api/v1/cameras/{camera_id}` - Get camera details
+- `GET /api/v1/cameras/{camera_id}/status` - Get camera status
 - `PUT /api/v1/cameras/{camera_id}` - Update camera
-- `DELETE /api/v1/cameras/{camera_id}` - Delete camera
+- `DELETE /api/v1/cameras/{camera_id}` - Delete camera and associated streams/detections
 
 #### Streams
 
@@ -382,6 +385,9 @@ carcara-nvc/
 ├── frontend/                    # React frontend
 ├── gstreamer/                   # GStreamer pipeline manager
 ├── mediamtx/                    # MediaMTX RTSP server config
+├── docs/
+│   ├── DESIGN_SYSTEM.md         # UI/UX design system
+│   └── LOCAL_CAMERA_SCAN.md     # Local camera scan architecture
 ├── docker-compose.yml
 └── README.md
 ```

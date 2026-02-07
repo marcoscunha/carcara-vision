@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
 
 
 class AlarmBase(BaseModel):
@@ -8,9 +9,9 @@ class AlarmBase(BaseModel):
     camera_id: int
     class_name: str
     confidence_threshold: float
-    region_of_interest: List[float]
+    region_of_interest: list[float]
     is_active: bool = True
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AlarmCreate(AlarmBase):
@@ -18,20 +19,20 @@ class AlarmCreate(AlarmBase):
 
 
 class AlarmUpdate(AlarmBase):
-    name: Optional[str] = None
-    camera_id: Optional[int] = None
-    class_name: Optional[str] = None
-    confidence_threshold: Optional[float] = None
-    region_of_interest: Optional[List[float]] = None
-    is_active: Optional[bool] = None
-    description: Optional[str] = None
+    name: str | None = None
+    camera_id: int | None = None
+    class_name: str | None = None
+    confidence_threshold: float | None = None
+    region_of_interest: list[float] | None = None
+    is_active: bool | None = None
+    description: str | None = None
 
 
 class AlarmResponse(AlarmBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
     class Config:
         from_attributes = True

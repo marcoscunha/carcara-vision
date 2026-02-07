@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 import {
   Box,
   Button,
@@ -19,20 +19,20 @@ import {
   alpha,
   useTheme,
   Skeleton,
-} from '@mui/material';
+} from '@mui/material'
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Notifications as NotificationsIcon,
   Circle as CircleIcon,
-} from '@mui/icons-material';
-import { useAlarms, useCreateAlarm, useUpdateAlarm, useDeleteAlarm, useCameras, useModels } from '../hooks/useQueries';
-import { Alarm, Camera, Model } from '../types';
+} from '@mui/icons-material'
+import { useAlarms, useCreateAlarm, useUpdateAlarm, useDeleteAlarm, useCameras, useModels } from '../hooks/useQueries'
+import { Alarm, Camera, Model } from '../types'
 
 const Alarms: React.FC = () => {
-  const [open, setOpen] = useState(false);
-  const [selectedAlarm, setSelectedAlarm] = useState<Alarm | null>(null);
+  const [open, setOpen] = useState(false)
+  const [selectedAlarm, setSelectedAlarm] = useState<Alarm | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     camera_id: 0,
@@ -40,21 +40,21 @@ const Alarms: React.FC = () => {
     confidence_threshold: 0.5,
     region_of_interest: [0, 0, 0, 0],
     is_active: true,
-  });
-  const theme = useTheme();
+  })
+  const theme = useTheme()
 
   // TanStack Query hooks for server state management
-  const { data: alarms, isLoading: alarmsLoading } = useAlarms();
-  const { data: cameras, isLoading: camerasLoading } = useCameras();
-  const { data: models, isLoading: modelsLoading } = useModels();
+  const { data: alarms, isLoading: alarmsLoading } = useAlarms()
+  const { data: cameras, isLoading: camerasLoading } = useCameras()
+  const { data: models, isLoading: modelsLoading } = useModels()
 
-  const createMutation = useCreateAlarm();
-  const updateMutation = useUpdateAlarm();
-  const deleteMutation = useDeleteAlarm();
+  const createMutation = useCreateAlarm()
+  const updateMutation = useUpdateAlarm()
+  const deleteMutation = useDeleteAlarm()
 
   const handleOpen = (alarm?: Alarm) => {
     if (alarm) {
-      setSelectedAlarm(alarm);
+      setSelectedAlarm(alarm)
       setFormData({
         name: alarm.name,
         camera_id: alarm.camera_id,
@@ -62,9 +62,9 @@ const Alarms: React.FC = () => {
         confidence_threshold: alarm.confidence_threshold,
         region_of_interest: alarm.region_of_interest,
         is_active: alarm.is_active,
-      });
+      })
     } else {
-      setSelectedAlarm(null);
+      setSelectedAlarm(null)
       setFormData({
         name: '',
         camera_id: 0,
@@ -72,14 +72,14 @@ const Alarms: React.FC = () => {
         confidence_threshold: 0.5,
         region_of_interest: [0, 0, 0, 0],
         is_active: true,
-      });
+      })
     }
-    setOpen(true);
-  };
+    setOpen(true)
+  }
 
   const handleClose = () => {
-    setOpen(false);
-    setSelectedAlarm(null);
+    setOpen(false)
+    setSelectedAlarm(null)
     setFormData({
       name: '',
       camera_id: 0,
@@ -87,20 +87,17 @@ const Alarms: React.FC = () => {
       confidence_threshold: 0.5,
       region_of_interest: [0, 0, 0, 0],
       is_active: true,
-    });
-  };
+    })
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     if (selectedAlarm) {
-      updateMutation.mutate(
-        { id: selectedAlarm.id, data: formData },
-        { onSuccess: () => handleClose() }
-      );
+      updateMutation.mutate({ id: selectedAlarm.id, data: formData }, { onSuccess: () => handleClose() })
     } else {
-      createMutation.mutate(formData, { onSuccess: () => handleClose() });
+      createMutation.mutate(formData, { onSuccess: () => handleClose() })
     }
-  };
+  }
 
   if (alarmsLoading || camerasLoading || modelsLoading) {
     return (
@@ -109,18 +106,24 @@ const Alarms: React.FC = () => {
           <Skeleton variant="text" width={120} height={40} />
           <Skeleton variant="rounded" width={130} height={40} />
         </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+            gap: 3,
+          }}
+        >
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} variant="rounded" height={180} />
           ))}
         </Box>
       </Box>
-    );
+    )
   }
 
-  const alarmList = alarms?.data || [];
-  const cameraList = cameras?.data || [];
-  const modelList = models?.data || [];
+  const alarmList = alarms?.data || []
+  const cameraList = cameras?.data || []
+  const modelList = models?.data || []
 
   return (
     <Box className="fade-in">
@@ -176,7 +179,9 @@ const Alarms: React.FC = () => {
               background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
             }}
           />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>Configured Alarms</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            Configured Alarms
+          </Typography>
           <Chip
             label={alarmList.length}
             size="small"
@@ -209,15 +214,30 @@ const Alarms: React.FC = () => {
             </Typography>
           </Box>
         ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+              gap: 3,
+            }}
+          >
             {alarmList.map((alarm: Alarm) => {
-              const camera = cameraList.find((c: Camera) => c.id === alarm.camera_id);
+              const camera = cameraList.find((c: Camera) => c.id === alarm.camera_id)
               return (
                 <Card key={alarm.id}>
                   <CardContent sx={{ p: 2.5 }}>
                     {/* Header */}
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{alarm.name}</Typography>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        mb: 2,
+                      }}
+                    >
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        {alarm.name}
+                      </Typography>
                       <Chip
                         icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
                         label={alarm.is_active ? 'Active' : 'Inactive'}
@@ -235,11 +255,17 @@ const Alarms: React.FC = () => {
                     {/* Info Grid */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="text.secondary">Camera</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{camera?.name || 'Unknown'}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Camera
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {camera?.name || 'Unknown'}
+                        </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="text.secondary">Detection Class</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Detection Class
+                        </Typography>
                         <Chip
                           label={alarm.class_name}
                           size="small"
@@ -251,7 +277,9 @@ const Alarms: React.FC = () => {
                         />
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="text.secondary">Confidence</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Confidence
+                        </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {(alarm.confidence_threshold * 100).toFixed(0)}%
                         </Typography>
@@ -283,16 +311,14 @@ const Alarms: React.FC = () => {
                     </Box>
                   </CardContent>
                 </Card>
-              );
+              )
             })}
           </Box>
         )}
       </Box>
 
       <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>
-          {selectedAlarm ? 'Edit Alarm' : 'Add Alarm'}
-        </DialogTitle>
+        <DialogTitle>{selectedAlarm ? 'Edit Alarm' : 'Add Alarm'}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <TextField
@@ -301,18 +327,14 @@ const Alarms: React.FC = () => {
               label="Name"
               fullWidth
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
             <FormControl fullWidth margin="dense">
               <InputLabel>Camera</InputLabel>
               <Select
                 value={formData.camera_id}
                 label="Camera"
-                onChange={(e) =>
-                  setFormData({ ...formData, camera_id: Number(e.target.value) })
-                }
+                onChange={(e) => setFormData({ ...formData, camera_id: Number(e.target.value) })}
               >
                 {cameraList.map((camera: Camera) => (
                   <MenuItem key={camera.id} value={camera.id}>
@@ -326,9 +348,7 @@ const Alarms: React.FC = () => {
               <Select
                 value={formData.class_name}
                 label="Model"
-                onChange={(e) =>
-                  setFormData({ ...formData, class_name: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, class_name: e.target.value })}
               >
                 {modelList.map((model: Model) => (
                   <MenuItem key={model.name} value={model.name}>
@@ -361,7 +381,7 @@ const Alarms: React.FC = () => {
         </form>
       </Dialog>
     </Box>
-  );
-};
+  )
+}
 
-export default Alarms;
+export default Alarms

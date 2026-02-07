@@ -1,8 +1,5 @@
-from sqlalchemy.orm import Session
-
-from .base_class import Base
-from ..models import camera, stream, detection
 from ..db.session import engine
+from .base_class import Base
 
 
 def init_db() -> None:

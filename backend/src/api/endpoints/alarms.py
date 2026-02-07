@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from ...db.session import get_db
 from ...models.alarm import Alarm
-from ...schemas.alarm import AlarmCreate, AlarmUpdate, AlarmResponse
+from ...schemas.alarm import AlarmCreate, AlarmResponse, AlarmUpdate
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[AlarmResponse])
+@router.get("/", response_model=list[AlarmResponse])
 def read_alarms(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Get a list of alarms.

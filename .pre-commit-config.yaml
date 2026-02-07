@@ -1,0 +1,70 @@
+# Pre-commit hooks for monorepo: backend (Python) + frontend (TypeScript/React)
+# Install: pre-commit install
+# Run all: pre-commit run --all-files
+
+repos:
+  # ===================
+  # General hooks
+  # ===================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: tsconfig
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+
+  # ===================
+  # Backend - Python (Ruff)
+  # ===================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.4
+    hooks:
+      # Linter (replaces flake8, isort, pyflakes, pycodestyle, etc.)
+      - id: ruff
+        args: [--fix, --config, backend/pyproject.toml]
+        files: ^backend/
+      # Formatter (replaces black)
+      - id: ruff-format
+        args: [--config, backend/pyproject.toml]
+        files: ^backend/
+
+  # ===================
+  # Backend - Type checking (disabled until pre-existing type errors are fixed)
+  # Uncomment when ready:
+  # ===================
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.14.1
+  #   hooks:
+  #     - id: mypy
+  #       files: ^backend/src/
+  #       args: [--config-file=backend/pyproject.toml, --ignore-missing-imports]
+  #       pass_filenames: true
+
+  # ===================
+  # Frontend - Prettier (formatting)
+  # ===================
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: ^frontend/src/
+        types_or: [ts, tsx, css, json]
+        additional_dependencies:
+          - prettier@3.4.2
+
+  # ===================
+  # Frontend - ESLint (linting)
+  # ===================
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: Frontend ESLint
+        entry: bash -c 'cd frontend && args=(); for f in "$@"; do args+=("${f#frontend/}"); done; npx eslint --fix "${args[@]}"' --
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx)$
+        types: [file]

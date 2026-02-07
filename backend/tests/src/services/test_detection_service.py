@@ -1,14 +1,12 @@
 from unittest import TestCase
 
-import cv2
 import numpy as np
+
 from src.core.config import settings
-from src.services.detection import CameraService
-from src.services.detection import ObjectDetectionService
+from src.services.detection import CameraService, ObjectDetectionService
 
 
 class ObjectDetectionServiceTests(TestCase):
-
     @classmethod
     def setUpClass(cls) -> None:
         """Set up resources shared across all tests."""

@@ -2,14 +2,9 @@
 Base classes for hardware accelerator backends.
 """
 
-from abc import ABC
-from abc import abstractmethod
-from dataclasses import dataclass
-from dataclasses import field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
 
 from ..base import HardwareAccelerator
 
@@ -17,14 +12,15 @@ from ..base import HardwareAccelerator
 @dataclass
 class DeviceInfo:
     """Information about a hardware device."""
+
     name: str
     accelerator_type: HardwareAccelerator
     memory_total_mb: int = 0
     memory_available_mb: int = 0
-    compute_capability: Optional[str] = None
-    driver_version: Optional[str] = None
+    compute_capability: str | None = None
+    driver_version: str | None = None
     is_available: bool = True
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class AcceleratorBackend(ABC):
@@ -54,12 +50,7 @@ class AcceleratorBackend(ABC):
         """Get the number of available devices."""
         pass
 
-    def optimize_model(
-        self,
-        model_path: str,
-        output_path: str,
-        **kwargs
-    ) -> Optional[str]:
+    def optimize_model(self, model_path: str, output_path: str, **kwargs) -> str | None:
         """
         Optimize a model for this accelerator.
 

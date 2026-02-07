@@ -4,10 +4,9 @@ GStreamer streaming service.
 This module provides integration with GStreamer pipeline manager and MediaMTX
 for managing video streams, replacing go2rtc functionality.
 """
+
 import logging
 from typing import Any
-from typing import Dict
-from typing import Optional
 
 import httpx
 
@@ -56,7 +55,7 @@ class GStreamerService:
             logger.error(f"Health check failed: {e}")
             return False
 
-    async def get_streams(self) -> Dict[str, Any]:
+    async def get_streams(self) -> dict[str, Any]:
         """Get all registered streams from GStreamer pipeline manager."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -69,7 +68,7 @@ class GStreamerService:
             logger.error(f"Error getting streams from GStreamer: {e}")
             return {}
 
-    async def get_mediamtx_paths(self) -> Dict[str, Any]:
+    async def get_mediamtx_paths(self) -> dict[str, Any]:
         """Get all paths from MediaMTX."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -86,12 +85,13 @@ class GStreamerService:
         self,
         name: str,
         source_type: str,
-        source_uri: Optional[str] = None,
-        device_id: Optional[int] = None,
+        source_uri: str | None = None,
+        device_id: int | None = None,
+        device_path: str | None = None,
         width: int = 640,
         height: int = 360,
         framerate: int = 30,
-        codec: str = "h264"
+        codec: str = "h264",
     ) -> bool:
         """
         Add or update a stream in GStreamer pipeline manager.
@@ -100,7 +100,8 @@ class GStreamerService:
             name: Unique stream name/identifier
             source_type: Type of source ('v4l2', 'rtsp', 'test')
             source_uri: Source URI for RTSP streams
-            device_id: Device ID for V4L2 sources
+            device_id: Device ID for V4L2 sources (legacy, prefer device_path)
+            device_path: Persistent device path for V4L2 sources (preferred)
             width: Video width
             height: Video height
             framerate: Target framerate
@@ -115,6 +116,7 @@ class GStreamerService:
                 "source_type": source_type,
                 "source_uri": source_uri,
                 "device_id": device_id,
+                "device_path": device_path,
                 "width": width,
                 "height": height,
                 "framerate": framerate,
@@ -122,10 +124,7 @@ class GStreamerService:
             }
 
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.put(
-                    self._get_gstreamer_api_url("/streams"),
-                    json=payload
-                )
+                response = await client.put(self._get_gstreamer_api_url("/streams"), json=payload)
                 if response.status_code in (200, 201):
                     logger.info(f"Stream '{name}' added to GStreamer")
                     return True
@@ -148,9 +147,7 @@ class GStreamerService:
         """
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.delete(
-                    self._get_gstreamer_api_url(f"/streams/{name}")
-                )
+                response = await client.delete(self._get_gstreamer_api_url(f"/streams/{name}"))
                 if response.status_code in (200, 204):
                     logger.info(f"Stream '{name}' removed from GStreamer")
                     return True
@@ -161,7 +158,7 @@ class GStreamerService:
             logger.error(f"Error removing stream '{name}' from GStreamer: {e}")
             return False
 
-    def get_stream_urls(self, stream_name: str, host: Optional[str] = None) -> Dict[str, str]:
+    def get_stream_urls(self, stream_name: str, host: str | None = None) -> dict[str, str]:
         """
         Get all available URLs for a stream.
 
@@ -180,25 +177,27 @@ class GStreamerService:
             "hls": f"http://{url_host}:{self.hls_port}/{stream_name}/index.m3u8",
             "mse": f"http://{url_host}:{self.webrtc_port}/{stream_name}",
             "mjpeg": f"http://{url_host}:{self.hls_port}/{stream_name}/index.m3u8",  # Fallback to HLS
-            "ws": f"ws://{url_host}:{self.webrtc_port}/{stream_name}/ws"
+            "ws": f"ws://{url_host}:{self.webrtc_port}/{stream_name}/ws",
         }
 
     def build_source_config(
         self,
         camera_type: str,
-        rtsp_url: Optional[str] = None,
-        device_id: Optional[int] = None,
+        rtsp_url: str | None = None,
+        device_id: int | None = None,
+        device_path: str | None = None,
         width: int = 640,
         height: int = 360,
-        codec: str = "h264"
-    ) -> Dict[str, Any]:
+        codec: str = "h264",
+    ) -> dict[str, Any]:
         """
         Build a source configuration for GStreamer pipeline.
 
         Args:
             camera_type: Type of camera ('rtsp', 'usb', 'local')
             rtsp_url: RTSP URL for network cameras
-            device_id: Device ID for local cameras (e.g., /dev/video0)
+            device_id: Device ID for local cameras (legacy, prefer device_path)
+            device_path: Persistent device path (e.g. /dev/v4l/by-id/...)
             width: Video width
             height: Video height
             codec: Video codec (h264, mjpeg, etc.)
@@ -216,18 +215,20 @@ class GStreamerService:
                 "source_type": "rtsp",
                 "source_uri": rtsp_url,
                 "device_id": None,
+                "device_path": None,
                 "width": width,
                 "height": height,
                 "codec": codec,
             }
 
         elif camera_type in ("usb", "local"):
-            if device_id is None:
-                raise ValueError("Device ID is required for USB/local cameras")
+            if device_path is None and device_id is None:
+                raise ValueError("Device path or device ID is required for USB/local cameras")
             return {
                 "source_type": "v4l2",
                 "source_uri": None,
                 "device_id": device_id,
+                "device_path": device_path,
                 "width": width,
                 "height": height,
                 "codec": codec,

@@ -1,7 +1,9 @@
 from typing import Any
 
-from sqlalchemy.orm import as_declarative  # Updated import
-from sqlalchemy.orm import declared_attr
+from sqlalchemy.orm import (
+    as_declarative,  # Updated import
+    declared_attr,
+)
 
 
 @as_declarative()

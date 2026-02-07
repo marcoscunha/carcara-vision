@@ -5,21 +5,22 @@ These tests verify the REST API for hardware detection.
 """
 
 from unittest import TestCase
-from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from src.main import app
-from src.schemas.hardware import AcceleratorInfo
-from src.schemas.hardware import AcceleratorStatus
-from src.schemas.hardware import AcceleratorType
-from src.schemas.hardware import CPUArchitecture
-from src.schemas.hardware import CPUInfo
-from src.schemas.hardware import HardwareDetectionResult
-from src.schemas.hardware import MemoryInfo
-from src.schemas.hardware import PlatformInfo
-from src.schemas.hardware import PlatformVendor
+from src.schemas.hardware import (
+    AcceleratorInfo,
+    AcceleratorStatus,
+    AcceleratorType,
+    CPUArchitecture,
+    CPUInfo,
+    HardwareDetectionResult,
+    MemoryInfo,
+    PlatformInfo,
+    PlatformVendor,
+)
 
 
 def create_mock_hardware_result() -> HardwareDetectionResult:
@@ -223,8 +224,17 @@ class TestPlatformEndpoint(TestHardwareEndpoints):
         vendor = response.json()["vendor"]
 
         valid_vendors = [
-            "intel", "amd", "nvidia_jetson", "raspberry_pi", "orange_pi",
-            "aetina", "rock_pi", "khadas", "generic_arm", "generic_x86", "unknown"
+            "intel",
+            "amd",
+            "nvidia_jetson",
+            "raspberry_pi",
+            "orange_pi",
+            "aetina",
+            "rock_pi",
+            "khadas",
+            "generic_arm",
+            "generic_x86",
+            "unknown",
         ]
         self.assertIn(vendor, valid_vendors)
 

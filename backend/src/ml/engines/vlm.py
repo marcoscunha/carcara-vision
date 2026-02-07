@@ -12,17 +12,11 @@ import logging
 import time
 from abc import abstractmethod
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
 
 import cv2
 import numpy as np
 
-from ..base import BaseInferenceEngine
-from ..base import HardwareAccelerator
-from ..base import InferenceResult
-from ..base import ModelConfig
+from ..base import BaseInferenceEngine, HardwareAccelerator, InferenceResult, ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +41,7 @@ class VLMEngine(BaseInferenceEngine):
                 "(high, medium, low). Format as a structured list."
             )
 
-    def get_supported_accelerators(self) -> List[HardwareAccelerator]:
+    def get_supported_accelerators(self) -> list[HardwareAccelerator]:
         """VLMs typically run on CPU or CUDA."""
         return [
             HardwareAccelerator.CPU,
@@ -55,12 +49,7 @@ class VLMEngine(BaseInferenceEngine):
         ]
 
     @abstractmethod
-    def query(
-        self,
-        image: np.ndarray,
-        prompt: str,
-        **kwargs
-    ) -> str:
+    def query(self, image: np.ndarray, prompt: str, **kwargs) -> str:
         """
         Query the VLM with an image and prompt.
 
@@ -74,12 +63,7 @@ class VLMEngine(BaseInferenceEngine):
         """
         pass
 
-    def infer(
-        self,
-        image: np.ndarray,
-        prompt: Optional[str] = None,
-        **kwargs
-    ) -> InferenceResult:
+    def infer(self, image: np.ndarray, prompt: str | None = None, **kwargs) -> InferenceResult:
         """
         Run VLM inference on an image.
 
@@ -118,7 +102,7 @@ class VLMEngine(BaseInferenceEngine):
 
         return result
 
-    def _parse_detections(self, response: str) -> List[Dict[str, Any]]:
+    def _parse_detections(self, response: str) -> list[dict[str, Any]]:
         """
         Parse object detections from VLM response.
 
@@ -155,11 +139,7 @@ class OllamaVLMEngine(VLMEngine):
     - moondream
     """
 
-    def __init__(
-        self,
-        config: ModelConfig,
-        ollama_host: str = "http://localhost:11434"
-    ):
+    def __init__(self, config: ModelConfig, ollama_host: str = "http://localhost:11434"):
         super().__init__(config)
         self.ollama_host = ollama_host
         self._client = None
@@ -198,13 +178,7 @@ class OllamaVLMEngine(VLMEngine):
         self._is_loaded = False
         logger.info("Ollama VLM unloaded")
 
-    def query(
-        self,
-        image: np.ndarray,
-        prompt: str,
-        stream: bool = False,
-        **kwargs
-    ) -> str:
+    def query(self, image: np.ndarray, prompt: str, stream: bool = False, **kwargs) -> str:
         """
         Query Ollama VLM with image and prompt.
 
@@ -224,13 +198,7 @@ class OllamaVLMEngine(VLMEngine):
         image_b64 = self._encode_image_base64(image)
 
         # Build message
-        messages = [
-            {
-                "role": "user",
-                "content": prompt,
-                "images": [image_b64]
-            }
-        ]
+        messages = [{"role": "user", "content": prompt, "images": [image_b64]}]
 
         # Query model
         response = self._client.chat(
@@ -240,12 +208,12 @@ class OllamaVLMEngine(VLMEngine):
                 "temperature": self.config.vlm_temperature,
                 "num_predict": self.config.vlm_max_tokens,
             },
-            **kwargs
+            **kwargs,
         )
 
         return response["message"]["content"]
 
-    def list_available_models(self) -> List[str]:
+    def list_available_models(self) -> list[str]:
         """List available Ollama models."""
         if not self._client:
             return []
@@ -264,11 +232,7 @@ class OpenAIVLMEngine(VLMEngine):
     Requires OPENAI_API_KEY environment variable.
     """
 
-    def __init__(
-        self,
-        config: ModelConfig,
-        api_key: Optional[str] = None
-    ):
+    def __init__(self, config: ModelConfig, api_key: str | None = None):
         super().__init__(config)
         self.api_key = api_key
         self._client = None
@@ -305,13 +269,7 @@ class OpenAIVLMEngine(VLMEngine):
         self._is_loaded = False
         logger.info("OpenAI VLM unloaded")
 
-    def query(
-        self,
-        image: np.ndarray,
-        prompt: str,
-        detail: str = "auto",
-        **kwargs
-    ) -> str:
+    def query(self, image: np.ndarray, prompt: str, detail: str = "auto", **kwargs) -> str:
         """
         Query OpenAI VLM with image and prompt.
 
@@ -342,15 +300,15 @@ class OpenAIVLMEngine(VLMEngine):
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{image_b64}",
-                                "detail": detail
-                            }
-                        }
-                    ]
+                                "detail": detail,
+                            },
+                        },
+                    ],
                 }
             ],
             max_tokens=self.config.vlm_max_tokens,
             temperature=self.config.vlm_temperature,
-            **kwargs
+            **kwargs,
         )
 
         return response.choices[0].message.content
@@ -374,8 +332,7 @@ class LocalVLMEngine(VLMEngine):
         """Load local VLM using transformers."""
         try:
             import torch
-            from transformers import AutoModelForVision2Seq
-            from transformers import AutoProcessor
+            from transformers import AutoModelForVision2Seq, AutoProcessor
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -392,10 +349,7 @@ class LocalVLMEngine(VLMEngine):
                 self._model = self._model.to(device)
 
             self._is_loaded = True
-            self._current_accelerator = (
-                HardwareAccelerator.CUDA if device == "cuda"
-                else HardwareAccelerator.CPU
-            )
+            self._current_accelerator = HardwareAccelerator.CUDA if device == "cuda" else HardwareAccelerator.CPU
 
             logger.info(f"Local VLM loaded on {device}")
             return True
@@ -419,6 +373,7 @@ class LocalVLMEngine(VLMEngine):
 
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except ImportError:
@@ -427,12 +382,7 @@ class LocalVLMEngine(VLMEngine):
         self._is_loaded = False
         logger.info("Local VLM unloaded")
 
-    def query(
-        self,
-        image: np.ndarray,
-        prompt: str,
-        **kwargs
-    ) -> str:
+    def query(self, image: np.ndarray, prompt: str, **kwargs) -> str:
         """Query local VLM with image and prompt."""
         if not self._is_loaded:
             raise RuntimeError("Model not loaded")
@@ -445,11 +395,7 @@ class LocalVLMEngine(VLMEngine):
         pil_image = Image.fromarray(rgb_image)
 
         # Process inputs
-        inputs = self._processor(
-            text=prompt,
-            images=pil_image,
-            return_tensors="pt"
-        )
+        inputs = self._processor(text=prompt, images=pil_image, return_tensors="pt")
 
         # Move to device
         device = next(self._model.parameters()).device

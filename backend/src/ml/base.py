@@ -5,22 +5,17 @@ This module defines the core abstractions for all inference engines,
 enabling support for multiple model types and hardware accelerators.
 """
 
-from abc import ABC
-from abc import abstractmethod
-from dataclasses import dataclass
-from dataclasses import field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Union
 
 import numpy as np
 
 
 class ModelType(str, Enum):
     """Supported model types."""
+
     YOLO = "yolo"
     VLM = "vlm"  # Vision Language Models (LLaVA, GPT-4V, etc.)
     CUSTOM = "custom"
@@ -30,6 +25,7 @@ class ModelType(str, Enum):
 
 class HardwareAccelerator(str, Enum):
     """Supported hardware accelerators."""
+
     CPU = "cpu"
     CUDA = "cuda"
     TENSORRT = "tensorrt"
@@ -43,15 +39,16 @@ class HardwareAccelerator(str, Enum):
 @dataclass
 class BoundingBox:
     """Bounding box detection result."""
+
     x1: float
     y1: float
     x2: float
     y2: float
 
-    def to_list(self) -> List[float]:
+    def to_list(self) -> list[float]:
         return [self.x1, self.y1, self.x2, self.y2]
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         return {"x1": self.x1, "y1": self.y1, "x2": self.x2, "y2": self.y2}
 
     @property
@@ -74,30 +71,31 @@ class InferenceResult:
 
     Supports both object detection and VLM responses.
     """
+
     # Common fields
     model_name: str
     inference_time_ms: float
     hardware_used: HardwareAccelerator
 
     # Object detection fields
-    detections: List[Dict[str, Any]] = field(default_factory=list)
+    detections: list[dict[str, Any]] = field(default_factory=list)
 
     # VLM response fields (for vision-language models)
-    text_response: Optional[str] = None
+    text_response: str | None = None
 
     # Raw model output for custom processing
-    raw_output: Optional[Any] = None
+    raw_output: Any | None = None
 
     # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def add_detection(
         self,
-        bbox: Union[BoundingBox, List[float]],
+        bbox: BoundingBox | list[float],
         class_name: str,
         class_id: int,
         confidence: float,
-        **extra
+        **extra,
     ):
         """Add a detection to the results."""
         if isinstance(bbox, BoundingBox):
@@ -110,11 +108,11 @@ class InferenceResult:
             "class_name": class_name,
             "class_id": class_id,
             "confidence": confidence,
-            **extra
+            **extra,
         }
         self.detections.append(detection)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary."""
         return {
             "model_name": self.model_name,
@@ -129,6 +127,7 @@ class InferenceResult:
 @dataclass
 class ModelConfig:
     """Configuration for loading and running a model."""
+
     model_path: str
     model_type: ModelType
     model_name: str
@@ -140,7 +139,7 @@ class ModelConfig:
 
     # Hardware settings
     preferred_accelerator: HardwareAccelerator = HardwareAccelerator.CPU
-    fallback_accelerators: List[HardwareAccelerator] = field(default_factory=list)
+    fallback_accelerators: list[HardwareAccelerator] = field(default_factory=list)
 
     # Input preprocessing
     input_size: tuple = (640, 640)  # (width, height)
@@ -148,10 +147,10 @@ class ModelConfig:
     bgr_to_rgb: bool = True
 
     # Model-specific options
-    options: Dict[str, Any] = field(default_factory=dict)
+    options: dict[str, Any] = field(default_factory=dict)
 
     # VLM-specific settings
-    vlm_prompt: Optional[str] = None
+    vlm_prompt: str | None = None
     vlm_max_tokens: int = 512
     vlm_temperature: float = 0.7
 
@@ -167,7 +166,7 @@ class BaseInferenceEngine(ABC):
         self.config = config
         self._model = None
         self._is_loaded = False
-        self._current_accelerator: Optional[HardwareAccelerator] = None
+        self._current_accelerator: HardwareAccelerator | None = None
 
     @property
     def is_loaded(self) -> bool:
@@ -175,7 +174,7 @@ class BaseInferenceEngine(ABC):
         return self._is_loaded
 
     @property
-    def current_accelerator(self) -> Optional[HardwareAccelerator]:
+    def current_accelerator(self) -> HardwareAccelerator | None:
         """Get the currently active hardware accelerator."""
         return self._current_accelerator
 
@@ -209,7 +208,7 @@ class BaseInferenceEngine(ABC):
         pass
 
     @abstractmethod
-    def get_supported_accelerators(self) -> List[HardwareAccelerator]:
+    def get_supported_accelerators(self) -> list[HardwareAccelerator]:
         """Return list of hardware accelerators supported by this engine."""
         pass
 
@@ -244,10 +243,7 @@ class BaseInferenceEngine(ABC):
         if not self._is_loaded:
             raise RuntimeError("Model must be loaded before warmup")
 
-        dummy_input = np.zeros(
-            (self.config.input_size[1], self.config.input_size[0], 3),
-            dtype=np.uint8
-        )
+        dummy_input = np.zeros((self.config.input_size[1], self.config.input_size[0], 3), dtype=np.uint8)
 
         for _ in range(iterations):
             self.infer(dummy_input)
@@ -275,7 +271,7 @@ class BaseAcceleratorBackend(ABC):
         pass
 
     @abstractmethod
-    def get_device_info(self) -> Dict[str, Any]:
+    def get_device_info(self) -> dict[str, Any]:
         """Get information about the accelerator device."""
         pass
 
@@ -286,13 +282,6 @@ class BaseAcceleratorBackend(ABC):
 
         Args:
             model_path: Path to the original model
-            output_path: Path to save optimized model
-            **kwargs: Accelerator-specific optimization options
-
-        Returns:
-            Path to the optimized model
-        """
-        pass
             output_path: Path to save optimized model
             **kwargs: Accelerator-specific optimization options
 

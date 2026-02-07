@@ -1,15 +1,14 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
-from pydantic import HttpUrl
 
 
 class CameraBase(BaseModel):
     name: str
     camera_type: str = "rtsp"
-    device_id: Optional[int] = None
-    rtsp_url: Optional[str] = None
+    device_id: int | None = None
+    device_path: str | None = None  # Persistent device path (e.g. /dev/v4l/by-id/...)
+    rtsp_url: str | None = None
     is_active: bool = True
 
 
@@ -18,11 +17,12 @@ class CameraCreate(CameraBase):
 
 
 class CameraUpdate(BaseModel):
-    name: Optional[str] = None
-    camera_type: Optional[str] = None
-    device_id: Optional[int] = None
-    rtsp_url: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    camera_type: str | None = None
+    device_id: int | None = None
+    device_path: str | None = None
+    rtsp_url: str | None = None
+    is_active: bool | None = None
 
 
 class CameraResponse(CameraBase):
