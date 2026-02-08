@@ -1,6 +1,8 @@
 # 📚 API Reference
 
-Interactive documentation:
+> **Prerequisites**: Make sure the services are running before accessing the API docs. Follow the [🚀 Quick Start](QUICK_START.md) guide to get everything up.
+
+Once the backend is running, interactive documentation is available at:
 
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
