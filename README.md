@@ -55,13 +55,27 @@ API docs: http://localhost:8000/docs
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open an issue first to discuss proposed changes.
+Everybody is invited and welcome to contribute to Carcara NVC! There's a lot to do — whether you're a developer, a tester with edge hardware, or someone who wants to improve the docs.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### How to contribute
+
+1. **Start a conversation** — Open an [issue](https://github.com/marcoscunha/carcara-nvc/issues) to report a bug or suggest a feature, or start a [discussion](https://github.com/marcoscunha/carcara-nvc/discussions) for broader ideas.
+2. **Pick up or create an issue** — Check existing issues or propose your own. Comment on it so others know you're working on it.
+3. **Create a branch** — Branch off `dev` with a descriptive name:
+   ```bash
+   git checkout dev
+   git pull
+   git checkout -b feature/my-awesome-feature
+   ```
+4. **Write code & tests** — Make your changes, ensure tests pass (`uv run pytest`).
+5. **Open a Pull Request** — Submit a PR against the `dev` branch. Describe _what_ changed and _why_.
+
+### Other ways to help
+
+- 📝 **Documentation** — Fix typos, clarify guides, add examples
+- 🧪 **Hardware testing** — Validate accelerator backends on Jetson, Raspberry Pi, Coral, or Hailo
+- 🐛 **Bug reports** — Detailed reports with logs and reproduction steps are incredibly valuable
+- 💡 **Feature ideas** — Start a discussion with your use case
 
 ## 🚧 Roadmap
 
@@ -96,4 +110,3 @@ MIT License — see the LICENSE file for details.
 <div align="center">
 Made with ❤️ for the video surveillance and ML community
 </div>
-        Coral["Coral TPU"]
