@@ -10,8 +10,6 @@ import {
   MenuItem,
   Slider,
   Button,
-  alpha,
-  useTheme,
   Skeleton,
   Divider,
   Chip,
@@ -126,7 +124,6 @@ const formatArchitecture = (arch: string): string => {
 const Settings: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5)
-  const theme = useTheme()
 
   // TanStack Query hooks for server state management
   const { data: models, isLoading } = useModels()
@@ -152,7 +149,7 @@ const Settings: React.FC = () => {
   if (isLoading) {
     return (
       <Box>
-        <Skeleton variant="text" width={120} height={40} sx={{ mb: 3 }} />
+        <Skeleton variant="text" width={120} height={40} className="loading-skeleton" />
         <Skeleton variant="rounded" height={300} />
       </Box>
     )
@@ -163,56 +160,28 @@ const Settings: React.FC = () => {
   return (
     <Box className="fade-in">
       {/* Page Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 4,
-          pb: 2,
-          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-        }}
-      >
+      <Box className="page-header">
         <Box>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
+          <Typography variant="h4" className="page-header__title">
             Settings
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography variant="body2" color="text.secondary" className="page-header__subtitle">
             Configure system and detection parameters
           </Typography>
         </Box>
       </Box>
 
       {/* Settings Cards */}
-      <Box sx={{ display: 'grid', gap: 3 }}>
+      <Box className="settings-grid">
         {/* Object Detection Settings */}
         <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-              <Box
-                sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 2,
-                  background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.2)} 0%, ${alpha(theme.palette.primary.dark, 0.2)} 100%)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <MemoryIcon sx={{ color: 'primary.main' }} />
+          <CardContent className="settings-card__content">
+            <Box className="settings-card__header">
+              <Box className="settings-card__icon settings-card__icon--primary">
+                <MemoryIcon color="primary" />
               </Box>
               <Box>
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Typography variant="h6" className="settings-card__title">
                   Object Detection
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -221,9 +190,9 @@ const Settings: React.FC = () => {
               </Box>
             </Box>
 
-            <Divider sx={{ mb: 3 }} />
+            <Divider className="settings-card__divider" />
 
-            <FormControl fullWidth sx={{ mb: 4 }}>
+            <FormControl fullWidth className="settings-card__control">
               <InputLabel>Detection Model</InputLabel>
               <Select value={selectedModel} label="Detection Model" onChange={(e) => setSelectedModel(e.target.value)}>
                 {modelList.map((model: Model) => (
@@ -234,23 +203,14 @@ const Settings: React.FC = () => {
               </Select>
             </FormControl>
 
-            <Box sx={{ mb: 4 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography sx={{ fontWeight: 500 }}>Confidence Threshold</Typography>
-                <Typography
-                  sx={{
-                    fontWeight: 600,
-                    color: 'primary.main',
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                    px: 1.5,
-                    py: 0.25,
-                    borderRadius: 1,
-                  }}
-                >
+            <Box className="settings-card__metric">
+              <Box className="settings-card__metric-header">
+                <Typography className="settings-card__metric-label">Confidence Threshold</Typography>
+                <Typography className="settings-card__metric-value">
                   {(confidenceThreshold * 100).toFixed(0)}%
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" className="settings-card__metric-note">
                 Minimum confidence level required for detections
               </Typography>
               <Slider
@@ -261,17 +221,7 @@ const Settings: React.FC = () => {
                 step={0.05}
                 valueLabelDisplay="auto"
                 valueLabelFormat={(value) => `${(value * 100).toFixed(0)}%`}
-                sx={{
-                  '& .MuiSlider-thumb': {
-                    backgroundColor: theme.palette.primary.main,
-                  },
-                  '& .MuiSlider-track': {
-                    background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                  },
-                  '& .MuiSlider-rail': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.2),
-                  },
-                }}
+                className="settings-card__slider"
               />
             </Box>
 
@@ -280,7 +230,7 @@ const Settings: React.FC = () => {
               onClick={handleSave}
               disabled={!selectedModel || updateMutation.isPending}
               startIcon={<SaveIcon />}
-              sx={{ px: 4 }}
+              className="settings-card__save"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Settings'}
             </Button>
@@ -289,24 +239,14 @@ const Settings: React.FC = () => {
 
         {/* Hardware Detection Card */}
         <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box
-                  sx={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 2,
-                    background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.2)} 0%, ${alpha(theme.palette.success.dark, 0.2)} 100%)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <HardwareIcon sx={{ color: 'success.main' }} />
+          <CardContent className="settings-card__content">
+            <Box className="settings-card__header settings-card__header--space">
+              <Box className="settings-card__header-left">
+                <Box className="settings-card__icon settings-card__icon--success">
+                  <HardwareIcon color="success" />
                 </Box>
                 <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Typography variant="h6" className="settings-card__title">
                     Hardware Detection
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -320,60 +260,47 @@ const Settings: React.FC = () => {
                 onClick={handleDetectHardware}
                 disabled={detectHardwareMutation.isPending}
                 startIcon={detectHardwareMutation.isPending ? <CircularProgress size={16} /> : <RefreshIcon />}
-                sx={{ minWidth: 120 }}
+                className="settings-card__detect"
               >
                 {detectHardwareMutation.isPending ? 'Scanning...' : 'Detect'}
               </Button>
             </Box>
 
-            <Divider sx={{ mb: 3 }} />
+            <Divider className="settings-card__divider" />
 
             {/* Loading State */}
             {(isHardwareLoading || detectHardwareMutation.isPending) && !hardwareData && (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <CircularProgress size={40} sx={{ mb: 2 }} />
+              <Box className="settings-card__loading">
+                <CircularProgress size={40} className="settings-card__loading-icon" />
                 <Typography color="text.secondary">Detecting hardware...</Typography>
               </Box>
             )}
 
             {/* Error State */}
             {detectHardwareMutation.isError && (
-              <Alert severity="error" sx={{ mb: 3 }}>
+              <Alert severity="error" className="settings-card__alert">
                 Hardware detection failed. Please try again.
               </Alert>
             )}
 
             {/* Hardware Results */}
             {hardwareData && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box className="settings-sections">
                 {/* CPU Section */}
                 <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Box className="settings-section__header">
                     <ComputerIcon fontSize="small" color="primary" />
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    <Typography variant="subtitle2" className="settings-section__title">
                       CPU Information
                     </Typography>
                   </Box>
-                  <Box
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      backgroundColor: alpha(theme.palette.background.default, 0.5),
-                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                        gap: 2,
-                      }}
-                    >
+                  <Box className="settings-panel">
+                    <Box className="settings-panel__grid">
                       <Box>
                         <Typography variant="caption" color="text.secondary">
                           Architecture
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="text-strong">
                           {formatArchitecture(hardwareData.cpu.architecture)}
                         </Typography>
                       </Box>
@@ -381,15 +308,15 @@ const Settings: React.FC = () => {
                         <Typography variant="caption" color="text.secondary">
                           Vendor
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="text-strong">
                           {hardwareData.cpu.vendor}
                         </Typography>
                       </Box>
-                      <Box sx={{ gridColumn: { xs: '1', sm: '1 / -1' } }}>
+                      <Box className="settings-panel__full">
                         <Typography variant="caption" color="text.secondary">
                           Model
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>
+                        <Typography variant="body2" className="text-strong text-break">
                           {hardwareData.cpu.model_name}
                         </Typography>
                       </Box>
@@ -397,7 +324,7 @@ const Settings: React.FC = () => {
                         <Typography variant="caption" color="text.secondary">
                           Cores / Threads
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="text-strong">
                           {hardwareData.cpu.cores} / {hardwareData.cpu.threads}
                         </Typography>
                       </Box>
@@ -406,7 +333,7 @@ const Settings: React.FC = () => {
                           <Typography variant="caption" color="text.secondary">
                             Max Frequency
                           </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          <Typography variant="body2" className="text-strong">
                             {(hardwareData.cpu.max_frequency_mhz / 1000).toFixed(2)} GHz
                           </Typography>
                         </Box>
@@ -417,27 +344,14 @@ const Settings: React.FC = () => {
 
                 {/* Platform Section */}
                 <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Box className="settings-section__header">
                     <StorageIcon fontSize="small" color="secondary" />
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    <Typography variant="subtitle2" className="settings-section__title">
                       Platform Information
                     </Typography>
                   </Box>
-                  <Box
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      backgroundColor: alpha(theme.palette.background.default, 0.5),
-                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                        gap: 2,
-                      }}
-                    >
+                  <Box className="settings-panel">
+                    <Box className="settings-panel__grid">
                       <Box>
                         <Typography variant="caption" color="text.secondary">
                           Vendor
@@ -453,7 +367,7 @@ const Settings: React.FC = () => {
                         <Typography variant="caption" color="text.secondary">
                           Board
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="text-strong">
                           {hardwareData.platform.board_name}
                         </Typography>
                       </Box>
@@ -461,7 +375,7 @@ const Settings: React.FC = () => {
                         <Typography variant="caption" color="text.secondary">
                           OS
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="text-strong">
                           {hardwareData.platform.os_name} {hardwareData.platform.os_version}
                         </Typography>
                       </Box>
@@ -469,7 +383,7 @@ const Settings: React.FC = () => {
                         <Typography variant="caption" color="text.secondary">
                           Kernel
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="text-strong">
                           {hardwareData.platform.kernel_version}
                         </Typography>
                       </Box>
@@ -479,61 +393,36 @@ const Settings: React.FC = () => {
 
                 {/* Memory Section */}
                 <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Box className="settings-section__header">
                     <MemoryIcon fontSize="small" color="info" />
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    <Typography variant="subtitle2" className="settings-section__title">
                       Memory
                     </Typography>
                   </Box>
-                  <Box
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      backgroundColor: alpha(theme.palette.background.default, 0.5),
-                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Box className="settings-panel">
+                    <Box className="settings-panel__row">
                       <Typography variant="body2">
                         {hardwareData.memory.available_gb.toFixed(1)} GB available of{' '}
                         {hardwareData.memory.total_gb.toFixed(1)} GB
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                      <Typography variant="body2" className="settings-panel__value">
                         {hardwareData.memory.used_percent.toFixed(1)}% used
                       </Typography>
                     </Box>
                     <LinearProgress
                       variant="determinate"
                       value={hardwareData.memory.used_percent}
-                      sx={{
-                        height: 8,
-                        borderRadius: 4,
-                        backgroundColor: alpha(theme.palette.primary.main, 0.2),
-                        '& .MuiLinearProgress-bar': {
-                          borderRadius: 4,
-                          background:
-                            hardwareData.memory.used_percent > 80
-                              ? `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.error.main} 100%)`
-                              : `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                        },
-                      }}
+                      className={`settings-panel__progress ${hardwareData.memory.used_percent > 80 ? 'settings-panel__progress--warn' : ''}`}
                     />
                   </Box>
                 </Box>
 
                 {/* Accelerators Section */}
                 <Box>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      mb: 2,
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box className="settings-section__header settings-section__header--space">
+                    <Box className="settings-section__header-left">
                       <SpeedIcon fontSize="small" color="warning" />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      <Typography variant="subtitle2" className="settings-section__title">
                         AI Accelerators
                       </Typography>
                     </Box>
@@ -546,33 +435,16 @@ const Settings: React.FC = () => {
                       />
                     )}
                   </Box>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <Box className="settings-accel-list">
                     {hardwareData.accelerators.map((acc, index) => (
                       <Box
                         key={`${acc.type}-${index}`}
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor:
-                            acc.status === 'available'
-                              ? alpha(theme.palette.success.main, 0.1)
-                              : alpha(theme.palette.background.default, 0.5),
-                          border: `1px solid ${
-                            acc.status === 'available'
-                              ? alpha(theme.palette.success.main, 0.3)
-                              : alpha(theme.palette.divider, 0.3)
-                          }`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          flexWrap: 'wrap',
-                          gap: 1,
-                        }}
+                        className={`settings-accel-card ${acc.status === 'available' ? 'settings-accel-card--available' : ''}`}
                       >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                          <Typography sx={{ fontSize: '1.2rem' }}>{getAcceleratorIcon(acc.type)}</Typography>
+                        <Box className="settings-accel-card__main">
+                          <Typography className="settings-accel-card__icon">{getAcceleratorIcon(acc.type)}</Typography>
                           <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            <Typography variant="body2" className="settings-accel-card__name">
                               {acc.name}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
@@ -588,7 +460,7 @@ const Settings: React.FC = () => {
                             size="small"
                             color={getStatusColor(acc.status) as 'success' | 'warning' | 'error' | 'default'}
                             icon={getStatusIcon(acc.status)}
-                            sx={{ textTransform: 'capitalize' }}
+                            className="settings-accel-card__status"
                           />
                         </Tooltip>
                       </Box>
@@ -597,7 +469,7 @@ const Settings: React.FC = () => {
                 </Box>
 
                 {/* Detection Info */}
-                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
+                <Typography variant="caption" color="text.secondary" className="settings-card__footer-note">
                   Detection completed in {hardwareData.detection_duration_ms.toFixed(0)}ms • Last updated:{' '}
                   {new Date(hardwareData.detection_timestamp).toLocaleString()}
                 </Typography>
@@ -606,9 +478,9 @@ const Settings: React.FC = () => {
 
             {/* Initial State - No Data */}
             {!hardwareData && !isHardwareLoading && !detectHardwareMutation.isPending && (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <HardwareIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                <Typography color="text.secondary" sx={{ mb: 1 }}>
+              <Box className="settings-card__empty">
+                <HardwareIcon className="settings-card__empty-icon" />
+                <Typography color="text.secondary" className="settings-card__empty-title">
                   Hardware not yet detected
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -621,23 +493,13 @@ const Settings: React.FC = () => {
 
         {/* System Info Card */}
         <Card>
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-              <Box
-                sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 2,
-                  background: `linear-gradient(135deg, ${alpha(theme.palette.secondary.main, 0.2)} 0%, ${alpha(theme.palette.secondary.dark, 0.2)} 100%)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <SettingsIcon sx={{ color: 'secondary.main' }} />
+          <CardContent className="settings-card__content">
+            <Box className="settings-card__header">
+              <Box className="settings-card__icon settings-card__icon--secondary">
+                <SettingsIcon color="secondary" />
               </Box>
               <Box>
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Typography variant="h6" className="settings-card__title">
                   System Information
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -646,30 +508,30 @@ const Settings: React.FC = () => {
               </Box>
             </Box>
 
-            <Divider sx={{ mb: 3 }} />
+            <Divider className="settings-card__divider" />
 
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box className="settings-info">
+              <Box className="settings-info__row">
                 <Typography variant="body2" color="text.secondary">
                   Product Name
                 </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                <Typography variant="body2" className="settings-info__value">
                   CARCARA-NVC
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Box className="settings-info__row">
                 <Typography variant="body2" color="text.secondary">
                   Description
                 </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                <Typography variant="body2" className="text-strong">
                   Network Video Controller
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Box className="settings-info__row">
                 <Typography variant="body2" color="text.secondary">
                   Version
                 </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                <Typography variant="body2" className="text-strong">
                   1.0.0
                 </Typography>
               </Box>

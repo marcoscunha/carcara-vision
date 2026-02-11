@@ -62,12 +62,12 @@ export const CameraScanner: React.FC = () => {
 
   return (
     <Box>
-      <Button variant="contained" onClick={handleScan} disabled={loading} sx={{ mb: 2 }}>
+      <Button variant="contained" onClick={handleScan} disabled={loading} className="camera-scanner__button">
         {loading ? <CircularProgress size={24} /> : 'Scan for Cameras'}
       </Button>
 
       {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
+        <Typography color="error" className="camera-scanner__error">
           {error}
         </Typography>
       )}

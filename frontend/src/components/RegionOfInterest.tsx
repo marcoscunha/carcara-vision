@@ -93,14 +93,14 @@ const RegionOfInterest: React.FC<RegionOfInterestProps> = ({
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 2 }}>
-      <Box sx={{ position: 'relative' }}>
+    <Paper elevation={3} className="roi">
+      <Box className="roi__box">
         <canvas
           ref={canvasRef}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          style={{ border: '1px solid #ccc' }}
+          className="roi__canvas"
         />
       </Box>
     </Paper>

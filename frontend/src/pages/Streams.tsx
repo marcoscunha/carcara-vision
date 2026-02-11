@@ -17,8 +17,6 @@ import {
   CircularProgress,
   Alert,
   Chip,
-  alpha,
-  useTheme,
 } from '@mui/material'
 import {
   Add as AddIcon,
@@ -41,7 +39,6 @@ const Streams: React.FC = () => {
     current_frame: 0,
     stream_metadata: {},
   })
-  const theme = useTheme()
 
   // TanStack Query hooks for server state management
   const {
@@ -101,22 +98,15 @@ const Streams: React.FC = () => {
 
   if (streamsLoading || camerasLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress sx={{ color: 'primary.main' }} />
+      <Box className="loading-center">
+        <CircularProgress color="primary" />
       </Box>
     )
   }
 
   if (streamsError || camerasError) {
     return (
-      <Alert
-        severity="error"
-        sx={{
-          m: 2,
-          backgroundColor: alpha(theme.palette.error.main, 0.1),
-          border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
-        }}
-      >
+      <Alert severity="error" className="alert-error">
         Error loading data: {streamsErrorData?.message || 'Unknown error'}
       </Alert>
     )
@@ -139,82 +129,49 @@ const Streams: React.FC = () => {
   return (
     <Box className="fade-in">
       {/* Page Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 4,
-          pb: 2,
-          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-        }}
-      >
+      <Box className="page-header">
         <Box>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
+          <Typography variant="h4" className="page-header__title">
             Streams
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography variant="body2" color="text.secondary" className="page-header__subtitle">
             Monitor active video streams
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => refetchStreams()} sx={{ px: 2.5 }}>
+        <Box className="page-header__actions">
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => refetchStreams()}
+            className="page-header__action page-header__action--outline"
+          >
             Refresh
           </Button>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ px: 3 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpen()}
+            className="page-header__action"
+          >
             Add Stream
           </Button>
         </Box>
       </Box>
 
       {/* Streams Section */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
-          <Box
-            sx={{
-              width: 4,
-              height: 24,
-              borderRadius: 2,
-              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            }}
-          />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+      <Box className="section section--compact">
+        <Box className="section-header">
+          <Box className="section-header__accent" />
+          <Typography variant="h5" className="section-header__title">
             Active Streams
           </Typography>
-          <Chip
-            label={streamList.length}
-            size="small"
-            sx={{
-              ml: 1,
-              backgroundColor: alpha(theme.palette.primary.main, 0.15),
-              color: theme.palette.primary.main,
-              fontWeight: 600,
-            }}
-          />
+          <Chip label={streamList.length} size="small" className="section-header__count" />
         </Box>
 
         {streamList.length === 0 ? (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 6,
-              px: 2,
-              borderRadius: 3,
-              border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
-              backgroundColor: alpha(theme.palette.background.paper, 0.3),
-            }}
-          >
-            <PlayCircleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
+          <Box className="empty-panel">
+            <PlayCircleIcon className="empty-panel__icon" />
+            <Typography color="text.secondary" variant="h6" className="empty-panel__title">
               No active streams
             </Typography>
             <Typography color="text.secondary" variant="body2">
@@ -222,74 +179,45 @@ const Streams: React.FC = () => {
             </Typography>
           </Box>
         ) : (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-              gap: 3,
-            }}
-          >
+          <Box className="card-grid--streams">
             {streamList.map((stream: Stream) => {
               const camera = cameraList.find((c: Camera) => c.id === stream.camera_id)
               return (
                 <Card key={stream.id}>
-                  <CardContent sx={{ p: 2.5 }}>
+                  <CardContent className="card-content">
                     {/* Header */}
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        mb: 2,
-                      }}
-                    >
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    <Box className="card-header">
+                      <Typography variant="h6" className="card-title">
                         {camera?.name || 'Unknown Camera'}
                       </Typography>
                       <Chip
-                        icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                        icon={<CircleIcon className="chip-icon--tiny" />}
                         label={stream.status}
                         size="small"
                         color={getStatusColor(stream.status) as any}
-                        sx={{
-                          textTransform: 'capitalize',
-                          '& .MuiChip-icon': {
-                            color: 'inherit',
-                            animation: stream.status === 'running' ? 'pulse 2s ease-in-out infinite' : 'none',
-                          },
-                        }}
+                        className={`status-chip chip-capitalize ${stream.status === 'running' ? 'status-chip--active' : ''}`}
                       />
                     </Box>
 
                     {/* Stream Preview */}
-                    <Box sx={{ mb: 2 }}>
+                    <Box className="stream-preview-wrapper">
                       <CameraStream stream={stream} />
                     </Box>
 
                     {/* Frame Counter */}
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
                       Frame: {stream.current_frame.toLocaleString()}
                     </Typography>
 
                     {/* Actions */}
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpen(stream)}
-                        sx={{
-                          color: 'primary.main',
-                          '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
-                        }}
-                      >
+                    <Box className="card-actions">
+                      <IconButton size="small" onClick={() => handleOpen(stream)} className="icon-button--primary">
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => deleteMutation.mutate(stream.id)}
-                        sx={{
-                          color: 'error.main',
-                          '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
-                        }}
+                        className="icon-button--error"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>

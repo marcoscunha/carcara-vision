@@ -6,8 +6,6 @@ import {
   Typography,
   Divider,
   Chip,
-  alpha,
-  useTheme,
   Skeleton,
   Table,
   TableBody,
@@ -34,7 +32,6 @@ const Cameras: React.FC = () => {
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null)
-  const theme = useTheme()
 
   // TanStack Query hooks for server state management
   const { data: cameras, isLoading } = useCameras()
@@ -82,7 +79,7 @@ const Cameras: React.FC = () => {
   if (isLoading) {
     return (
       <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Box className="loading-header">
           <Skeleton variant="text" width={150} height={40} />
           <Skeleton variant="rounded" width={140} height={40} />
         </Box>
@@ -96,105 +93,54 @@ const Cameras: React.FC = () => {
   return (
     <Box className="fade-in">
       {/* Page Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 4,
-          pb: 2,
-          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-        }}
-      >
+      <Box className="page-header">
         <Box>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
+          <Typography variant="h4" className="page-header__title">
             Cameras
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography variant="body2" color="text.secondary" className="page-header__subtitle">
             Manage your video surveillance cameras
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenFormDialog()}
-          sx={{
-            px: 3,
-            py: 1.25,
-          }}
-        >
-          Add Camera
-        </Button>
+        <Box className="page-header__actions">
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenFormDialog()}
+            className="page-header__action"
+          >
+            Add Camera
+          </Button>
+        </Box>
       </Box>
 
       {/* Local Cameras Section */}
-      <Box sx={{ mb: 5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
-          <Box
-            sx={{
-              width: 4,
-              height: 24,
-              borderRadius: 2,
-              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            }}
-          />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+      <Box className="section section--compact">
+        <Box className="section-header">
+          <Box className="section-header__accent" />
+          <Typography variant="h5" className="section-header__title">
             Local Cameras
           </Typography>
         </Box>
         <CameraScanner />
       </Box>
 
-      <Divider sx={{ my: 4 }} />
+      <Divider className="section-divider" />
 
       {/* IP Cameras Section */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
-          <Box
-            sx={{
-              width: 4,
-              height: 24,
-              borderRadius: 2,
-              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            }}
-          />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+      <Box className="section">
+        <Box className="section-header">
+          <Box className="section-header__accent" />
+          <Typography variant="h5" className="section-header__title">
             Registered Cameras
           </Typography>
-          <Chip
-            label={cameraList.length}
-            size="small"
-            sx={{
-              ml: 1,
-              backgroundColor: alpha(theme.palette.primary.main, 0.15),
-              color: theme.palette.primary.main,
-              fontWeight: 600,
-            }}
-          />
+          <Chip label={cameraList.length} size="small" className="section-header__count" />
         </Box>
 
         {cameraList.length === 0 ? (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 6,
-              px: 2,
-              borderRadius: 3,
-              border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
-              backgroundColor: alpha(theme.palette.background.paper, 0.3),
-            }}
-          >
-            <VideocamIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
+          <Box className="empty-panel">
+            <VideocamIcon className="empty-panel__icon" />
+            <Typography color="text.secondary" variant="h6" className="empty-panel__title">
               No cameras configured
             </Typography>
             <Typography color="text.secondary" variant="body2">
@@ -202,33 +148,28 @@ const Cameras: React.FC = () => {
             </Typography>
           </Box>
         ) : (
-          <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+          <TableContainer component={Paper} className="table-card">
             <Table>
               <TableHead>
-                <TableRow sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.08) }}>
-                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>URL / Device</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Resolution</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>FPS</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }} align="right">
+                <TableRow className="table-head-row">
+                  <TableCell className="table-head-cell">Name</TableCell>
+                  <TableCell className="table-head-cell">Type</TableCell>
+                  <TableCell className="table-head-cell">URL / Device</TableCell>
+                  <TableCell className="table-head-cell">Resolution</TableCell>
+                  <TableCell className="table-head-cell">FPS</TableCell>
+                  <TableCell className="table-head-cell">Status</TableCell>
+                  <TableCell className="table-head-cell" align="right">
                     Actions
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {cameraList.map((camera: Camera) => (
-                  <TableRow
-                    key={camera.id}
-                    sx={{
-                      '&:hover': { backgroundColor: alpha(theme.palette.action.hover, 0.5) },
-                    }}
-                  >
+                  <TableRow key={camera.id} className="table-row-hover">
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <VideocamIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      <Box className="table-name">
+                        <VideocamIcon className="table-name__icon" />
+                        <Typography variant="body2" className="table-name__text">
                           {camera.name}
                         </Typography>
                       </Box>
@@ -238,20 +179,11 @@ const Cameras: React.FC = () => {
                         label={camera.camera_type || 'IP'}
                         size="small"
                         variant="outlined"
-                        sx={{ textTransform: 'capitalize' }}
+                        className="chip-capitalize"
                       />
                     </TableCell>
                     <TableCell>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{
-                          maxWidth: 200,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
+                      <Typography variant="body2" color="text.secondary" className="table-url">
                         {camera.rtsp_url || `Device ${camera.device_id}`}
                       </Typography>
                     </TableCell>
@@ -265,36 +197,25 @@ const Cameras: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                        icon={<CircleIcon className="chip-icon--tiny" />}
                         label={camera.is_active ? 'Active' : 'Inactive'}
                         size="small"
                         color={camera.is_active ? 'success' : 'error'}
-                        sx={{
-                          '& .MuiChip-icon': {
-                            color: 'inherit',
-                            animation: camera.is_active ? 'pulse 2s ease-in-out infinite' : 'none',
-                          },
-                        }}
+                        className={`status-chip ${camera.is_active ? 'status-chip--active' : ''}`}
                       />
                     </TableCell>
                     <TableCell align="right">
                       <IconButton
                         size="small"
                         onClick={() => handleOpenFormDialog(camera)}
-                        sx={{
-                          color: 'primary.main',
-                          '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
-                        }}
+                        className="icon-button--primary"
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleOpenDeleteDialog(camera)}
-                        sx={{
-                          color: 'error.main',
-                          '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
-                        }}
+                        className="icon-button--error"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>

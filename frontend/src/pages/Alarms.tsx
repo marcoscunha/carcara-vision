@@ -16,8 +16,6 @@ import {
   FormControl,
   InputLabel,
   Chip,
-  alpha,
-  useTheme,
   Skeleton,
 } from '@mui/material'
 import {
@@ -41,7 +39,6 @@ const Alarms: React.FC = () => {
     region_of_interest: [0, 0, 0, 0],
     is_active: true,
   })
-  const theme = useTheme()
 
   // TanStack Query hooks for server state management
   const { data: alarms, isLoading: alarmsLoading } = useAlarms()
@@ -102,17 +99,11 @@ const Alarms: React.FC = () => {
   if (alarmsLoading || camerasLoading || modelsLoading) {
     return (
       <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Box className="loading-header">
           <Skeleton variant="text" width={120} height={40} />
           <Skeleton variant="rounded" width={130} height={40} />
         </Box>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-            gap: 3,
-          }}
-        >
+        <Box className="card-grid--alarms">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} variant="rounded" height={180} />
           ))}
@@ -128,85 +119,41 @@ const Alarms: React.FC = () => {
   return (
     <Box className="fade-in">
       {/* Page Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 4,
-          pb: 2,
-          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-        }}
-      >
+      <Box className="page-header">
         <Box>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              background: `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.secondary.main} 100%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
+          <Typography variant="h4" className="page-header__title">
             Alarms
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography variant="body2" color="text.secondary" className="page-header__subtitle">
             Configure detection alerts and notifications
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpen()}
-          sx={{
-            px: 3,
-            py: 1.25,
-          }}
-        >
-          Add Alarm
-        </Button>
+        <Box className="page-header__actions">
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpen()}
+            className="page-header__action"
+          >
+            Add Alarm
+          </Button>
+        </Box>
       </Box>
 
       {/* Alarms Grid */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
-          <Box
-            sx={{
-              width: 4,
-              height: 24,
-              borderRadius: 2,
-              background: `linear-gradient(180deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            }}
-          />
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+      <Box className="section section--compact">
+        <Box className="section-header">
+          <Box className="section-header__accent" />
+          <Typography variant="h5" className="section-header__title">
             Configured Alarms
           </Typography>
-          <Chip
-            label={alarmList.length}
-            size="small"
-            sx={{
-              ml: 1,
-              backgroundColor: alpha(theme.palette.primary.main, 0.15),
-              color: theme.palette.primary.main,
-              fontWeight: 600,
-            }}
-          />
+          <Chip label={alarmList.length} size="small" className="section-header__count" />
         </Box>
 
         {alarmList.length === 0 ? (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 6,
-              px: 2,
-              borderRadius: 3,
-              border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
-              backgroundColor: alpha(theme.palette.background.paper, 0.3),
-            }}
-          >
-            <NotificationsIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography color="text.secondary" variant="h6" sx={{ mb: 1 }}>
+          <Box className="empty-panel">
+            <NotificationsIcon className="empty-panel__icon" />
+            <Typography color="text.secondary" variant="h6" className="empty-panel__title">
               No alarms configured
             </Typography>
             <Typography color="text.secondary" variant="body2">
@@ -214,97 +161,61 @@ const Alarms: React.FC = () => {
             </Typography>
           </Box>
         ) : (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-              gap: 3,
-            }}
-          >
+          <Box className="card-grid--alarms">
             {alarmList.map((alarm: Alarm) => {
               const camera = cameraList.find((c: Camera) => c.id === alarm.camera_id)
               return (
                 <Card key={alarm.id}>
-                  <CardContent sx={{ p: 2.5 }}>
+                  <CardContent className="card-content">
                     {/* Header */}
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        mb: 2,
-                      }}
-                    >
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    <Box className="card-header">
+                      <Typography variant="h6" className="card-title">
                         {alarm.name}
                       </Typography>
                       <Chip
-                        icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
+                        icon={<CircleIcon className="chip-icon--tiny" />}
                         label={alarm.is_active ? 'Active' : 'Inactive'}
                         size="small"
                         color={alarm.is_active ? 'success' : 'error'}
-                        sx={{
-                          '& .MuiChip-icon': {
-                            color: 'inherit',
-                            animation: alarm.is_active ? 'pulse 2s ease-in-out infinite' : 'none',
-                          },
-                        }}
+                        className={`status-chip ${alarm.is_active ? 'status-chip--active' : ''}`}
                       />
                     </Box>
 
                     {/* Info Grid */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Box className="card-info">
+                      <Box className="card-info__row">
                         <Typography variant="body2" color="text.secondary">
                           Camera
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="card-info__value">
                           {camera?.name || 'Unknown'}
                         </Typography>
                       </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Box className="card-info__row">
                         <Typography variant="body2" color="text.secondary">
                           Detection Class
                         </Typography>
-                        <Chip
-                          label={alarm.class_name}
-                          size="small"
-                          sx={{
-                            height: 22,
-                            backgroundColor: alpha(theme.palette.secondary.main, 0.15),
-                            color: theme.palette.secondary.main,
-                          }}
-                        />
+                        <Chip label={alarm.class_name} size="small" className="card-chip" />
                       </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Box className="card-info__row">
                         <Typography variant="body2" color="text.secondary">
                           Confidence
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" className="card-info__value">
                           {(alarm.confidence_threshold * 100).toFixed(0)}%
                         </Typography>
                       </Box>
                     </Box>
 
                     {/* Actions */}
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpen(alarm)}
-                        sx={{
-                          color: 'primary.main',
-                          '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.12) },
-                        }}
-                      >
+                    <Box className="card-actions">
+                      <IconButton size="small" onClick={() => handleOpen(alarm)} className="icon-button--primary">
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => deleteMutation.mutate(alarm.id)}
-                        sx={{
-                          color: 'error.main',
-                          '&:hover': { backgroundColor: alpha(theme.palette.error.main, 0.12) },
-                        }}
+                        className="icon-button--error"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>

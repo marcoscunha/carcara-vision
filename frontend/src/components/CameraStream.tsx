@@ -12,7 +12,7 @@ interface StreamStats {
 interface CameraStreamProps {
   stream: Stream
   protocol?: 'webrtc' | 'mse' | 'hls' | 'mjpeg'
-  width?: number
+  size?: 'fluid' | 'fixed'
   autoPlay?: boolean
   muted?: boolean
   showStats?: boolean
@@ -32,7 +32,7 @@ interface CameraStreamProps {
 const CameraStream: React.FC<CameraStreamProps> = ({
   stream,
   protocol = 'webrtc',
-  width = 640,
+  size = 'fluid',
   autoPlay = true,
   muted = true,
   showStats = true,
@@ -346,50 +346,13 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   // Render MJPEG as image
   if (currentProtocol === 'mjpeg' && stream.urls?.mjpeg) {
     return (
-      <div className="camera-stream" style={{ width, maxWidth: '100%' }}>
-        <div
-          style={{
-            position: 'relative',
-            width: '100%',
-            paddingTop: '56.25%', // 16:9 aspect ratio
-            background: '#18191c',
-            borderRadius: 12,
-            overflow: 'hidden',
-          }}
-        >
-          {isConnecting && <div className="loading">Connecting...</div>}
-          {error && <div className="error">{error}</div>}
-          <img
-            src={stream.urls.mjpeg}
-            alt={`Stream ${stream.stream_name}`}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block',
-              background: '#000',
-            }}
-          />
+      <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
+        <div className="camera-stream__frame">
+          {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
+          {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
+          <img src={stream.urls.mjpeg} alt={`Stream ${stream.stream_name}`} className="camera-stream__image" />
           {showStats && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '10px',
-                left: '10px',
-                color: '#00ff00',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                padding: '8px 12px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                lineHeight: '1.6',
-                pointerEvents: 'none',
-                zIndex: 10,
-              }}
-            >
+            <div className="camera-stream__stats">
               <div>⏱ {stats.time}</div>
               <div>📐 {stats.resolution}</div>
               <div>🎬 {stats.fps} fps</div>
@@ -405,22 +368,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   // Stats overlay component
   const StatsOverlay = () =>
     showStats ? (
-      <div
-        style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          color: '#00ff00',
-          backgroundColor: 'rgba(0,0,0,0.6)',
-          padding: '8px 12px',
-          borderRadius: '4px',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          lineHeight: '1.6',
-          pointerEvents: 'none',
-          zIndex: 10,
-        }}
-      >
+      <div className="camera-stream__stats">
         <div>⏱ {stats.time}</div>
         <div>📐 {stats.resolution}</div>
         <div>🎬 {stats.fps} fps</div>
@@ -430,51 +378,10 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     ) : null
 
   return (
-    <div className="camera-stream" style={{ width, maxWidth: '100%' }}>
-      <div
-        style={{
-          position: 'relative',
-          width: '100%',
-          paddingTop: '56.25%', // 16:9 aspect ratio
-          background: '#18191c',
-          borderRadius: 12,
-          overflow: 'hidden',
-        }}
-      >
-        {isConnecting && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              color: 'white',
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              padding: '10px',
-              borderRadius: '5px',
-              zIndex: 20,
-            }}
-          >
-            Connecting...
-          </div>
-        )}
-        {error && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              color: 'red',
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              padding: '10px',
-              borderRadius: '5px',
-              zIndex: 20,
-            }}
-          >
-            {error}
-          </div>
-        )}
+    <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
+      <div className="camera-stream__frame">
+        {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
+        {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
         <video
           ref={videoRef}
           autoPlay={autoPlay}
@@ -516,35 +423,10 @@ const CameraStream: React.FC<CameraStreamProps> = ({
               }
             }
           }}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-            background: '#000',
-          }}
+          className="camera-stream__video"
         />
         <StatsOverlay />
-        {stream.status !== 'active' && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '10px',
-              left: '10px',
-              color: 'orange',
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              padding: '5px 10px',
-              borderRadius: '3px',
-              fontSize: '12px',
-              zIndex: 10,
-            }}
-          >
-            Stream: {stream.status}
-          </div>
-        )}
+        {stream.status !== 'active' && <div className="camera-stream__status">Stream: {stream.status}</div>}
       </div>
     </div>
   )
