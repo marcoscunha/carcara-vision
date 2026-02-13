@@ -1,15 +1,17 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ThemeProvider, createTheme, alpha } from '@mui/material'
 import CssBaseline from '@mui/material/CssBaseline'
 
+import { AuthProvider, ProtectedRoute } from './auth'
 import Layout from './components/Layout'
 import Cameras from './pages/Cameras'
 import Alarms from './pages/Alarms'
 import Streams from './pages/Streams'
 import Settings from './pages/Settings'
+import Login from './pages/Login'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -327,23 +329,38 @@ const theme = createTheme({
 
 const App: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Router>
-          <Layout>
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <Router>
             <Routes>
-              <Route path="/" element={<Cameras />} />
-              <Route path="/cameras" element={<Cameras />} />
-              <Route path="/streams" element={<Streams />} />
-              <Route path="/alarms" element={<Alarms />} />
-              <Route path="/settings" element={<Settings />} />
+              {/* Public route: Login page */}
+              <Route path="/login" element={<Login />} />
+
+              {/* Protected routes: require authentication */}
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Routes>
+                        <Route path="/" element={<Navigate to="/cameras" replace />} />
+                        <Route path="/cameras" element={<Cameras />} />
+                        <Route path="/streams" element={<Streams />} />
+                        <Route path="/alarms" element={<Alarms />} />
+                        <Route path="/settings" element={<Settings />} />
+                      </Routes>
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
-          </Layout>
-        </Router>
-      </ThemeProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+          </Router>
+        </ThemeProvider>
+        <ReactQueryDevtools initialIsOpen={false} />
+      </QueryClientProvider>
+    </AuthProvider>
   )
 }
 

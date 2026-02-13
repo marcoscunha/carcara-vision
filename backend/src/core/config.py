@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # Model path
     MODEL_PATH: str = os.getenv("MODEL_PATH", "yolov8n.pt")
 
+    # Keycloak / OAuth2 Configuration
+    KEYCLOAK_URL: str = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
+    KEYCLOAK_ISSUER_URL: str = os.getenv("KEYCLOAK_ISSUER_URL", "http://localhost:8080")
+    KEYCLOAK_REALM: str = os.getenv("KEYCLOAK_REALM", "carcara")
+    KEYCLOAK_CLIENT_ID: str = os.getenv("KEYCLOAK_CLIENT_ID", "carcara-backend")
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.SQLALCHEMY_DATABASE_URI = (

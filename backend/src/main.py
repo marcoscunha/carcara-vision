@@ -83,6 +83,15 @@ def read_root():
     }
 
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint - public, no authentication required."""
+    return {
+        "status": "healthy",
+        "version": settings.VERSION,
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup Logic
@@ -95,4 +104,4 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown Logic
     logger.info("Application shutting down...")
-    logger.info("Application shutting down...")
+    logger.info(f"Camera Manager: {settings.MODEL_PATH}", end="")

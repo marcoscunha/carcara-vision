@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from ...api.models.stream import StreamCreate, StreamResponse, StreamUpdate, StreamURLs
+from ...core.security import AuthenticatedUser
 from ...db.session import get_db
 from ...models.camera import Camera
 from ...models.stream import Stream
@@ -48,9 +49,14 @@ def _build_stream_response(stream: Stream, host: str | None = None) -> StreamRes
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=StreamResponse)
-async def create_stream(stream: StreamCreate, request: Request, db: Session = Depends(get_db)):
+async def create_stream(
+    stream: StreamCreate,
+    request: Request,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
     """
-    Create a new stream for a camera.
+    Create a new stream for a camera. Requires authentication.
 
     This endpoint:
     1. Creates a stream record in the database
@@ -137,12 +143,13 @@ async def create_stream(stream: StreamCreate, request: Request, db: Session = De
 @router.get("/", response_model=list[StreamResponse])
 async def list_streams(
     request: Request,
+    current_user: AuthenticatedUser,
     skip: int = 0,
     limit: int = 100,
     status_filter: str | None = Query(None, alias="status"),
     db: Session = Depends(get_db),
 ):
-    """List all streams with their RTSP URLs."""
+    """List all streams with their RTSP URLs. Requires authentication."""
     query = db.query(Stream)
 
     if status_filter:
@@ -155,8 +162,13 @@ async def list_streams(
 
 
 @router.get("/{stream_id}", response_model=StreamResponse)
-async def get_stream(stream_id: int, request: Request, db: Session = Depends(get_db)):
-    """Get a specific stream by ID with its RTSP URLs."""
+async def get_stream(
+    stream_id: int,
+    request: Request,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Get a specific stream by ID with its RTSP URLs. Requires authentication."""
     stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
@@ -166,8 +178,13 @@ async def get_stream(stream_id: int, request: Request, db: Session = Depends(get
 
 
 @router.get("/{stream_id}/urls")
-async def get_stream_urls(stream_id: int, request: Request, db: Session = Depends(get_db)):
-    """Get all available URLs for a stream."""
+async def get_stream_urls(
+    stream_id: int,
+    request: Request,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Get all available URLs for a stream. Requires authentication."""
     stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
@@ -180,8 +197,14 @@ async def get_stream_urls(stream_id: int, request: Request, db: Session = Depend
 
 
 @router.put("/{stream_id}", response_model=StreamResponse)
-async def update_stream(stream_id: int, stream_update: StreamUpdate, request: Request, db: Session = Depends(get_db)):
-    """Update a stream's status or metadata."""
+async def update_stream(
+    stream_id: int,
+    stream_update: StreamUpdate,
+    request: Request,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Update a stream's status or metadata. Requires authentication."""
     db_stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if db_stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
@@ -197,8 +220,13 @@ async def update_stream(stream_id: int, stream_update: StreamUpdate, request: Re
 
 
 @router.post("/{stream_id}/restart", response_model=StreamResponse)
-async def restart_stream(stream_id: int, request: Request, db: Session = Depends(get_db)):
-    """Restart a stream by re-registering it with GStreamer."""
+async def restart_stream(
+    stream_id: int,
+    request: Request,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Restart a stream by re-registering it with GStreamer. Requires authentication."""
     db_stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if db_stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
@@ -239,8 +267,12 @@ async def restart_stream(stream_id: int, request: Request, db: Session = Depends
 
 
 @router.delete("/{stream_id}")
-async def delete_stream(stream_id: int, db: Session = Depends(get_db)):
-    """Delete a stream and remove it from GStreamer."""
+async def delete_stream(
+    stream_id: int,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Delete a stream and remove it from GStreamer. Requires authentication."""
     db_stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if db_stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
@@ -274,10 +306,3 @@ async def check_gstreamer_health():
         }
     else:
         raise HTTPException(status_code=503, detail="GStreamer or MediaMTX service is not available")
-
-
-# Legacy endpoint for backward compatibility
-@router.get("/health/go2rtc")
-async def check_go2rtc_health_legacy():
-    """Legacy endpoint - redirects to GStreamer health check."""
-    return await check_gstreamer_health()

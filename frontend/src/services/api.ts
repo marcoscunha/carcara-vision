@@ -11,9 +11,9 @@ import {
   HardwareDetectionResult,
   AcceleratorInfo,
 } from '../types'
+import keycloak from '../auth/keycloak'
 
-const API_URL = 'http://localhost:8000/api/v1'
-export const GO2RTC_URL = 'http://localhost:1984'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
 const api = axios.create({
   baseURL: API_URL,
@@ -21,6 +21,49 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+/**
+ * Request interceptor to add authentication token.
+ * Automatically refreshes token if it's about to expire.
+ */
+api.interceptors.request.use(
+  async (config) => {
+    if (keycloak.authenticated && keycloak.token) {
+      // Refresh token if it expires within 30 seconds
+      try {
+        await keycloak.updateToken(30)
+      } catch (error) {
+        console.error('Token refresh failed:', error)
+        // Token refresh failed, redirect to login
+        keycloak.login()
+        return Promise.reject(new Error('Token refresh failed'))
+      }
+
+      // Add Authorization header
+      config.headers.Authorization = `Bearer ${keycloak.token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  },
+)
+
+/**
+ * Response interceptor to handle authentication errors.
+ * Redirects to login on 401 Unauthorized responses.
+ */
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Session expired or invalid token
+      console.log('Received 401, redirecting to login')
+      keycloak.login()
+    }
+    return Promise.reject(error)
+  },
+)
 
 export interface CameraInfo {
   device_id: number
@@ -65,7 +108,7 @@ export const streamApi = {
   update: (id: number, data: Partial<Stream>) => api.put<Stream>(`/streams/${id}`, data),
   delete: (id: number) => api.delete(`/streams/${id}`),
   restart: (id: number) => api.post<Stream>(`/streams/${id}/restart`),
-  checkHealth: () => api.get('/streams/health/go2rtc'),
+  checkHealth: () => api.get('/streams/health/gstreamer'),
 }
 
 // Detection endpoints

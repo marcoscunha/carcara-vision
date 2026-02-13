@@ -1,5 +1,5 @@
 # MediaMTX Configuration
-# Replacement for go2rtc as media server
+# RTSP/WebRTC/HLS media server
 
 ###############################################
 # Global settings

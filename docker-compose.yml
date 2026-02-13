@@ -10,7 +10,7 @@ services:
     depends_on:
       - backend
 
-  # GStreamer Pipeline Manager - replaces go2rtc
+  # GStreamer Pipeline Manager
   gstreamer:
     build:
       context: ./gstreamer
@@ -48,21 +48,6 @@ services:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml
     restart: unless-stopped
 
-  # Legacy go2rtc - kept for reference, can be removed after migration
-  # go2rtc:
-  #   build:
-  #     context: ./go2rtc
-  #     dockerfile: Dockerfile
-  #   container_name: go2rtc
-  #   ports:
-  #     - "1984:1984" # HTTP API and WebRTC
-  #     - "8554:8554" # RTSP
-  #   volumes:
-  #     - ./go2rtc/go2rtc.yaml:/config/go2rtc.yaml
-  #   devices:
-  #     - /dev/video0:/dev/video0
-  #     - /dev/video4:/dev/video4
-  #   restart: unless-stopped
   backend:
     build:
       context: ./backend
@@ -77,6 +62,11 @@ services:
       - USE_GPU=true
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      # Keycloak OAuth2 Configuration
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_ISSUER_URL=http://localhost:8080
+      - KEYCLOAK_REALM=carcara
+      - KEYCLOAK_CLIENT_ID=carcara-backend
     volumes:
       - ./backend/src:/app/src
       - ./backend/migrations:/app/migrations
@@ -84,6 +74,7 @@ services:
       - db
       - mediamtx
       - gstreamer
+      - keycloak
     devices:
       - "/dev/video0:/dev/video0"
       - "/dev/video1:/dev/video1"
@@ -109,5 +100,28 @@ services:
     ports:
       - "5432:5432"
 
+  # Keycloak - Identity and Access Management
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak
+    command: start-dev --import-realm
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_HTTP_PORT=8080
+      - KC_HEALTH_ENABLED=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - keycloak_data:/opt/keycloak/data
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  keycloak_data:

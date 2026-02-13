@@ -17,6 +17,7 @@ import {
   Alert,
   Tooltip,
   LinearProgress,
+  Avatar,
 } from '@mui/material'
 import {
   Save as SaveIcon,
@@ -30,8 +31,13 @@ import {
   Computer as ComputerIcon,
   Storage as StorageIcon,
   Speed as SpeedIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
+  AdminPanelSettings as AdminIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material'
 import { useModels, useUpdateModel, useHardwareDetection, useDetectHardware } from '../hooks/useQueries'
+import { useAuth } from '../auth'
 import type { Model, AcceleratorStatus, AcceleratorType } from '../types'
 
 // Helper functions for hardware display
@@ -124,6 +130,9 @@ const formatArchitecture = (arch: string): string => {
 const Settings: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5)
+
+  // Auth hook for user info
+  const { user, logout, isAdmin } = useAuth()
 
   // TanStack Query hooks for server state management
   const { data: models, isLoading } = useModels()
@@ -538,6 +547,132 @@ const Settings: React.FC = () => {
             </Box>
           </CardContent>
         </Card>
+
+        {/* User Profile Card */}
+        <Card>
+          <CardContent className="settings-card__content">
+            <Box className="settings-card__header">
+              <Box className="settings-card__icon settings-card__icon--primary">
+                <PersonIcon color="primary" />
+              </Box>
+              <Box>
+                <Typography variant="h6" className="settings-card__title">
+                  User Profile
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Your account information
+                </Typography>
+              </Box>
+            </Box>
+
+            <Divider className="settings-card__divider" />
+
+            {user ? (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <Avatar
+                    sx={{
+                      width: 56,
+                      height: 56,
+                      mr: 2,
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                    }}
+                  >
+                    {user.username.charAt(0).toUpperCase()}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6">
+                      {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.username}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {user.email || 'No email'}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Box className="settings-info">
+                  <Box className="settings-info__row">
+                    <Typography variant="body2" color="text.secondary">
+                      Username
+                    </Typography>
+                    <Typography variant="body2" className="settings-info__value">
+                      {user.username}
+                    </Typography>
+                  </Box>
+                  <Box className="settings-info__row">
+                    <Typography variant="body2" color="text.secondary">
+                      Roles
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      {user.roles.map((role) => (
+                        <Chip
+                          key={role}
+                          label={role}
+                          size="small"
+                          color={role === 'admin' ? 'primary' : 'default'}
+                          variant="outlined"
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box sx={{ mt: 3 }}>
+                  <Button variant="outlined" color="error" startIcon={<LogoutIcon />} onClick={logout} fullWidth>
+                    Sign Out
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <Typography color="text.secondary">Not logged in</Typography>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* User Management Card (Admin Only) */}
+        {isAdmin && (
+          <Card>
+            <CardContent className="settings-card__content">
+              <Box className="settings-card__header">
+                <Box className="settings-card__icon settings-card__icon--warning">
+                  <AdminIcon color="warning" />
+                </Box>
+                <Box>
+                  <Typography variant="h6" className="settings-card__title">
+                    User Management
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Manage users via Keycloak Admin Console
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Divider className="settings-card__divider" />
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Create, edit, and manage user accounts through the Keycloak administration console. You can add new
+                users, assign roles, and configure authentication settings.
+              </Typography>
+
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<OpenInNewIcon />}
+                href="http://localhost:8080/admin/carcara/console/#/carcara/users"
+                target="_blank"
+                rel="noopener noreferrer"
+                fullWidth
+              >
+                Open Keycloak Admin Console
+              </Button>
+
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+                Default credentials: admin / admin
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
       </Box>
     </Box>
   )

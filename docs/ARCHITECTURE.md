@@ -5,15 +5,14 @@ This document describes the system layout and how data flows through Carcara NVC
 ## High-level View
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph External["📡 External Sources"]
-        direction LR
+        direction TB
         Cameras["IP Cameras / RTSP"]
-        DB[(PostgreSQL)]
     end
 
     subgraph Services["🌐 Services Layer"]
-        direction LR
+        direction TB
         subgraph Streaming["Streaming"]
             direction LR
             GStreamer["GStreamer Pipeline Manager"]
@@ -25,24 +24,32 @@ flowchart TB
             FastAPI["FastAPI Backend"]
             REST["REST API Endpoints"]
         end
+
+        subgraph Data["Data"]
+            direction LR
+            DB[(PostgreSQL)]
+        end
     end
 
-    subgraph ML["🤖 ML Inference Layer"]
+    subgraph Processing[" "]
         direction LR
-        YOLO["YOLO Engine"]
-        VLM["VLM Engine"]
-        ONNX["ONNX Engine"]
-        TensorRT["TensorRT Engine"]
-    end
+        subgraph ML["🤖 ML Inference Layer"]
+            direction TB
+            YOLO["YOLO Engine"]
+            VLM["VLM Engine"]
+            ONNX["ONNX Engine"]
+            TensorRT["TensorRT Engine"]
+        end
 
-    subgraph HW["⚡ Hardware Accelerator Layer"]
-        direction LR
-        CPU["CPU"]
-        CUDA["CUDA"]
-        Jetson["Jetson"]
-        RPi["Raspberry Pi"]
-        Coral["Coral TPU"]
-        Hailo["Hailo-8"]
+        subgraph HW["⚡ Hardware Accelerator Layer"]
+            direction LR
+            CPU["CPU"]
+            CUDA["CUDA"]
+            Jetson["Jetson"]
+            RPi["Raspberry Pi"]
+            Coral["Coral TPU"]
+            Hailo["Hailo-8"]
+        end
     end
 
     Cameras --> GStreamer

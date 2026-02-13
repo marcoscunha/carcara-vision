@@ -21,7 +21,7 @@ interface CameraStreamProps {
 }
 
 /**
- * CameraStream component for displaying RTSP camera streams via go2rtc.
+ * CameraStream component for displaying RTSP camera streams via MediaMTX.
  *
  * Supports multiple protocols:
  * - webrtc: Low-latency WebRTC stream (default, best for real-time viewing)
@@ -225,7 +225,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
         }
       })
 
-      // Send offer to go2rtc and get answer - use URL from stream object
+      // Send offer to MediaMTX and get answer - use URL from stream object
       if (!stream.urls?.webrtc) {
         throw new Error('WebRTC URL not available')
       }

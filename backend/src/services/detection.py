@@ -97,6 +97,71 @@ class CameraService:
         return CameraService.resolve_device_path(device_path)
 
     # ------------------------------------------------------------------ #
+    #  V4L2 capability helpers                                            #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def is_capture_device(device_id: int | None = None, *, device_path: str | None = None) -> bool:
+        """
+        Check if a V4L2 device has VIDEO_CAPTURE capability.
+
+        Metadata devices (like those created by UVC webcams for metadata
+        streaming) do not have VIDEO_CAPTURE capability and should be
+        excluded from camera scanning.
+
+        Args:
+            device_id: The V4L2 device index (e.g., 0 for /dev/video0).
+            device_path: Persistent or direct device path (preferred).
+
+        Returns:
+            True if the device supports VIDEO_CAPTURE, False otherwise.
+        """
+        if device_path:
+            dev = os.path.realpath(device_path)
+        elif device_id is not None:
+            dev = f"/dev/video{device_id}"
+        else:
+            return False
+
+        if not shutil.which("v4l2-ctl"):
+            # If v4l2-ctl is not available, assume capture is possible
+            # and let downstream operations fail if the device is not valid
+            return True
+
+        try:
+            result = subprocess.run(
+                ["v4l2-ctl", "--device", dev, "-D"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                return False
+
+            # Look for "Video Capture" in Device Caps section
+            # Device Caps indicate what THIS specific device node supports
+            in_device_caps = False
+            for line in result.stdout.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("Device Caps"):
+                    in_device_caps = True
+                    continue
+                if in_device_caps:
+                    if stripped.startswith("0x") or not stripped:
+                        # Still in Device Caps header
+                        continue
+                    if not line.startswith("\t\t"):
+                        # Exited Device Caps section
+                        break
+                    if "Video Capture" in stripped:
+                        return True
+            return False
+        except Exception as e:
+            logger.warning("Error checking capture capability for %s: %s", dev, e)
+            return False
+
+    # ------------------------------------------------------------------ #
     #  Device metadata helpers (accept device_path OR device_id)          #
     # ------------------------------------------------------------------ #
 
@@ -306,6 +371,11 @@ class CameraService:
 
         for device_id in device_ids:
             try:
+                # First check if this is a VIDEO_CAPTURE device (not metadata-only)
+                if not CameraService.is_capture_device(device_id=device_id):
+                    logger.debug("Skipping /dev/video%d: not a capture device", device_id)
+                    continue
+
                 cap = cv2.VideoCapture(device_id)
                 if cap.isOpened():
                     # Get physical address
