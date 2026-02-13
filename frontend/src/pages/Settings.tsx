@@ -134,6 +134,10 @@ const Settings: React.FC = () => {
   // Auth hook for user info
   const { user, logout, isAdmin } = useAuth()
 
+  const keycloakBaseUrl = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080'
+  const keycloakRealm = import.meta.env.VITE_KEYCLOAK_REALM || 'carcara'
+  const keycloakAdminUrl = `${keycloakBaseUrl}/admin/master/console/#/realms/${keycloakRealm}/users`
+
   // TanStack Query hooks for server state management
   const { data: models, isLoading } = useModels()
   const updateMutation = useUpdateModel()
@@ -659,9 +663,7 @@ const Settings: React.FC = () => {
                 variant="outlined"
                 color="primary"
                 startIcon={<OpenInNewIcon />}
-                href="http://localhost:8080/admin/carcara/console/#/carcara/users"
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => window.open(keycloakAdminUrl, '_blank', 'noopener,noreferrer')}
                 fullWidth
               >
                 Open Keycloak Admin Console
