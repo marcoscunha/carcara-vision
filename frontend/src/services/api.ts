@@ -10,6 +10,8 @@ import {
   StreamURLs,
   HardwareDetectionResult,
   AcceleratorInfo,
+  DiscoveredCamera,
+  DiscoveryProtocol,
 } from '../types'
 import keycloak from '../auth/keycloak'
 
@@ -183,6 +185,16 @@ export const hardwareApi = {
   },
   getRecommended: async () => {
     const response = await api.get<{ recommended: string; available_accelerators: string[] }>('/hardware/recommended')
+    return response.data
+  },
+}
+
+// Discovery endpoints (IP camera scanning)
+export const discoveryApi = {
+  scanCameras: async (protocol: DiscoveryProtocol = 'mdns', timeout: number = 3.0) => {
+    const response = await api.get<DiscoveredCamera[]>('/discovery/cameras', {
+      params: { protocol, timeout },
+    })
     return response.data
   },
 }

@@ -3,12 +3,19 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api.endpoints import alarms, cameras, detections, hardware, models, streams
+from .api.endpoints import alarms
+from .api.endpoints import cameras
+from .api.endpoints import detections
+from .api.endpoints import discovery
+from .api.endpoints import hardware
+from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
+from .api.endpoints import streams
 from .core.config import settings
 from .core.logging import setup_logging
 from .db.init_db import init_db
@@ -71,6 +78,7 @@ app.include_router(models.router, prefix=f"{settings.API_V1_STR}/models", tags=[
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(roi_endpoints.router, prefix=f"{settings.API_V1_STR}/roi", tags=["roi"])
 app.include_router(hardware.router, prefix=f"{settings.API_V1_STR}/hardware", tags=["hardware"])
+app.include_router(discovery.router, prefix=f"{settings.API_V1_STR}/discovery", tags=["discovery"])
 
 
 @app.get("/")

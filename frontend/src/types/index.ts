@@ -168,3 +168,16 @@ export interface HardwareDetectionResult {
   detection_timestamp: string
   detection_duration_ms: number
 }
+
+// ============================================================================
+// IP Camera Discovery Types
+// ============================================================================
+
+export interface DiscoveredCamera {
+  ip: string
+  name: string | null
+  rtsp_url: string | null
+  protocol: 'mdns' | 'onvif'
+}
+
+export type DiscoveryProtocol = 'mdns' | 'onvif' | 'both'

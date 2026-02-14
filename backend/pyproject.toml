@@ -36,6 +36,11 @@ dependencies = [
     "psutil>=7.2.1",
     "aiofiles>=25.1.0",
     "httpx>=0.28.1",
+    # mDNS / Zeroconf for IP camera discovery
+    "zeroconf>=0.136.0",
+    # ONVIF camera discovery and control
+    "onvif-zeep-async>=3.1.12",
+    "wsdiscovery>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -94,27 +99,20 @@ docs = [
 line-length = 120
 target-version = "py313"
 src = ["src", "tests"]
-exclude = [
-    ".git",
-    ".venv",
-    "__pycache__",
-    "migrations",
-    "build",
-    "dist",
-]
+exclude = [".git", ".venv", "__pycache__", "migrations", "build", "dist"]
 
 [tool.ruff.lint]
 select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "N",    # pep8-naming
-    "UP",   # pyupgrade
-    "B",    # flake8-bugbear
-    "SIM",  # flake8-simplify
-    "TCH",  # flake8-type-checking
-    "RUF",  # ruff-specific rules
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "RUF", # ruff-specific rules
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -130,6 +128,7 @@ ignore = [
     "SIM102", # nested if statements (readability preference)
     "SIM105", # contextlib.suppress (readability preference)
     "SIM108", # ternary operator (readability preference)
+    "I001",   # import formatting (keep one import per line)
 ]
 fixable = ["ALL"]
 

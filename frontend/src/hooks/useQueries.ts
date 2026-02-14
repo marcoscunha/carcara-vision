@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { cameraApi, streamApi, detectionApi, alarmApi, modelApi, roiApi, hardwareApi } from '../services/api'
-import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest } from '../types'
+import {
+  cameraApi,
+  streamApi,
+  detectionApi,
+  alarmApi,
+  modelApi,
+  roiApi,
+  hardwareApi,
+  discoveryApi,
+} from '../services/api'
+import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest, DiscoveryProtocol } from '../types'
 
 // Query Keys - centralized for consistency
 export const queryKeys = {
@@ -40,6 +49,9 @@ export const queryKeys = {
     platform: ['hardware', 'platform'] as const,
     accelerators: ['hardware', 'accelerators'] as const,
     recommended: ['hardware', 'recommended'] as const,
+  },
+  discovery: {
+    cameras: (protocol?: DiscoveryProtocol) => ['discovery', 'cameras', protocol] as const,
   },
 }
 
@@ -401,5 +413,14 @@ export const useRecommendedAccelerator = () => {
     queryKey: queryKeys.hardware.recommended,
     queryFn: hardwareApi.getRecommended,
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+// ============ DISCOVERY HOOKS ============
+
+export const useDiscoverCameras = () => {
+  return useMutation({
+    mutationFn: ({ protocol, timeout }: { protocol?: DiscoveryProtocol; timeout?: number }) =>
+      discoveryApi.scanCameras(protocol, timeout),
   })
 }
