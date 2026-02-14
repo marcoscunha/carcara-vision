@@ -4,66 +4,47 @@ This document describes the system layout and how data flows through Carcara NVC
 
 ## High-level View
 
-```mermaid
-flowchart LR
-    subgraph External["📡 External Sources"]
-        direction TB
-        Cameras["IP Cameras / RTSP"]
-    end
+```
+High-Level Architecture
 
-    subgraph Services["🌐 Services Layer"]
-        direction TB
-        subgraph Streaming["Streaming"]
-            direction LR
-            GStreamer["GStreamer Pipeline Manager"]
-            MediaMTX["MediaMTX RTSP Server"]
-        end
-
-        subgraph API["API"]
-            direction LR
-            FastAPI["FastAPI Backend"]
-            REST["REST API Endpoints"]
-        end
-
-        subgraph Data["Data"]
-            direction LR
-            DB[(PostgreSQL)]
-        end
-    end
-
-    subgraph Processing[" "]
-        direction LR
-        subgraph ML["🤖 ML Inference Layer"]
-            direction TB
-            YOLO["YOLO Engine"]
-            VLM["VLM Engine"]
-            ONNX["ONNX Engine"]
-            TensorRT["TensorRT Engine"]
-        end
-
-        subgraph HW["⚡ Hardware Accelerator Layer"]
-            direction LR
-            CPU["CPU"]
-            CUDA["CUDA"]
-            Jetson["Jetson"]
-            RPi["Raspberry Pi"]
-            Coral["Coral TPU"]
-            Hailo["Hailo-8"]
-        end
-    end
-
-    Cameras --> GStreamer
-    GStreamer --> MediaMTX
-    MediaMTX --> FastAPI
-    FastAPI --> DB
-
-    FastAPI --> ML
-    REST --> ML
-
-    YOLO --> HW
-    VLM --> HW
-    ONNX --> HW
-    TensorRT --> HW
+External Sources
+  +---------------------+
+  | IP Cameras / RTSP   |
+  +----------+----------+
+             |
+             v
+Services Layer
+  Streaming
+    +------------------------+      +--------------------+
+    | GStreamer Pipeline     | ---> | MediaMTX RTSP      |
+    | Manager                |      | Server             |
+    +-----------+------------+      +---------+----------+
+                |                             |
+                v                             v
+  API                                           Data
+    +------------------------+                 +--------------------+
+    | FastAPI Backend        | --------------> | PostgreSQL         |
+    +-----------+------------+                 +--------------------+
+                |
+                v
+  REST API Endpoints
+    +------------------------+
+    | /cameras /streams ...  |
+    +-----------+------------+
+                |
+                v
+Processing
+  ML Inference Layer
+    +-------+   +------+   +------+   +-----------+
+    | YOLO  |   | VLM  |   | ONNX |   | TensorRT  |
+    +---+---+   +--+---+   +--+---+   +-----+-----+
+        \         |          |             /
+         \        |          |            /
+          v       v          v           v
+  Hardware Accelerator Layer
+    +-----+  +------+  +--------+  +-----+  +---------+  +--------+
+    | CPU |  | CUDA |  | Jetson |  | RPi |  | Coral   |  | Hailo-8|
+    +-----+  +------+  +--------+  +-----+  +---------+  +--------+
 ```
 
 ## 📝 Notes
