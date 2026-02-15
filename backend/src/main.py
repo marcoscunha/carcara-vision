@@ -13,6 +13,7 @@ from .api.endpoints import cameras
 from .api.endpoints import detections
 from .api.endpoints import discovery
 from .api.endpoints import hardware
+from .api.endpoints import inference_runtime
 from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
 from .api.endpoints import streams
@@ -79,6 +80,9 @@ app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=[
 app.include_router(roi_endpoints.router, prefix=f"{settings.API_V1_STR}/roi", tags=["roi"])
 app.include_router(hardware.router, prefix=f"{settings.API_V1_STR}/hardware", tags=["hardware"])
 app.include_router(discovery.router, prefix=f"{settings.API_V1_STR}/discovery", tags=["discovery"])
+app.include_router(
+    inference_runtime.router, prefix=f"{settings.API_V1_STR}/inference-runtime", tags=["inference-runtime"]
+)
 
 
 @app.get("/")

@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # Keycloak / OAuth2 Configuration
     KEYCLOAK_URL: str = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
-    KEYCLOAK_ISSUER_URL: str = os.getenv("KEYCLOAK_ISSUER_URL", "http://localhost:8080")
+    KEYCLOAK_ISSUER_URL: str = os.getenv("KEYCLOAK_ISSUER_URL", "http://localhost:8280")
     KEYCLOAK_REALM: str = os.getenv("KEYCLOAK_REALM", "carcara")
     KEYCLOAK_CLIENT_ID: str = os.getenv("KEYCLOAK_CLIENT_ID", "carcara-backend")
 

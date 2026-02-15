@@ -15,11 +15,19 @@ class StreamCreate(StreamBase):
     width: int | None = 640
     height: int | None = 360
     codec: str | None = "h264"
+    detection_enabled: bool | None = False
+    detection_model: str | None = "yolov8n.pt"
+    detection_confidence: float | None = 0.5
+    detection_classes: list[int] | None = None
 
 
 class StreamUpdate(BaseModel):
     status: str | None = None
     stream_metadata: dict[str, Any] | None = None
+    detection_enabled: bool | None = None
+    detection_model: str | None = None
+    detection_confidence: float | None = None
+    detection_classes: list[int] | None = None
 
 
 class StreamURLs(BaseModel):
@@ -39,6 +47,10 @@ class StreamResponse(StreamBase):
     current_frame: int
     stream_name: str | None = None
     urls: StreamURLs | None = None
+    detection_enabled: bool
+    detection_model: str
+    detection_confidence: float
+    detection_classes: list[int] | None = None
     created_at: datetime
     updated_at: datetime
 

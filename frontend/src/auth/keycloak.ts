@@ -7,7 +7,7 @@
 import Keycloak from 'keycloak-js'
 
 const keycloakConfig = {
-  url: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080',
+  url: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8280',
   realm: import.meta.env.VITE_KEYCLOAK_REALM || 'carcara',
   clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'carcara-frontend',
 }

@@ -12,6 +12,8 @@ import {
   AcceleratorInfo,
   DiscoveredCamera,
   DiscoveryProtocol,
+  InferenceRuntimeConfig,
+  RealtimeInferenceMetrics,
 } from '../types'
 import keycloak from '../auth/keycloak'
 
@@ -110,6 +112,8 @@ export const streamApi = {
   update: (id: number, data: Partial<Stream>) => api.put<Stream>(`/streams/${id}`, data),
   delete: (id: number) => api.delete(`/streams/${id}`),
   restart: (id: number) => api.post<Stream>(`/streams/${id}/restart`),
+  getRealtimeMetrics: () => api.get<RealtimeInferenceMetrics>('/streams/metrics/realtime'),
+  getStreamMetrics: (id: number) => api.get(`/streams/${id}/metrics`),
   checkHealth: () => api.get('/streams/health/gstreamer'),
 }
 
@@ -197,4 +201,14 @@ export const discoveryApi = {
     })
     return response.data
   },
+}
+
+// Inference runtime endpoints (system-wide model + accelerator)
+export const inferenceRuntimeApi = {
+  getConfig: async () => {
+    const response = await api.get<InferenceRuntimeConfig>('/inference-runtime/')
+    return response.data
+  },
+  updateConfig: (data: Partial<Pick<InferenceRuntimeConfig, 'model_name' | 'accelerator'>>) =>
+    api.put<InferenceRuntimeConfig>('/inference-runtime/', data),
 }

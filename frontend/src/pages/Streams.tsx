@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Button,
@@ -17,7 +17,10 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  FormControlLabel,
+  Switch,
 } from '@mui/material'
+import type { ChipProps } from '@mui/material'
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -26,7 +29,16 @@ import {
   PlayCircle as PlayCircleIcon,
   Circle as CircleIcon,
 } from '@mui/icons-material'
-import { useStreams, useCreateStream, useUpdateStream, useDeleteStream, useCameras } from '../hooks/useQueries'
+import {
+  useStreams,
+  useCreateStream,
+  useUpdateStream,
+  useDeleteStream,
+  useCameras,
+  useInferenceRuntimeConfig,
+  useUpdateInferenceRuntimeConfig,
+  useRealtimeInferenceMetrics,
+} from '../hooks/useQueries'
 import { Stream, Camera } from '../types'
 import CameraStream from '../components/CameraStream'
 
@@ -37,7 +49,12 @@ const Streams: React.FC = () => {
     camera_id: 0,
     status: 'stopped',
     current_frame: 0,
+    detection_enabled: true,
     stream_metadata: {},
+  })
+  const [runtimeForm, setRuntimeForm] = useState({
+    model_name: '',
+    accelerator: 'cpu',
   })
 
   // TanStack Query hooks for server state management
@@ -54,6 +71,19 @@ const Streams: React.FC = () => {
   const createMutation = useCreateStream()
   const updateMutation = useUpdateStream()
   const deleteMutation = useDeleteStream()
+  const updateRuntimeMutation = useUpdateInferenceRuntimeConfig()
+
+  const { data: runtimeConfig } = useInferenceRuntimeConfig()
+  const { data: realtimeMetrics } = useRealtimeInferenceMetrics()
+
+  useEffect(() => {
+    if (runtimeConfig) {
+      setRuntimeForm({
+        model_name: runtimeConfig.model_name,
+        accelerator: runtimeConfig.accelerator,
+      })
+    }
+  }, [runtimeConfig])
 
   const handleOpen = (stream?: Stream) => {
     if (stream) {
@@ -62,6 +92,10 @@ const Streams: React.FC = () => {
         camera_id: stream.camera_id,
         status: stream.status,
         current_frame: stream.current_frame,
+        detection_enabled:
+          typeof stream.detection_enabled === 'boolean'
+            ? stream.detection_enabled
+            : Boolean(stream.stream_metadata?.detection_enabled),
         stream_metadata: stream.stream_metadata,
       })
     } else {
@@ -70,6 +104,7 @@ const Streams: React.FC = () => {
         camera_id: 0,
         status: 'stopped',
         current_frame: 0,
+        detection_enabled: true,
         stream_metadata: {},
       })
     }
@@ -83,12 +118,18 @@ const Streams: React.FC = () => {
       camera_id: 0,
       status: 'stopped',
       current_frame: 0,
+      detection_enabled: true,
       stream_metadata: {},
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    await updateRuntimeMutation.mutateAsync({
+      model_name: runtimeForm.model_name,
+      accelerator: runtimeForm.accelerator,
+    })
+
     if (selectedStream) {
       updateMutation.mutate({ id: selectedStream.id, data: formData }, { onSuccess: () => handleClose() })
     } else {
@@ -115,7 +156,7 @@ const Streams: React.FC = () => {
   const streamList = Array.isArray(streams) ? streams : []
   const cameraList = Array.isArray(cameras) ? cameras : []
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): ChipProps['color'] => {
     switch (status) {
       case 'running':
         return 'success'
@@ -124,6 +165,20 @@ const Streams: React.FC = () => {
       default:
         return 'warning'
     }
+  }
+
+  const isDetectionEnabled = (stream: Stream) => {
+    if (typeof stream.detection_enabled === 'boolean') {
+      return stream.detection_enabled
+    }
+    return Boolean(stream.stream_metadata?.detection_enabled)
+  }
+
+  const handleToggleDetection = (stream: Stream, enabled: boolean) => {
+    updateMutation.mutate({
+      id: stream.id,
+      data: { detection_enabled: enabled },
+    })
   }
 
   return (
@@ -194,7 +249,7 @@ const Streams: React.FC = () => {
                         icon={<CircleIcon className="chip-icon--tiny" />}
                         label={stream.status}
                         size="small"
-                        color={getStatusColor(stream.status) as any}
+                        color={getStatusColor(stream.status)}
                         className={`status-chip chip-capitalize ${stream.status === 'running' ? 'status-chip--active' : ''}`}
                       />
                     </Box>
@@ -208,6 +263,29 @@ const Streams: React.FC = () => {
                     <Typography variant="body2" color="text.secondary" className="stream-frame-count">
                       Frame: {stream.current_frame.toLocaleString()}
                     </Typography>
+                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
+                      Model:{' '}
+                      {realtimeMetrics?.per_stream?.[stream.id]?.model_name || runtimeConfig?.model_name || 'n/a'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
+                      Accelerator:{' '}
+                      {realtimeMetrics?.per_stream?.[stream.id]?.accelerator || runtimeConfig?.accelerator || 'n/a'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
+                      Inference: {realtimeMetrics?.per_stream?.[stream.id]?.avg_inference_time_ms || 0} ms • FPS:{' '}
+                      {realtimeMetrics?.per_stream?.[stream.id]?.fps || 0}
+                    </Typography>
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={isDetectionEnabled(stream)}
+                          onChange={(e) => handleToggleDetection(stream, e.target.checked)}
+                          disabled={updateMutation.isPending}
+                        />
+                      }
+                      label="Detection"
+                    />
 
                     {/* Actions */}
                     <Box className="card-actions">
@@ -248,6 +326,50 @@ const Streams: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.detection_enabled}
+                  onChange={(e) => setFormData({ ...formData, detection_enabled: e.target.checked })}
+                />
+              }
+              label="Detection Enabled"
+            />
+
+            <FormControl fullWidth margin="dense">
+              <InputLabel>System Model</InputLabel>
+              <Select
+                value={runtimeForm.model_name}
+                label="System Model"
+                onChange={(e) => setRuntimeForm({ ...runtimeForm, model_name: e.target.value })}
+              >
+                {(runtimeConfig?.available_models || []).map((model) => (
+                  <MenuItem key={model} value={model}>
+                    {model}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth margin="dense">
+              <InputLabel>System Accelerator</InputLabel>
+              <Select
+                value={runtimeForm.accelerator}
+                label="System Accelerator"
+                onChange={(e) => setRuntimeForm({ ...runtimeForm, accelerator: e.target.value })}
+              >
+                {(runtimeConfig?.available_accelerators || ['cpu']).map((accelerator) => (
+                  <MenuItem key={accelerator} value={accelerator}>
+                    {accelerator}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Typography variant="caption" color="text.secondary">
+              Model and accelerator selection are applied globally to all streams.
+            </Typography>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleClose}>Cancel</Button>

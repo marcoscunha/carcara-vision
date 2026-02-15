@@ -1,15 +1,21 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter
+from fastapi import BackgroundTasks
+from fastapi import Depends
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ...api.models.detection import DetectionCreate, DetectionResponse
+from ...api.models.detection import DetectionCreate
+from ...api.models.detection import DetectionResponse
 from ...db.session import get_db
 from ...models.camera import Camera
 from ...models.detection import Detection
 from ...models.stream import Stream
-from ...services.detection import ObjectDetectionService
+from ...services.camera_service import CameraService
+from ...services.object_detection import ObjectDetectionService
 
 router = APIRouter()
 detection_service = ObjectDetectionService()
+camera_service = CameraService()
 
 
 @router.post("/", response_model=DetectionResponse)
@@ -27,7 +33,7 @@ async def create_detection(
         raise HTTPException(status_code=404, detail="Stream not found")
 
     # Process frame and perform detection
-    frame = detection_service.process_stream(
+    frame = camera_service.process_stream(
         camera.rtsp_url,
         camera_type=camera.camera_type,
         device_id=camera.device_id,
@@ -43,11 +49,11 @@ async def create_detection(
         camera_id=detection.camera_id,
         stream_id=detection.stream_id,
         frame_number=detection.frame_number,
-        model_name=detection_service.model_name,
+        detection_model_name=detection_service.model_name,
         confidence=detections[0]["confidence"] if detections else 0.0,
         class_name=detections[0]["class_name"] if detections else "",
         bbox=detections[0]["bbox"] if detections else [],
-        metadata={"detections": detections},
+        detection_metadata={"detections": detections},
     )
 
     db.add(db_detection)
@@ -91,10 +97,6 @@ def delete_detection(detection_id: int, db: Session = Depends(get_db)):
     db_detection = db.query(Detection).filter(Detection.id == detection_id).first()
     if db_detection is None:
         raise HTTPException(status_code=404, detail="Detection not found")
-
-    db.delete(db_detection)
-    db.commit()
-    return {"message": "Detection deleted successfully"}
 
     db.delete(db_detection)
     db.commit()

@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 
 class DetectionBase(BaseModel):
@@ -20,8 +22,7 @@ class DetectionResponse(DetectionBase):
     confidence: float
     class_name: str
     bbox: list[float]
-    metadata: dict[str, Any]
+    metadata: dict[str, Any] = Field(validation_alias="detection_metadata")
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

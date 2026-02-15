@@ -8,8 +8,19 @@ import {
   roiApi,
   hardwareApi,
   discoveryApi,
+  inferenceRuntimeApi,
 } from '../services/api'
-import { Camera, Stream, StreamCreate, Detection, Alarm, Model, RegionOfInterest, DiscoveryProtocol } from '../types'
+import {
+  Camera,
+  Stream,
+  StreamCreate,
+  Detection,
+  Alarm,
+  Model,
+  RegionOfInterest,
+  DiscoveryProtocol,
+  InferenceRuntimeConfig,
+} from '../types'
 
 // Query Keys - centralized for consistency
 export const queryKeys = {
@@ -52,6 +63,13 @@ export const queryKeys = {
   },
   discovery: {
     cameras: (protocol?: DiscoveryProtocol) => ['discovery', 'cameras', protocol] as const,
+  },
+  inferenceRuntime: {
+    config: ['inference-runtime', 'config'] as const,
+  },
+  inferenceMetrics: {
+    realtime: ['inference-metrics', 'realtime'] as const,
+    stream: (streamId: number) => ['inference-metrics', 'stream', streamId] as const,
   },
 }
 
@@ -201,6 +219,23 @@ export const useRestartStream = () => {
       // Invalidate all stream queries (including byStatus variants)
       queryClient.invalidateQueries({ queryKey: ['streams'] })
     },
+  })
+}
+
+export const useRealtimeInferenceMetrics = () => {
+  return useQuery({
+    queryKey: queryKeys.inferenceMetrics.realtime,
+    queryFn: () => streamApi.getRealtimeMetrics().then((res) => res.data),
+    refetchInterval: 2000,
+  })
+}
+
+export const useStreamInferenceMetrics = (streamId: number) => {
+  return useQuery({
+    queryKey: queryKeys.inferenceMetrics.stream(streamId),
+    queryFn: () => streamApi.getStreamMetrics(streamId).then((res) => res.data),
+    enabled: !!streamId,
+    refetchInterval: 2000,
   })
 }
 
@@ -422,5 +457,28 @@ export const useDiscoverCameras = () => {
   return useMutation({
     mutationFn: ({ protocol, timeout }: { protocol?: DiscoveryProtocol; timeout?: number }) =>
       discoveryApi.scanCameras(protocol, timeout),
+  })
+}
+
+// ============ INFERENCE RUNTIME HOOKS ============
+
+export const useInferenceRuntimeConfig = () => {
+  return useQuery({
+    queryKey: queryKeys.inferenceRuntime.config,
+    queryFn: inferenceRuntimeApi.getConfig,
+  })
+}
+
+export const useUpdateInferenceRuntimeConfig = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Partial<Pick<InferenceRuntimeConfig, 'model_name' | 'accelerator'>>) =>
+      inferenceRuntimeApi.updateConfig(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.inferenceRuntime.config })
+      queryClient.invalidateQueries({ queryKey: queryKeys.inferenceMetrics.realtime })
+      queryClient.invalidateQueries({ queryKey: ['streams'] })
+    },
   })
 }

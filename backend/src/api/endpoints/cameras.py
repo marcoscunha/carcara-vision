@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ...api.models.camera import CameraCreate, CameraResponse, CameraUpdate
+from ...api.models.camera import CameraCreate
+from ...api.models.camera import CameraResponse
+from ...api.models.camera import CameraUpdate
 from ...core.security import AuthenticatedUser
 from ...db.session import get_db
 from ...models.camera import Camera
-from ...services.detection import CameraService, ObjectDetectionService
+from ...services.camera_service import CameraService
+from ...services.object_detection import ObjectDetectionService
 
 router = APIRouter()
 detection_service = ObjectDetectionService()

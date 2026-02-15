@@ -30,6 +30,10 @@ export interface Stream {
   current_frame: number
   urls: StreamURLs | null
   stream_metadata: Record<string, any>
+  detection_enabled?: boolean
+  detection_model?: string
+  detection_confidence?: number
+  detection_classes?: number[] | null
   created_at: string
   updated_at: string
 }
@@ -39,7 +43,41 @@ export interface StreamCreate {
   width?: number
   height?: number
   codec?: string
+  detection_enabled?: boolean
+  detection_model?: string
+  detection_confidence?: number
+  detection_classes?: number[] | null
   stream_metadata?: Record<string, any>
+}
+
+export interface InferenceRuntimeConfig {
+  model_name: string
+  accelerator: string
+  available_models: string[]
+  available_accelerators: string[]
+}
+
+export interface StreamInferenceMetrics {
+  stream_id: number
+  samples: number
+  avg_inference_time_ms: number
+  min_inference_time_ms: number
+  max_inference_time_ms: number
+  fps: number
+  last_inference_time_ms: number
+  model_name: string | null
+  accelerator: string | null
+}
+
+export interface RealtimeInferenceMetrics {
+  global: {
+    samples: number
+    avg_inference_time_ms: number
+    min_inference_time_ms: number
+    max_inference_time_ms: number
+    fps: number
+  }
+  per_stream: Record<number, StreamInferenceMetrics>
 }
 
 export interface Detection {

@@ -134,7 +134,7 @@ const Settings: React.FC = () => {
   // Auth hook for user info
   const { user, logout, isAdmin } = useAuth()
 
-  const keycloakBaseUrl = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080'
+  const keycloakBaseUrl = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8280'
   const keycloakRealm = import.meta.env.VITE_KEYCLOAK_REALM || 'carcara'
   const keycloakAdminUrl = `${keycloakBaseUrl}/admin/master/console/#/realms/${keycloakRealm}/users`
 
