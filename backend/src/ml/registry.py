@@ -8,14 +8,23 @@ import hashlib
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .base import BaseInferenceEngine, HardwareAccelerator, ModelConfig, ModelType
+from .base import BaseInferenceEngine
+from .base import HardwareAccelerator
+from .base import ModelConfig
+from .base import ModelType
 
 logger = logging.getLogger(__name__)
+
+# Supported YOLO task types.
+TASK_TYPE_DETECT = "detect"
+TASK_TYPE_POSE = "pose"
+TASK_TYPE_SEGMENT = "segment"
 
 
 @dataclass
@@ -25,6 +34,7 @@ class ModelInfo:
     name: str
     model_type: ModelType
     path: str
+    task_type: str = TASK_TYPE_DETECT  # detect | pose | segment
     version: str = "1.0.0"
     description: str = ""
     supported_accelerators: list[HardwareAccelerator] = field(default_factory=list)
@@ -41,6 +51,7 @@ class ModelInfo:
             "name": self.name,
             "model_type": self.model_type.value,
             "path": self.path,
+            "task_type": self.task_type,
             "version": self.version,
             "description": self.description,
             "supported_accelerators": [a.value for a in self.supported_accelerators],
@@ -59,6 +70,7 @@ class ModelInfo:
             name=data["name"],
             model_type=ModelType(data["model_type"]),
             path=data["path"],
+            task_type=data.get("task_type", TASK_TYPE_DETECT),
             version=data.get("version", "1.0.0"),
             description=data.get("description", ""),
             supported_accelerators=[HardwareAccelerator(a) for a in data.get("supported_accelerators", [])],
@@ -72,6 +84,50 @@ class ModelInfo:
         )
 
 
+def _all_accelerators() -> list[HardwareAccelerator]:
+    return [
+        HardwareAccelerator.CPU,
+        HardwareAccelerator.CUDA,
+        HardwareAccelerator.TENSORRT,
+        HardwareAccelerator.JETSON,
+    ]
+
+
+def _gpu_accelerators() -> list[HardwareAccelerator]:
+    return [HardwareAccelerator.CPU, HardwareAccelerator.CUDA, HardwareAccelerator.TENSORRT]
+
+
+def _make_yolo_models(family: str, version_str: str, sizes: dict[str, str]) -> dict[str, "ModelInfo"]:
+    """
+    Generate ModelInfo entries for a YOLO family across detect/pose/segment tasks.
+
+    Args:
+        family: Model family prefix, e.g. "yolov8", "yolo11", "yolo12"
+        version_str: Semantic version string, e.g. "8.0.0"
+        sizes: Mapping of size key → human description, e.g. {"n": "Nano", "s": "Small"}
+    """
+    models: dict[str, ModelInfo] = {}
+    for size_key, size_label in sizes.items():
+        accelerators = _all_accelerators() if size_key in ("n", "s") else _gpu_accelerators()
+        for task_type, task_label, suffix in [
+            (TASK_TYPE_DETECT, "Object Detection", ""),
+            (TASK_TYPE_POSE, "Pose Estimation", "-pose"),
+            (TASK_TYPE_SEGMENT, "Segmentation", "-seg"),
+        ]:
+            name = f"{family}{size_key}{suffix}"
+            models[name] = ModelInfo(
+                name=name,
+                model_type=ModelType.YOLO,
+                path=f"{name}.pt",
+                task_type=task_type,
+                version=version_str,
+                description=f"{family.upper()}{size_key.upper()} {size_label} — {task_label}",
+                supported_accelerators=accelerators,
+                input_size=(640, 640),
+            )
+    return models
+
+
 class ModelRegistry:
     """
     Central registry for managing ML models.
@@ -79,79 +135,21 @@ class ModelRegistry:
     Features:
     - Model discovery and registration
     - Model caching and versioning
-    - Automatic model download from URLs
+    - Automatic model availability via ultralytics auto-download
     - Model optimization for different accelerators
+
+    Design:
+    - Single source of truth for available models; consumers must call
+      ``ensure_model_available(name)`` before running inference.
+    - Ultralytics handles disk caching transparently; ``is_downloaded``
+      reflects whether the file is cached locally.
     """
 
-    # Default models shipped with Carcara NVC
-    DEFAULT_MODELS = {
-        "yolov8n": ModelInfo(
-            name="yolov8n",
-            model_type=ModelType.YOLO,
-            path="yolov8n.pt",
-            version="8.0.0",
-            description="YOLOv8 Nano - Fastest, smallest model",
-            supported_accelerators=[
-                HardwareAccelerator.CPU,
-                HardwareAccelerator.CUDA,
-                HardwareAccelerator.TENSORRT,
-                HardwareAccelerator.JETSON,
-            ],
-            input_size=(640, 640),
-        ),
-        "yolov8s": ModelInfo(
-            name="yolov8s",
-            model_type=ModelType.YOLO,
-            path="yolov8s.pt",
-            version="8.0.0",
-            description="YOLOv8 Small - Good balance of speed and accuracy",
-            supported_accelerators=[
-                HardwareAccelerator.CPU,
-                HardwareAccelerator.CUDA,
-                HardwareAccelerator.TENSORRT,
-                HardwareAccelerator.JETSON,
-            ],
-            input_size=(640, 640),
-        ),
-        "yolov8m": ModelInfo(
-            name="yolov8m",
-            model_type=ModelType.YOLO,
-            path="yolov8m.pt",
-            version="8.0.0",
-            description="YOLOv8 Medium - Higher accuracy",
-            supported_accelerators=[
-                HardwareAccelerator.CPU,
-                HardwareAccelerator.CUDA,
-                HardwareAccelerator.TENSORRT,
-            ],
-            input_size=(640, 640),
-        ),
-        "yolov8l": ModelInfo(
-            name="yolov8l",
-            model_type=ModelType.YOLO,
-            path="yolov8l.pt",
-            version="8.0.0",
-            description="YOLOv8 Large - High accuracy, slower",
-            supported_accelerators=[
-                HardwareAccelerator.CPU,
-                HardwareAccelerator.CUDA,
-                HardwareAccelerator.TENSORRT,
-            ],
-            input_size=(640, 640),
-        ),
-        "yolov8x": ModelInfo(
-            name="yolov8x",
-            model_type=ModelType.YOLO,
-            path="yolov8x.pt",
-            version="8.0.0",
-            description="YOLOv8 Extra Large - Maximum accuracy",
-            supported_accelerators=[
-                HardwareAccelerator.CPU,
-                HardwareAccelerator.CUDA,
-                HardwareAccelerator.TENSORRT,
-            ],
-            input_size=(640, 640),
-        ),
+    # Default models: YOLOv8, YOLO11, YOLO12 x detect / pose / segment x n / m
+    DEFAULT_MODELS: dict[str, "ModelInfo"] = {
+        **_make_yolo_models("yolov8", "8.0.0", {"n": "Nano", "m": "Medium", "l": "Large"}),
+        **_make_yolo_models("yolo11", "11.0.0", {"n": "Nano", "m": "Medium", "l": "Large"}),
+        **_make_yolo_models("yolo12", "12.0.0", {"n": "Nano", "m": "Medium"}),
     }
 
     def __init__(self, models_dir: str = "./models", cache_dir: str = "./.model_cache"):
@@ -236,6 +234,7 @@ class ModelRegistry:
     def list_models(
         self,
         model_type: ModelType | None = None,
+        task_type: str | None = None,
         accelerator: HardwareAccelerator | None = None,
         downloaded_only: bool = False,
     ) -> list[ModelInfo]:
@@ -243,14 +242,18 @@ class ModelRegistry:
         List registered models with optional filtering.
 
         Args:
-            model_type: Filter by model type
+            model_type: Filter by model type (YOLO, ONNX, …)
+            task_type: Filter by task (detect, pose, segment)
             accelerator: Filter by supported accelerator
-            downloaded_only: Only show downloaded models
+            downloaded_only: Only show models whose file is available on disk
         """
         models = list(self._registry.values())
 
         if model_type:
             models = [m for m in models if m.model_type == model_type]
+
+        if task_type:
+            models = [m for m in models if m.task_type == task_type]
 
         if accelerator:
             models = [m for m in models if accelerator in m.supported_accelerators]
@@ -318,6 +321,45 @@ class ModelRegistry:
             for chunk in iter(lambda: f.read(8192), b""):
                 sha256.update(chunk)
         return sha256.hexdigest()
+
+    def ensure_model_available(self, name: str) -> bool:
+        """
+        Ensure a model is available for inference.
+
+        For Ultralytics YOLO models the library auto-downloads the weights on
+        the first call to ``YOLO(name)`` and stores them in its own cache.
+        This method triggers that process so the next inference call is instant.
+
+        Returns:
+            True if the model is ready; False if it could not be prepared.
+        """
+        model_info = self._registry.get(name)
+        if not model_info:
+            logger.error("Model '%s' not found in registry", name)
+            return False
+
+        # If already confirmed available, skip
+        if model_info.is_downloaded:
+            return True
+
+        if model_info.model_type == ModelType.YOLO:
+            try:
+                from ultralytics import YOLO
+
+                logger.info("Triggering ultralytics auto-download for '%s'", name)
+                # YOLO(name) downloads weights once; raises on failure
+                _model = YOLO(name)
+                del _model
+                model_info.is_downloaded = True
+                self._save_registry()
+                logger.info("Model '%s' is now available", name)
+                return True
+            except Exception as exc:
+                logger.error("Failed to ensure model '%s': %s", name, exc)
+                return False
+
+        # For non-YOLO models fall back to explicit URL download
+        return self.download_model(name)
 
     def create_engine(
         self, model_name: str, accelerator: HardwareAccelerator | None = None, **config_overrides
@@ -396,3 +438,12 @@ class ModelRegistry:
                     self.register_model(info)
 
         return discovered
+
+
+# ---------------------------------------------------------------------------
+# Module-level singleton — import and use model_registry throughout the app
+# ---------------------------------------------------------------------------
+model_registry = ModelRegistry()  # ---------------------------------------------------------------------------
+# Module-level singleton — import and use model_registry throughout the app
+# ---------------------------------------------------------------------------
+model_registry = ModelRegistry()

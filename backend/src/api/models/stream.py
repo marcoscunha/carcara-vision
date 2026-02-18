@@ -16,7 +16,8 @@ class StreamCreate(StreamBase):
     height: int | None = 360
     codec: str | None = "h264"
     detection_enabled: bool | None = False
-    detection_model: str | None = "yolov8n.pt"
+    detection_model: str | None = "yolov8n"
+    detection_task_type: str | None = "detect"
     detection_confidence: float | None = 0.5
     detection_classes: list[int] | None = None
 
@@ -26,6 +27,7 @@ class StreamUpdate(BaseModel):
     stream_metadata: dict[str, Any] | None = None
     detection_enabled: bool | None = None
     detection_model: str | None = None
+    detection_task_type: str | None = None
     detection_confidence: float | None = None
     detection_classes: list[int] | None = None
 
@@ -39,6 +41,10 @@ class StreamURLs(BaseModel):
     mse: str
     mjpeg: str
     ws: str
+    # Annotated stream (server-side AI overlay)
+    annotated_rtsp: str = ""
+    annotated_webrtc: str = ""
+    annotated_hls: str = ""
 
 
 class StreamResponse(StreamBase):
@@ -47,8 +53,10 @@ class StreamResponse(StreamBase):
     current_frame: int
     stream_name: str | None = None
     urls: StreamURLs | None = None
+    stream_metadata: dict[str, Any] | None = None
     detection_enabled: bool
     detection_model: str
+    detection_task_type: str
     detection_confidence: float
     detection_classes: list[int] | None = None
     created_at: datetime

@@ -20,6 +20,10 @@ export interface StreamURLs {
   mse: string
   mjpeg: string
   ws: string
+  // Annotated stream (server-side AI overlay)
+  annotated_rtsp?: string
+  annotated_webrtc?: string
+  annotated_hls?: string
 }
 
 export interface Stream {
@@ -32,6 +36,7 @@ export interface Stream {
   stream_metadata: Record<string, any>
   detection_enabled?: boolean
   detection_model?: string
+  detection_task_type?: string
   detection_confidence?: number
   detection_classes?: number[] | null
   created_at: string
@@ -45,6 +50,7 @@ export interface StreamCreate {
   codec?: string
   detection_enabled?: boolean
   detection_model?: string
+  detection_task_type?: string
   detection_confidence?: number
   detection_classes?: number[] | null
   stream_metadata?: Record<string, any>
@@ -53,8 +59,10 @@ export interface StreamCreate {
 export interface InferenceRuntimeConfig {
   model_name: string
   accelerator: string
+  task_type: string
   available_models: string[]
   available_accelerators: string[]
+  available_task_types: string[]
 }
 
 export interface StreamInferenceMetrics {
@@ -109,6 +117,8 @@ export interface Model {
   name: string
   description: string
   is_available: boolean
+  is_downloaded: boolean
+  task_type: string
   confidence_threshold: number
 }
 
@@ -219,3 +229,31 @@ export interface DiscoveredCamera {
 }
 
 export type DiscoveryProtocol = 'mdns' | 'onvif' | 'both'
+// ============================================================================
+// Real-time Detection Event Types (WebSocket)
+// ============================================================================
+
+export interface DetectionBox {
+  bbox: [number, number, number, number] // [x1, y1, x2, y2] in pixels
+  class_name: string
+  class_id: number
+  confidence: number
+  track_id?: number | null
+  /** COCO 17 keypoints [[x, y, conf], ...] — pose task only */
+  keypoints?: [number, number, number][]
+  /** Polygon vertices [[x, y], ...] — segment task only */
+  mask_polygon?: [number, number][]
+}
+
+export interface DetectionEvent {
+  stream_id: number
+  stream_name: string
+  timestamp: number
+  task_type: 'detect' | 'pose' | 'segment'
+  model_name: string
+  inference_time_ms: number
+  fps: number
+  detections: DetectionBox[]
+  /** Present only for heartbeat messages */
+  heartbeat?: boolean
+}

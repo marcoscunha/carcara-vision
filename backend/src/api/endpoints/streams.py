@@ -30,6 +30,7 @@ from ...services.camera_service import CameraService
 from ...services.gstreamer import gstreamer_service
 from ...services.inference_runtime import inference_metrics_service
 from ...services.inference_runtime import inference_runtime_service
+from ...services.inference_worker_manager import inference_worker_manager
 from ...services.object_detection import ObjectDetectionService
 
 logger = logging.getLogger(__name__)
@@ -42,15 +43,27 @@ def _get_detection_settings(stream: Stream) -> dict:
     runtime = inference_runtime_service.get()
     return {
         "enabled": bool(metadata.get("detection_enabled", False)),
-        "model": runtime.model_name,
+        # Per-stream model takes precedence over the global runtime
+        "model": metadata.get("detection_model") or runtime.model_name,
         "accelerator": runtime.accelerator,
+        "task_type": metadata.get("detection_task_type") or getattr(runtime, "task_type", "detect"),
         "confidence": float(metadata.get("detection_confidence", 0.5)),
         "classes": metadata.get("detection_classes"),
     }
 
 
 def _build_stream_detector(stream: Stream) -> ObjectDetectionService:
-    """Build detection service configured for a specific stream."""
+    """
+    Return the persistent detector from the active worker when available.
+
+    Falls back to creating a new ObjectDetectionService (slower) only if
+    no worker is currently running for this stream — e.g. on-demand single
+    shot detection with detection_enabled=False.
+    """
+    worker = inference_worker_manager.get_worker(stream.id)
+    if worker is not None and worker._detector is not None:
+        return worker._detector
+
     detection_settings = _get_detection_settings(stream)
     return ObjectDetectionService(
         model_name=detection_settings["model"],
@@ -194,6 +207,7 @@ def _build_stream_response(stream: Stream, host: str | None = None) -> StreamRes
         stream_metadata=stream.stream_metadata,
         detection_enabled=detection_settings["enabled"],
         detection_model=detection_settings["model"],
+        detection_task_type=detection_settings["task_type"],
         detection_confidence=detection_settings["confidence"],
         detection_classes=detection_settings["classes"],
         created_at=stream.created_at,
@@ -250,7 +264,8 @@ async def create_stream(
         "height": stream.height or 360,
         "codec": stream.codec or "h264",
         "detection_enabled": bool(stream.detection_enabled),
-        "detection_model": stream.detection_model or "yolov8n.pt",
+        "detection_model": stream.detection_model or "yolov8n",
+        "detection_task_type": stream.detection_task_type or "detect",
         "detection_confidence": stream.detection_confidence or 0.5,
         "detection_classes": stream.detection_classes,
         **(stream.stream_metadata or {}),
@@ -295,6 +310,9 @@ async def create_stream(
 
     db.commit()
     db.refresh(db_stream)
+
+    # Start inference worker if detection enabled
+    inference_worker_manager.start_worker(db_stream)
 
     # Get host from request for URL generation
     host = request.headers.get("host", "localhost").split(":")[0]
@@ -377,7 +395,14 @@ async def update_stream(
     if "stream_metadata" in update_data and update_data["stream_metadata"] is not None:
         metadata.update(update_data.pop("stream_metadata"))
 
-    detection_keys = ["detection_enabled", "detection_model", "detection_confidence", "detection_classes"]
+    detection_keys = [
+        "detection_enabled",
+        "detection_model",
+        "detection_task_type",
+        "detection_confidence",
+        "detection_classes",
+    ]
+    detection_changed = any(k in update_data for k in detection_keys)
     for key in detection_keys:
         if key in update_data:
             metadata[key] = update_data.pop(key)
@@ -389,6 +414,10 @@ async def update_stream(
 
     db.commit()
     db.refresh(db_stream)
+
+    # Restart inference worker when detection settings change
+    if detection_changed:
+        inference_worker_manager.restart_worker(db_stream)
 
     host = request.headers.get("host", "localhost").split(":")[0]
     return _build_stream_response(db_stream, host=host)
@@ -437,6 +466,9 @@ async def restart_stream(
     db.commit()
     db.refresh(db_stream)
 
+    # Re-launch inference worker if detection is enabled
+    inference_worker_manager.restart_worker(db_stream)
+
     host = request.headers.get("host", "localhost").split(":")[0]
     return _build_stream_response(db_stream, host=host)
 
@@ -456,6 +488,9 @@ async def delete_stream(
     if db_stream.stream_name:
         await gstreamer_service.remove_stream(db_stream.stream_name)
         logger.info(f"Stream '{db_stream.stream_name}' removed from GStreamer")
+
+    # Stop inference worker if running
+    inference_worker_manager.stop_worker(db_stream.id)
 
     db.delete(db_stream)
     db.commit()

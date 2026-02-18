@@ -331,10 +331,21 @@ export const useDeleteAlarm = () => {
 
 // ============ MODEL HOOKS ============
 
-export const useModels = () => {
+export const useModels = (task_type?: string) => {
   return useQuery({
-    queryKey: queryKeys.models.all,
-    queryFn: modelApi.getAll,
+    queryKey: task_type ? [...queryKeys.models.all, task_type] : queryKeys.models.all,
+    queryFn: () => modelApi.getAll(task_type),
+  })
+}
+
+export const useEnsureModel = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (name: string) => modelApi.ensure(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.models.all })
+    },
   })
 }
 
@@ -473,7 +484,7 @@ export const useUpdateInferenceRuntimeConfig = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: Partial<Pick<InferenceRuntimeConfig, 'model_name' | 'accelerator'>>) =>
+    mutationFn: (data: Partial<Pick<InferenceRuntimeConfig, 'model_name' | 'accelerator' | 'task_type'>>) =>
       inferenceRuntimeApi.updateConfig(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.inferenceRuntime.config })

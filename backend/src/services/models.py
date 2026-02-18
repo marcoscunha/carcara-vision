@@ -1,58 +1,53 @@
+"""
+Model service — thin delegation layer over ModelRegistry.
+
+All consumers should use these functions rather than addressing the registry
+directly, keeping the import surface small and testable.
+"""
+
 from typing import Any
 
-# This is a simple service that returns a list of available models
-# In a real application, this would be more dynamic and might come from a database
-# or from the actual model files on disk
-
-AVAILABLE_MODELS = [
-    {
-        "name": "yolov5s",
-        "description": "YOLOv5 Small - Fast and efficient object detection model",
-        "is_available": True,
-    },
-    {
-        "name": "yolov5m",
-        "description": "YOLOv5 Medium - Balanced speed and accuracy",
-        "is_available": True,
-    },
-    {
-        "name": "yolov5l",
-        "description": "YOLOv5 Large - Higher accuracy but slower",
-        "is_available": True,
-    },
-    {
-        "name": "yolov5x",
-        "description": "YOLOv5 Extra Large - Highest accuracy but slowest",
-        "is_available": False,
-    },
-]
+from ..ml.registry import ModelInfo
+from ..ml.registry import model_registry
 
 
-def get_available_models() -> list[dict[str, Any]]:
+def get_available_models(task_type: str | None = None) -> list[dict[str, Any]]:
     """
-    Get a list of available models.
+    Return all registered models, optionally filtered by task type.
 
-    Returns:
-        List[Dict[str, Any]]: A list of available models with their details.
+    Each entry is a plain dict so it can be serialised directly to JSON.
     """
-    return AVAILABLE_MODELS
+    models: list[ModelInfo] = model_registry.list_models(task_type=task_type)
+    return [_model_to_dict(m) for m in sorted(models, key=lambda m: m.name)]
 
 
 def get_model_by_name(name: str) -> dict[str, Any]:
     """
-    Get a model by its name.
-
-    Args:
-        name (str): The name of the model to get.
-
-    Returns:
-        Dict[str, Any]: The model details.
+    Return a single model by name.
 
     Raises:
-        ValueError: If the model is not found.
+        ValueError: if the model is not registered.
     """
-    for model in AVAILABLE_MODELS:
-        if model["name"] == name:
-            return model
+    info = model_registry.get_model(name)
+    if info is None:
+        raise ValueError(f"Model '{name}' not found")
+    return _model_to_dict(info)
 
-    raise ValueError(f"Model {name} not found")
+
+def ensure_model_available(name: str) -> bool:
+    """Trigger ultralytics auto-download for YOLO models if needed."""
+    return model_registry.ensure_model_available(name)
+
+
+def _model_to_dict(info: ModelInfo) -> dict[str, Any]:
+    """Serialise a ModelInfo to the public API shape."""
+    return {
+        "name": info.name,
+        "description": info.description,
+        "model_type": info.model_type.value,
+        "task_type": info.task_type,
+        "version": info.version,
+        "is_available": info.is_downloaded,
+        "supported_accelerators": [a.value for a in info.supported_accelerators],
+        "input_size": list(info.input_size),
+    }

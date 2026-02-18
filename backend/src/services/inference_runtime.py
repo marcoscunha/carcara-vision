@@ -8,6 +8,8 @@ from typing import Any
 from ..core.config import settings
 from ..ml.accelerators.detector import HardwareDetector
 from ..ml.base import HardwareAccelerator
+from ..ml.registry import TASK_TYPE_DETECT
+from ..ml.registry import model_registry
 
 
 def _resolve_default_accelerator() -> HardwareAccelerator:
@@ -21,6 +23,7 @@ def _resolve_default_accelerator() -> HardwareAccelerator:
 class InferenceRuntimeConfig:
     model_name: str
     accelerator: HardwareAccelerator
+    task_type: str = TASK_TYPE_DETECT  # detect | pose | segment
 
 
 class InferenceRuntimeService:
@@ -31,6 +34,7 @@ class InferenceRuntimeService:
         self._config = InferenceRuntimeConfig(
             model_name=settings.DEFAULT_MODEL,
             accelerator=_resolve_default_accelerator(),
+            task_type=TASK_TYPE_DETECT,
         )
 
     def get(self) -> InferenceRuntimeConfig:
@@ -38,20 +42,31 @@ class InferenceRuntimeService:
             return InferenceRuntimeConfig(
                 model_name=self._config.model_name,
                 accelerator=self._config.accelerator,
+                task_type=self._config.task_type,
             )
 
     def update(
-        self, model_name: str | None = None, accelerator: str | HardwareAccelerator | None = None
+        self,
+        model_name: str | None = None,
+        accelerator: str | HardwareAccelerator | None = None,
+        task_type: str | None = None,
     ) -> InferenceRuntimeConfig:
         with self._lock:
             if model_name:
                 self._config.model_name = model_name
             if accelerator is not None:
                 self._config.accelerator = self._coerce_accelerator(accelerator)
+            if task_type is not None:
+                self._config.task_type = task_type
             return InferenceRuntimeConfig(
                 model_name=self._config.model_name,
                 accelerator=self._config.accelerator,
+                task_type=self._config.task_type,
             )
+
+    def list_available_models(self) -> list[str]:
+        """Return all model names from the live registry."""
+        return sorted(m.name for m in model_registry.list_models())
 
     def list_available_accelerators(self) -> list[str]:
         available = HardwareDetector.detect_all()
@@ -146,4 +161,5 @@ class InferenceMetricsService:
 
 
 inference_runtime_service = InferenceRuntimeService()
+inference_metrics_service = InferenceMetricsService()
 inference_metrics_service = InferenceMetricsService()

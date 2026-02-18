@@ -17,9 +17,13 @@ from .api.endpoints import inference_runtime
 from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
 from .api.endpoints import streams
+from .api.endpoints import ws_detections
 from .core.config import settings
 from .core.logging import setup_logging
 from .db.init_db import init_db
+from .db.session import SessionLocal
+from .models.stream import Stream
+from .services.inference_worker_manager import inference_worker_manager
 
 # Setup logging
 setup_logging()
@@ -28,12 +32,36 @@ logger = logging.getLogger(__name__)
 # Initialize database
 init_db()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ──────────────────────────────────────────────────────────
+    logger.info("Application starting up...")
+    logger.info(f"Environment: {settings.PROJECT_NAME} v{settings.VERSION}")
+
+    # Restore inference workers for streams that were already active
+    db = SessionLocal()
+    try:
+        active_streams = db.query(Stream).filter(Stream.status == "active").all()
+        inference_worker_manager.restore_workers(active_streams)
+        logger.info("Restored %d active-stream workers", len(active_streams))
+    finally:
+        db.close()
+
+    yield
+
+    # ── Shutdown ─────────────────────────────────────────────────────────
+    logger.info("Application shutting down — stopping all inference workers...")
+    inference_worker_manager.stop_all()
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -71,7 +99,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Include routers
+# Include HTTP routers
 app.include_router(cameras.router, prefix=f"{settings.API_V1_STR}/cameras", tags=["cameras"])
 app.include_router(streams.router, prefix=f"{settings.API_V1_STR}/streams", tags=["streams"])
 app.include_router(detections.router, prefix=f"{settings.API_V1_STR}/detections", tags=["detections"])
@@ -83,6 +111,9 @@ app.include_router(discovery.router, prefix=f"{settings.API_V1_STR}/discovery", 
 app.include_router(
     inference_runtime.router, prefix=f"{settings.API_V1_STR}/inference-runtime", tags=["inference-runtime"]
 )
+
+# WebSocket routers (no auth middleware — token can be passed as query param if needed)
+app.include_router(ws_detections.router, prefix=f"{settings.API_V1_STR}/ws", tags=["websocket"])
 
 
 @app.get("/")
@@ -102,18 +133,3 @@ def health_check():
         "status": "healthy",
         "version": settings.VERSION,
     }
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup Logic
-    logger.info("Application starting up...")
-    logger.info(f"Environment: {settings.PROJECT_NAME} v{settings.VERSION}")
-    logger.info(f"Database URI: {settings.SQLALCHEMY_DATABASE_URI}")
-    logger.info(f"Using GPU: {settings.USE_GPU}")
-    logger.info(f"Camera Manager: {settings.MODEL_PATH}", end="")
-
-    yield
-    # Shutdown Logic
-    logger.info("Application shutting down...")
-    logger.info(f"Camera Manager: {settings.MODEL_PATH}", end="")

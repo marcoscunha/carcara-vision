@@ -142,12 +142,14 @@ export const alarmApi = {
 
 // Model endpoints
 export const modelApi = {
-  getAll: async () => {
-    const response = await api.get<ApiResponse<Model[]>>('/models')
+  getAll: async (task_type?: string) => {
+    const params = task_type ? { task_type } : {}
+    const response = await api.get<ApiResponse<Model[]>>('/models/', { params })
     return response.data
   },
   getById: (name: string) => api.get<Model>(`/models/${name}`),
   update: (name: string, data: Partial<Model>) => api.put<Model>(`/models/${name}`, data),
+  ensure: (name: string) => api.post<{ status: string; name: string }>(`/models/${name}/ensure`),
 }
 
 // Region of Interest endpoints
@@ -209,6 +211,6 @@ export const inferenceRuntimeApi = {
     const response = await api.get<InferenceRuntimeConfig>('/inference-runtime/')
     return response.data
   },
-  updateConfig: (data: Partial<Pick<InferenceRuntimeConfig, 'model_name' | 'accelerator'>>) =>
+  updateConfig: (data: Partial<Pick<InferenceRuntimeConfig, 'model_name' | 'accelerator' | 'task_type'>>) =>
     api.put<InferenceRuntimeConfig>('/inference-runtime/', data),
 }

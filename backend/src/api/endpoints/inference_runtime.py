@@ -3,7 +3,6 @@ from fastapi import HTTPException
 
 from ...api.models.inference_runtime import InferenceRuntimeConfigResponse
 from ...api.models.inference_runtime import InferenceRuntimeConfigUpdate
-from ...core.config import settings
 from ...services.inference_runtime import inference_runtime_service
 
 router = APIRouter()
@@ -15,7 +14,8 @@ def get_inference_runtime_config() -> InferenceRuntimeConfigResponse:
     return InferenceRuntimeConfigResponse(
         model_name=config.model_name,
         accelerator=config.accelerator.value,
-        available_models=settings.SUPPORTED_MODELS,
+        task_type=config.task_type,
+        available_models=inference_runtime_service.list_available_models(),
         available_accelerators=inference_runtime_service.list_available_accelerators(),
     )
 
@@ -26,6 +26,7 @@ def update_inference_runtime_config(payload: InferenceRuntimeConfigUpdate) -> In
         updated = inference_runtime_service.update(
             model_name=payload.model_name,
             accelerator=payload.accelerator,
+            task_type=payload.task_type,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid accelerator: {payload.accelerator}") from exc
@@ -33,6 +34,7 @@ def update_inference_runtime_config(payload: InferenceRuntimeConfigUpdate) -> In
     return InferenceRuntimeConfigResponse(
         model_name=updated.model_name,
         accelerator=updated.accelerator.value,
-        available_models=settings.SUPPORTED_MODELS,
+        task_type=updated.task_type,
+        available_models=inference_runtime_service.list_available_models(),
         available_accelerators=inference_runtime_service.list_available_accelerators(),
     )

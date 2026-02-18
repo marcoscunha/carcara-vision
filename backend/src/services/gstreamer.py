@@ -162,6 +162,9 @@ class GStreamerService:
         """
         Get all available URLs for a stream.
 
+        Includes both the raw stream URLs and the annotated (AI-overlaid)
+        stream URLs served from the ``annotated_{stream_name}`` MediaMTX path.
+
         Args:
             stream_name: Name of the stream in GStreamer/MediaMTX
             host: Optional host override for URL generation
@@ -170,14 +173,20 @@ class GStreamerService:
             Dictionary with URLs for different protocols
         """
         url_host = host or self.rtsp_host
+        annotated = f"annotated_{stream_name}"
 
         return {
+            # Raw stream
             "rtsp": f"rtsp://{url_host}:{self.rtsp_port}/{stream_name}",
             "webrtc": f"http://{url_host}:{self.webrtc_port}/{stream_name}/whep",
             "hls": f"http://{url_host}:{self.hls_port}/{stream_name}/index.m3u8",
             "mse": f"http://{url_host}:{self.webrtc_port}/{stream_name}",
-            "mjpeg": f"http://{url_host}:{self.hls_port}/{stream_name}/index.m3u8",  # Fallback to HLS
+            "mjpeg": f"http://{url_host}:{self.hls_port}/{stream_name}/index.m3u8",
             "ws": f"ws://{url_host}:{self.webrtc_port}/{stream_name}/ws",
+            # Annotated stream (server-side AI overlay pushed by InferenceWorker)
+            "annotated_rtsp": f"rtsp://{url_host}:{self.rtsp_port}/{annotated}",
+            "annotated_webrtc": f"http://{url_host}:{self.webrtc_port}/{annotated}/whep",
+            "annotated_hls": f"http://{url_host}:{self.hls_port}/{annotated}/index.m3u8",
         }
 
     def build_source_config(

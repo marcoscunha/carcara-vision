@@ -7,7 +7,10 @@ import time
 
 import numpy as np
 
-from ..base import BaseInferenceEngine, HardwareAccelerator, InferenceResult, ModelConfig
+from ..base import BaseInferenceEngine
+from ..base import HardwareAccelerator
+from ..base import InferenceResult
+from ..base import ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +308,5 @@ class YOLOEngine(BaseInferenceEngine):
                     )
 
         return result
-        return result
 
-        return result
         return result

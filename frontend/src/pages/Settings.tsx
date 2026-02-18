@@ -4,10 +4,6 @@ import {
   Card,
   CardContent,
   Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Slider,
   Button,
   Skeleton,
@@ -18,6 +14,8 @@ import {
   Tooltip,
   LinearProgress,
   Avatar,
+  Tab,
+  Tabs,
 } from '@mui/material'
 import {
   Save as SaveIcon,
@@ -35,8 +33,16 @@ import {
   Logout as LogoutIcon,
   AdminPanelSettings as AdminIcon,
   OpenInNew as OpenInNewIcon,
+  CloudDownload as CloudDownloadIcon,
 } from '@mui/icons-material'
-import { useModels, useUpdateModel, useHardwareDetection, useDetectHardware } from '../hooks/useQueries'
+import {
+  useModels,
+  useEnsureModel,
+  useHardwareDetection,
+  useDetectHardware,
+  useInferenceRuntimeConfig,
+  useUpdateInferenceRuntimeConfig,
+} from '../hooks/useQueries'
 import { useAuth } from '../auth'
 import type { Model, AcceleratorStatus, AcceleratorType } from '../types'
 
@@ -127,9 +133,16 @@ const formatArchitecture = (arch: string): string => {
   return names[arch] || arch
 }
 
+// Task type labels for display
+const TASK_LABELS: Record<string, string> = {
+  detect: 'Object Detection',
+  pose: 'Pose Estimation',
+  segment: 'Segmentation',
+}
+
 const Settings: React.FC = () => {
-  const [selectedModel, setSelectedModel] = useState<string>('')
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5)
+  const [taskTab, setTaskTab] = useState<string>('detect')
 
   // Auth hook for user info
   const { user, logout, isAdmin } = useAuth()
@@ -138,21 +151,36 @@ const Settings: React.FC = () => {
   const keycloakRealm = import.meta.env.VITE_KEYCLOAK_REALM || 'carcara'
   const keycloakAdminUrl = `${keycloakBaseUrl}/admin/master/console/#/realms/${keycloakRealm}/users`
 
-  // TanStack Query hooks for server state management
-  const { data: models, isLoading } = useModels()
-  const updateMutation = useUpdateModel()
+  // TanStack Query hooks
+  const { data: allModels, isLoading } = useModels()
+  const { data: runtimeConfig } = useInferenceRuntimeConfig()
+  const updateRuntimeMutation = useUpdateInferenceRuntimeConfig()
+  const ensureModelMutation = useEnsureModel()
 
   // Hardware detection hooks
   const { data: hardwareData, isLoading: isHardwareLoading } = useHardwareDetection(true)
   const detectHardwareMutation = useDetectHardware()
 
-  const handleSave = () => {
-    if (selectedModel) {
-      updateMutation.mutate({
-        name: selectedModel,
-        data: { confidence_threshold: confidenceThreshold },
-      })
-    }
+  // Models filtered by current tab (task type)
+  const modelList: Model[] = (allModels?.data ?? []).filter((m: Model) => m.task_type === taskTab)
+
+  // Global runtime model selection (default to runtimeConfig or first model)
+  const selectedModel = runtimeConfig?.model_name ?? ''
+  const selectedTaskType = runtimeConfig?.task_type ?? 'detect'
+
+  const handleSaveRuntime = () => {
+    updateRuntimeMutation.mutate({
+      task_type: taskTab,
+      confidence_threshold: confidenceThreshold,
+    } as any)
+  }
+
+  const handleSelectModel = (modelName: string) => {
+    updateRuntimeMutation.mutate({ model_name: modelName, task_type: taskTab })
+  }
+
+  const handleEnsureModel = (name: string) => {
+    ensureModelMutation.mutate(name)
   }
 
   const handleDetectHardware = () => {
@@ -167,8 +195,6 @@ const Settings: React.FC = () => {
       </Box>
     )
   }
-
-  const modelList = models?.data || []
 
   return (
     <Box className="fade-in">
@@ -195,28 +221,119 @@ const Settings: React.FC = () => {
               </Box>
               <Box>
                 <Typography variant="h6" className="settings-card__title">
-                  Object Detection
+                  AI Models
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Configure AI model and detection sensitivity
+                  Configure YOLO models for object detection, pose estimation and segmentation
                 </Typography>
               </Box>
             </Box>
 
             <Divider className="settings-card__divider" />
 
-            <FormControl fullWidth className="settings-card__control">
-              <InputLabel>Detection Model</InputLabel>
-              <Select value={selectedModel} label="Detection Model" onChange={(e) => setSelectedModel(e.target.value)}>
-                {modelList.map((model: Model) => (
-                  <MenuItem key={model.name} value={model.name}>
-                    {model.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {/* Task Type Tabs */}
+            <Tabs value={taskTab} onChange={(_, v) => setTaskTab(v)} sx={{ mb: 2 }}>
+              {Object.entries(TASK_LABELS).map(([key, label]) => (
+                <Tab key={key} value={key} label={label} />
+              ))}
+            </Tabs>
 
-            <Box className="settings-card__metric">
+            {/* Global active model indicator */}
+            {selectedModel && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Active global model: <strong>{selectedModel}</strong> (
+                {TASK_LABELS[selectedTaskType] ?? selectedTaskType})
+              </Alert>
+            )}
+
+            {/* Model list for active tab */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {modelList.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                  No models found for {TASK_LABELS[taskTab]}
+                </Typography>
+              ) : (
+                modelList.map((model: Model) => (
+                  <Box
+                    key={model.name}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      p: 1.5,
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: model.name === selectedModel ? 'primary.main' : 'divider',
+                      bgcolor: model.name === selectedModel ? 'primary.50' : 'transparent',
+                      gap: 1,
+                    }}
+                  >
+                    {/* Model info */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>
+                        {model.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {model.description || model.task_type}
+                      </Typography>
+                    </Box>
+
+                    {/* Status chip */}
+                    <Chip
+                      label={model.is_downloaded ? 'Downloaded' : 'Not downloaded'}
+                      size="small"
+                      color={model.is_downloaded ? 'success' : 'default'}
+                      variant="outlined"
+                    />
+
+                    {/* Actions */}
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {/* Download / ensure button */}
+                      {!model.is_downloaded && (
+                        <Tooltip title="Download model weights">
+                          <span>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={
+                                ensureModelMutation.isPending && ensureModelMutation.variables === model.name ? (
+                                  <CircularProgress size={14} />
+                                ) : (
+                                  <CloudDownloadIcon />
+                                )
+                              }
+                              onClick={() => handleEnsureModel(model.name)}
+                              disabled={ensureModelMutation.isPending}
+                            >
+                              Download
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      )}
+
+                      {/* Set as global model */}
+                      {model.is_downloaded && model.name !== selectedModel && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleSelectModel(model.name)}
+                          disabled={updateRuntimeMutation.isPending}
+                        >
+                          Set Active
+                        </Button>
+                      )}
+
+                      {model.name === selectedModel && (
+                        <Chip label="Active" size="small" color="primary" icon={<CheckCircleIcon />} />
+                      )}
+                    </Box>
+                  </Box>
+                ))
+              )}
+            </Box>
+
+            {/* Confidence threshold for global runtime */}
+            <Box className="settings-card__metric" sx={{ mt: 3 }}>
               <Box className="settings-card__metric-header">
                 <Typography className="settings-card__metric-label">Confidence Threshold</Typography>
                 <Typography className="settings-card__metric-value">
@@ -240,12 +357,13 @@ const Settings: React.FC = () => {
 
             <Button
               variant="contained"
-              onClick={handleSave}
-              disabled={!selectedModel || updateMutation.isPending}
+              onClick={handleSaveRuntime}
+              disabled={updateRuntimeMutation.isPending}
               startIcon={<SaveIcon />}
               className="settings-card__save"
+              sx={{ mt: 2 }}
             >
-              {updateMutation.isPending ? 'Saving...' : 'Save Settings'}
+              {updateRuntimeMutation.isPending ? 'Saving...' : 'Save Threshold'}
             </Button>
           </CardContent>
         </Card>
