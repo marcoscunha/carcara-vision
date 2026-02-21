@@ -4,14 +4,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        - VITE_API_URL=${VITE_API_URL:-/api/v1}
         - VITE_AUTH_ENABLED=${VITE_AUTH_ENABLED:-false}
-        - VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL:-http://localhost:8280}
+        - VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL:-}
         - VITE_KEYCLOAK_REALM=${VITE_KEYCLOAK_REALM:-carcara}
         - VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID:-carcara-frontend}
     ports:
       - "8221:80"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000/api/v1
     depends_on:
       - backend
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { DetectionBox, DetectionEvent, Stream } from '../types'
+import { buildDetectionsWsUrl } from '../utils/apiUrl'
 
 // ─── COCO 17-keypoint skeleton ────────────────────────────────────────────────
 const COCO_SKELETON: [number, number][] = [
@@ -123,9 +124,7 @@ function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: nu
 // ─── WebSocket URL helper ────────────────────────────────────────────────────
 
 function buildWsUrl(streamId: number): string {
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
-  const wsBase = apiBase.replace(/^http/, 'ws')
-  return `${wsBase}/ws/streams/${streamId}/detections`
+  return buildDetectionsWsUrl(streamId)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
