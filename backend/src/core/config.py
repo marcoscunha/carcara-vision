@@ -6,6 +6,13 @@ from pydantic_settings import BaseSettings
 load_dotenv()
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Carcara NVC Backend"
     VERSION: str = "0.1.0"
@@ -21,6 +28,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    AUTH_ENABLED: bool = _env_bool("AUTH_ENABLED", True)
 
     # Object Detection
     DEFAULT_MODEL: str = "yolov8n.pt"

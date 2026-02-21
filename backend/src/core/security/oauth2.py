@@ -63,6 +63,14 @@ class CurrentUser(BaseModel):
         return role in self.roles
 
 
+DEV_USER = CurrentUser(
+    id="dev-user",
+    username="dev",
+    email="dev@local",
+    roles=["admin"],
+)
+
+
 # OAuth2 scheme configuration
 # This is used by FastAPI to generate OpenAPI docs and extract the token
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
@@ -224,6 +232,9 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Cur
     Raises:
         HTTPException 401: If token is invalid or expired
     """
+    if not settings.AUTH_ENABLED:
+        return DEV_USER
+
     payload = decode_token(token)
 
     return CurrentUser(
@@ -246,6 +257,9 @@ async def get_admin_user(current_user: Annotated[CurrentUser, Depends(get_curren
     Raises:
         HTTPException 403: If user doesn't have admin role
     """
+    if not settings.AUTH_ENABLED:
+        return DEV_USER
+
     if not current_user.is_admin:
         logger.warning(f"User {current_user.username} attempted admin access without role")
         raise HTTPException(
@@ -277,6 +291,9 @@ async def get_optional_user(
 
     Useful for endpoints that behave differently based on auth status.
     """
+    if not settings.AUTH_ENABLED:
+        return DEV_USER
+
     if token is None:
         return None
 
