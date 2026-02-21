@@ -230,10 +230,15 @@ Set:
 - `VITE_KEYCLOAK_URL=http://<jetson-ip>:8280`
 - `KEYCLOAK_ISSUER_URL=http://<jetson-ip>:8280`
 - `KC_HOSTNAME=<jetson-ip>`
+- `VITE_AUTH_ENABLED=true` (only when you want Keycloak enabled)
 
 Keep:
 
 - `KEYCLOAK_INTERNAL_URL=http://keycloak:8080`
+
+If the browser still redirects to `http://localhost:8280`, rebuild frontend because `VITE_*` values are embedded at build time:
+
+- `docker compose up -d --build frontend`
 
 ### Token validation fails
 
