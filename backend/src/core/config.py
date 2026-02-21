@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     MODEL_PATH: str = os.getenv("MODEL_PATH", "yolov8n.pt")
 
     # Keycloak / OAuth2 Configuration
-    KEYCLOAK_URL: str = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
+    KEYCLOAK_INTERNAL_URL: str = os.getenv("KEYCLOAK_INTERNAL_URL", os.getenv("KEYCLOAK_URL", "http://keycloak:8080"))
     KEYCLOAK_ISSUER_URL: str = os.getenv("KEYCLOAK_ISSUER_URL", "http://localhost:8280")
     KEYCLOAK_REALM: str = os.getenv("KEYCLOAK_REALM", "carcara")
     KEYCLOAK_CLIENT_ID: str = os.getenv("KEYCLOAK_CLIENT_ID", "carcara-backend")

@@ -82,7 +82,7 @@ The frontend uses `keycloak-js` library for:
 ```typescript
 // Configuration (frontend/src/auth/keycloak.ts)
 const keycloakConfig = {
-  url: "http://localhost:8080",
+  url: import.meta.env.VITE_KEYCLOAK_URL || `${window.location.protocol}//${window.location.hostname}:8280`,
   realm: "carcara",
   clientId: "carcara-frontend",
 };
@@ -150,7 +150,7 @@ _Additional roles can be defined in Keycloak and enforced via custom dependencie
 
 | Service                | Username | Password   | URL                         |
 | ---------------------- | -------- | ---------- | --------------------------- |
-| Keycloak Admin Console | `admin`  | `admin`    | http://localhost:8080/admin |
+| Keycloak Admin Console | `admin`  | `admin`    | http://localhost:8280/admin |
 | Carcara Application    | `admin`  | `admin123` | http://localhost:8221       |
 
 > **Warning**: Change these credentials before deploying to production.
@@ -161,16 +161,17 @@ _Additional roles can be defined in Keycloak and enforced via custom dependencie
 
 #### Backend
 
-| Variable         | Default                | Description                                   |
-| ---------------- | ---------------------- | --------------------------------------------- |
-| `KEYCLOAK_URL`   | `http://keycloak:8080` | Keycloak server URL (internal Docker network) |
-| `KEYCLOAK_REALM` | `carcara`              | Realm name                                    |
+| Variable                | Default                 | Description                                                       |
+| ----------------------- | ----------------------- | ----------------------------------------------------------------- |
+| `KEYCLOAK_INTERNAL_URL` | `http://keycloak:8080`  | Keycloak URL reachable from backend container (Docker network)    |
+| `KEYCLOAK_ISSUER_URL`   | `http://localhost:8280` | Public Keycloak URL used in token issuer validation (browser URL) |
+| `KEYCLOAK_REALM`        | `carcara`               | Realm name                                                        |
 
 #### Frontend
 
 | Variable                  | Default                 | Description                              |
 | ------------------------- | ----------------------- | ---------------------------------------- |
-| `VITE_KEYCLOAK_URL`       | `http://localhost:8080` | Keycloak server URL (browser accessible) |
+| `VITE_KEYCLOAK_URL`       | `http://localhost:8280` | Keycloak server URL (browser accessible) |
 | `VITE_KEYCLOAK_REALM`     | `carcara`               | Realm name                               |
 | `VITE_KEYCLOAK_CLIENT_ID` | `carcara-frontend`      | OAuth2 client ID                         |
 
@@ -205,7 +206,21 @@ The backend allows requests from configured origins:
 
 1. Verify Keycloak is running: `docker compose ps keycloak`
 2. Check token in browser DevTools → Network → Request Headers
-3. Verify KEYCLOAK_URL is accessible from backend container
+3. Verify `KEYCLOAK_INTERNAL_URL` is accessible from backend container
+
+### Remote access (Jetson or LAN host)
+
+When opening the frontend from another machine, do **not** keep localhost defaults.
+
+Set:
+
+- `VITE_KEYCLOAK_URL=http://<jetson-ip>:8280`
+- `KEYCLOAK_ISSUER_URL=http://<jetson-ip>:8280`
+- `KC_HOSTNAME=<jetson-ip>`
+
+Keep:
+
+- `KEYCLOAK_INTERNAL_URL=http://keycloak:8080`
 
 ### Token validation fails
 

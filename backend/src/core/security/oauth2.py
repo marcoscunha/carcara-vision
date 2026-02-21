@@ -20,9 +20,12 @@ import logging
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
+from fastapi import HTTPException
+from fastapi import status
 from fastapi.security import OAuth2AuthorizationCodeBearer
-from jose import JWTError, jwt
+from jose import JWTError
+from jose import jwt
 from pydantic import BaseModel
 
 from ..config import settings
@@ -63,8 +66,8 @@ class CurrentUser(BaseModel):
 # OAuth2 scheme configuration
 # This is used by FastAPI to generate OpenAPI docs and extract the token
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl=f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/auth",
-    tokenUrl=f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token",
+    authorizationUrl=f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/auth",
+    tokenUrl=f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token",
     auto_error=True,
 )
 
@@ -78,7 +81,7 @@ class JWKSClient:
     @classmethod
     def get_jwks(cls) -> dict:
         """Fetch JWKS from Keycloak (cached)."""
-        jwks_url = f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/certs"
+        jwks_url = f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/certs"
 
         # Return cached if URL hasn't changed
         if cls._cache is not None and cls._cache_url == jwks_url:
@@ -263,8 +266,8 @@ async def get_optional_user(
         str | None,
         Depends(
             OAuth2AuthorizationCodeBearer(
-                authorizationUrl=f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/auth",
-                tokenUrl=f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token",
+                authorizationUrl=f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/auth",
+                tokenUrl=f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token",
                 auto_error=False,
             )
         ),
@@ -287,9 +290,6 @@ async def get_optional_user(
         )
     except HTTPException:
         return None
-
-
-OptionalUser = Annotated[CurrentUser | None, Depends(get_optional_user)]
 
 
 OptionalUser = Annotated[CurrentUser | None, Depends(get_optional_user)]
