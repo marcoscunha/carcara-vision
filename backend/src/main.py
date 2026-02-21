@@ -20,7 +20,6 @@ from .api.endpoints import streams
 from .api.endpoints import ws_detections
 from .core.config import settings
 from .core.logging import setup_logging
-from .db.init_db import init_db
 from .db.session import SessionLocal
 from .models.stream import Stream
 from .services.inference_worker_manager import inference_worker_manager
@@ -28,9 +27,6 @@ from .services.inference_worker_manager import inference_worker_manager
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# Initialize database
-init_db()
 
 
 @asynccontextmanager
