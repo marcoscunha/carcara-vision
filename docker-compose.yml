@@ -80,13 +80,6 @@ services:
       - "/dev/video2:/dev/video2"
       - "/dev/video3:/dev/video3"
     privileged: true
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu, compute, utility, video]
 
   db:
     image: postgres:15

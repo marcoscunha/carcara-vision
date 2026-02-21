@@ -45,11 +45,13 @@ Carcara NVC manages IP camera streams with real-time detection and intelligent v
 ## 🚀 Quick start
 
 ```bash
-
 cd carcara-nvc
 cp .env.example .env
-docker compose up -d
+./launch_docker_gpu.sh
 ```
+
+This script auto-detects Jetson vs PC+NVIDIA and applies the right Docker Compose override.
+If needed, you can still run plain Docker Compose manually.
 
 API docs: http://localhost:8000/docs
 
