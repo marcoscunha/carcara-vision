@@ -45,7 +45,10 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy only necessary application files
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/alembic.ini /app/alembic.ini
-COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /app/scripts /app/scripts
+
+# Ensure startup scripts are executable
+RUN chmod +x /app/scripts/start.sh /app/scripts/migrate.sh
 
 # Add virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
@@ -56,4 +59,4 @@ ENV VIRTUAL_ENV=/app/.venv
 EXPOSE 8000
 
 # Run migrations and start the application
-CMD sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --log-level debug --reload --reload-dir src"
+CMD ["/app/scripts/start.sh"]

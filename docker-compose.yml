@@ -69,7 +69,6 @@ services:
       - KEYCLOAK_CLIENT_ID=carcara-backend
     volumes:
       - ./backend/src:/app/src
-      - ./backend/migrations:/app/migrations
     depends_on:
       - db
       - mediamtx
