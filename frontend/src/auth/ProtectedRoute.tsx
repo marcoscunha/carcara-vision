@@ -8,6 +8,7 @@
 import React from 'react'
 import { Box, CircularProgress, Typography, alpha } from '@mui/material'
 import { useAuth } from './AuthProvider'
+import { AUTH_ENABLED } from './keycloak'
 
 interface ProtectedRouteProps {
   /** Child components to render when authenticated */
@@ -95,6 +96,10 @@ const UnauthorizedMessage: React.FC<{ requiredRole?: string }> = ({ requiredRole
  */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
   const { isAuthenticated, isLoading, hasRole, login } = useAuth()
+
+  if (!AUTH_ENABLED) {
+    return <>{children}</>
+  }
 
   // Show loading spinner while auth is initializing
   if (isLoading) {

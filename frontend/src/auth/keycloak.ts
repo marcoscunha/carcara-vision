@@ -6,6 +6,13 @@
  */
 import Keycloak from 'keycloak-js'
 
+const parseAuthEnabled = (value: string | undefined): boolean => {
+  if (!value) return true
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())
+}
+
+export const AUTH_ENABLED = parseAuthEnabled(import.meta.env.VITE_AUTH_ENABLED)
+
 const keycloakUrl = import.meta.env.VITE_KEYCLOAK_URL || `${window.location.protocol}//${window.location.hostname}:8280`
 
 const keycloakConfig = {

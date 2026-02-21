@@ -5,7 +5,7 @@
  * Uses Keycloak for OAuth2/OIDC authentication with PKCE flow.
  */
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
-import keycloak from './keycloak'
+import keycloak, { AUTH_ENABLED } from './keycloak'
 
 /**
  * User information extracted from the Keycloak token.
@@ -136,6 +136,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   useEffect(() => {
     const initKeycloak = async () => {
+      if (!AUTH_ENABLED) {
+        setIsAuthenticated(true)
+        setUser({
+          id: 'dev-user',
+          username: 'dev',
+          email: 'dev@local',
+          roles: ['admin'],
+        })
+        setToken(null)
+        setIsLoading(false)
+        return
+      }
+
       try {
         // Initialize Keycloak with check-sso to detect existing sessions
         const authenticated = await keycloak.init({
@@ -193,6 +206,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    * Initiate login flow.
    */
   const login = useCallback(() => {
+    if (!AUTH_ENABLED) return
     keycloak.login()
   }, [])
 
@@ -200,6 +214,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    * Logout and redirect to home.
    */
   const logout = useCallback(() => {
+    if (!AUTH_ENABLED) return
+
     keycloak.logout({
       redirectUri: window.location.origin,
     })

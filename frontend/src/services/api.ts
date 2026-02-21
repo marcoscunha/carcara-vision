@@ -16,6 +16,7 @@ import {
   RealtimeInferenceMetrics,
 } from '../types'
 import keycloak from '../auth/keycloak'
+import { AUTH_ENABLED } from '../auth/keycloak'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
@@ -32,6 +33,10 @@ const api = axios.create({
  */
 api.interceptors.request.use(
   async (config) => {
+    if (!AUTH_ENABLED) {
+      return config
+    }
+
     if (keycloak.authenticated && keycloak.token) {
       // Refresh token if it expires within 30 seconds
       try {
@@ -60,6 +65,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (!AUTH_ENABLED) {
+      return Promise.reject(error)
+    }
+
     if (error.response?.status === 401) {
       // Session expired or invalid token
       console.log('Received 401, redirecting to login')

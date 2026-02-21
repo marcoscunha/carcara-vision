@@ -163,6 +163,7 @@ _Additional roles can be defined in Keycloak and enforced via custom dependencie
 
 | Variable                | Default                 | Description                                                       |
 | ----------------------- | ----------------------- | ----------------------------------------------------------------- |
+| `AUTH_ENABLED`          | `false` (dev `.env`)    | Enables/disables backend JWT enforcement (`true` in production)   |
 | `KEYCLOAK_INTERNAL_URL` | `http://keycloak:8080`  | Keycloak URL reachable from backend container (Docker network)    |
 | `KEYCLOAK_ISSUER_URL`   | `http://localhost:8280` | Public Keycloak URL used in token issuer validation (browser URL) |
 | `KEYCLOAK_REALM`        | `carcara`               | Realm name                                                        |
@@ -171,9 +172,21 @@ _Additional roles can be defined in Keycloak and enforced via custom dependencie
 
 | Variable                  | Default                 | Description                              |
 | ------------------------- | ----------------------- | ---------------------------------------- |
+| `VITE_AUTH_ENABLED`       | `false` (dev `.env`)    | Enables/disables Keycloak flow in SPA    |
 | `VITE_KEYCLOAK_URL`       | `http://localhost:8280` | Keycloak server URL (browser accessible) |
 | `VITE_KEYCLOAK_REALM`     | `carcara`               | Realm name                               |
 | `VITE_KEYCLOAK_CLIENT_ID` | `carcara-frontend`      | OAuth2 client ID                         |
+
+### Development Auth Toggle
+
+For local development, you can disable authentication in both backend and frontend:
+
+- `AUTH_ENABLED=false`
+- `VITE_AUTH_ENABLED=false`
+
+To re-enable full Keycloak flow in development, set both to `true`.
+
+> `VITE_*` variables are build-time values. After changing `VITE_AUTH_ENABLED` you must rebuild/restart the frontend container.
 
 ## Security Considerations
 

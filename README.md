@@ -50,6 +50,9 @@ cp .env.example .env
 ./launch_docker_gpu.sh
 ```
 
+For local development without login, keep `AUTH_ENABLED=false` and `VITE_AUTH_ENABLED=false` in `.env`.
+Set both to `true` when you want full Keycloak authentication.
+
 This script auto-detects Jetson vs PC+NVIDIA and applies the right Docker Compose override.
 If needed, you can still run plain Docker Compose manually.
 
