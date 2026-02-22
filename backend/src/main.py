@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────
     logger.info("Application starting up...")
     logger.info(f"Environment: {settings.PROJECT_NAME} v{settings.VERSION}")
+    logger.info(f"AUTH_ENABLED: {settings.AUTH_ENABLED}")
 
     # Restore inference workers for streams that were already active
     db = SessionLocal()

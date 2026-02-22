@@ -232,10 +232,16 @@ async def get_current_user(token: Annotated[str | None, Depends(oauth2_scheme)])
     Raises:
         HTTPException 401: If token is invalid or expired
     """
+    logger.debug(
+        f"get_current_user called: AUTH_ENABLED={settings.AUTH_ENABLED}, token={'<present>' if token else 'None'}"
+    )
+
     if not settings.AUTH_ENABLED:
+        logger.debug("AUTH_ENABLED is False, returning DEV_USER")
         return DEV_USER
 
     if token is None:
+        logger.debug("AUTH_ENABLED is True but token is None, raising 401")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
