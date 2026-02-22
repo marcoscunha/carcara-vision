@@ -76,7 +76,7 @@ DEV_USER = CurrentUser(
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
     authorizationUrl=f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/auth",
     tokenUrl=f"{settings.KEYCLOAK_INTERNAL_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token",
-    auto_error=True,
+    auto_error=False,
 )
 
 
@@ -220,7 +220,7 @@ def decode_token(token: str) -> TokenPayload:
         )
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> CurrentUser:
+async def get_current_user(token: Annotated[str | None, Depends(oauth2_scheme)]) -> CurrentUser:
     """FastAPI dependency to get current authenticated user.
 
     Args:
@@ -234,6 +234,13 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Cur
     """
     if not settings.AUTH_ENABLED:
         return DEV_USER
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     payload = decode_token(token)
 
