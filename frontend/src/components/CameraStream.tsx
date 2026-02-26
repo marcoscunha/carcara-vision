@@ -150,6 +150,53 @@ interface CameraStreamProps {
   onConnected?: () => void
 }
 
+type StreamProtocol = 'webrtc' | 'mse' | 'hls' | 'mjpeg'
+
+const LOW_LATENCY_PROTOCOL_ORDER: StreamProtocol[] = ['webrtc', 'mse', 'mjpeg', 'hls']
+
+function hasProtocolUrl(protocol: StreamProtocol, stream: Stream, showAnnotatedStream: boolean): boolean {
+  if (!stream.urls) return false
+  if (protocol === 'webrtc') {
+    return Boolean(showAnnotatedStream ? stream.urls.annotated_webrtc : stream.urls.webrtc)
+  }
+  if (protocol === 'mse') return Boolean(stream.urls.mse)
+  if (protocol === 'mjpeg') return Boolean(stream.urls.mjpeg)
+  return Boolean(stream.urls.hls)
+}
+
+function pickPreferredProtocol(
+  stream: Stream,
+  showAnnotatedStream: boolean,
+  preferred?: StreamProtocol,
+): StreamProtocol {
+  if (preferred && hasProtocolUrl(preferred, stream, showAnnotatedStream)) {
+    return preferred
+  }
+  for (const candidate of LOW_LATENCY_PROTOCOL_ORDER) {
+    if (hasProtocolUrl(candidate, stream, showAnnotatedStream)) {
+      return candidate
+    }
+  }
+  return preferred ?? 'webrtc'
+}
+
+function nextProtocolAfterFailure(
+  failed: StreamProtocol,
+  stream: Stream,
+  showAnnotatedStream: boolean,
+): StreamProtocol | null {
+  const failedIndex = LOW_LATENCY_PROTOCOL_ORDER.indexOf(failed)
+  if (failedIndex < 0) return null
+
+  for (let i = failedIndex + 1; i < LOW_LATENCY_PROTOCOL_ORDER.length; i++) {
+    const candidate = LOW_LATENCY_PROTOCOL_ORDER[i]
+    if (hasProtocolUrl(candidate, stream, showAnnotatedStream)) {
+      return candidate
+    }
+  }
+  return null
+}
+
 /**
  * CameraStream — displays a MediaMTX video stream with an optional AI overlay.
  *
@@ -181,9 +228,16 @@ const CameraStream: React.FC<CameraStreamProps> = ({
 
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentProtocol, setCurrentProtocol] = useState(protocol)
+  const [currentProtocol, setCurrentProtocol] = useState<StreamProtocol>(() =>
+    pickPreferredProtocol(stream, showAnnotatedStream, protocol),
+  )
   const [detectionFps, setDetectionFps] = useState(0)
-  const [showCanvas, setShowCanvas] = useState(true)
+  const protocolLabel = currentProtocol.toUpperCase()
+
+  const detectionEnabled =
+    typeof stream.detection_enabled === 'boolean'
+      ? stream.detection_enabled
+      : Boolean(stream.stream_metadata?.detection_enabled)
 
   const [stats, setStats] = useState<StreamStats>({
     time: '',
@@ -196,6 +250,10 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   const lastFrameTimeRef = useRef(Date.now())
   const bytesReceivedRef = useRef(0)
   const lastBytesTimeRef = useRef(Date.now())
+
+  useEffect(() => {
+    setCurrentProtocol(pickPreferredProtocol(stream, showAnnotatedStream, protocol))
+  }, [stream, stream.id, stream.urls, showAnnotatedStream, protocol])
 
   // ── Clock ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -228,7 +286,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   const drawLoop = useCallback(() => {
     const canvas = canvasRef.current
     const video = videoRef.current
-    if (!canvas || !video || !showCanvas) {
+    if (!canvas || !video) {
       animFrameRef.current = requestAnimationFrame(drawLoop)
       return
     }
@@ -258,7 +316,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     }
 
     animFrameRef.current = requestAnimationFrame(drawLoop)
-  }, [showCanvas])
+  }, [])
 
   useEffect(() => {
     animFrameRef.current = requestAnimationFrame(drawLoop)
@@ -267,19 +325,26 @@ const CameraStream: React.FC<CameraStreamProps> = ({
 
   // ── WebSocket detection feed ────────────────────────────────────────────────
   useEffect(() => {
-    if (!stream.id || showAnnotatedStream) return // no overlay when watching annotated stream
+    if (!stream.id || showAnnotatedStream || !detectionEnabled || stream.worker_active === false) return // no overlay when disabled/annotated stream or no worker
 
     const wsUrl = buildWsUrl(stream.id)
     let ws: WebSocket
     let reconnectTimer: ReturnType<typeof setTimeout>
+    let stopReconnect = false
 
     const connect = () => {
+      if (stopReconnect) return
       ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
       ws.onmessage = (ev) => {
         try {
-          const event: DetectionEvent = JSON.parse(ev.data)
+          const event = JSON.parse(ev.data) as DetectionEvent & { error?: string }
+          if (event.error?.includes('No active inference worker')) {
+            stopReconnect = true
+            ws.close()
+            return
+          }
           if (event.heartbeat) return
           lastDetectionsRef.current = event.detections ?? []
           taskTypeRef.current = event.task_type ?? 'detect'
@@ -290,7 +355,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       }
 
       ws.onclose = () => {
-        // Reconnect after 3 s
+        if (stopReconnect) return
         reconnectTimer = setTimeout(connect, 3000)
       }
 
@@ -306,7 +371,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       wsRef.current = null
       lastDetectionsRef.current = []
     }
-  }, [stream.id, showAnnotatedStream])
+  }, [stream.id, stream.worker_active, showAnnotatedStream, detectionEnabled])
 
   // ── WebRTC stats ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -454,10 +519,11 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       onError?.(msg)
       setIsConnecting(false)
       if (currentProtocol === 'webrtc') {
-        setCurrentProtocol('mse')
+        const nextProtocol = nextProtocolAfterFailure('webrtc', stream, showAnnotatedStream)
+        if (nextProtocol) setCurrentProtocol(nextProtocol)
       }
     }
-  }, [stream.stream_name, stream.urls, showAnnotatedStream, onConnected, onError, currentProtocol])
+  }, [stream, showAnnotatedStream, onConnected, onError, currentProtocol])
 
   // ── MSE / HLS connection ────────────────────────────────────────────────────
   const connectMSE = useCallback(() => {
@@ -477,6 +543,8 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       hls.on('hlsError', (_: any, data: any) => {
         setError(`HLS error: ${data.details}`)
         onError?.(`HLS error: ${data.details}`)
+        const nextProtocol = nextProtocolAfterFailure('hls', stream, showAnnotatedStream)
+        if (nextProtocol) setCurrentProtocol(nextProtocol)
       })
     } else {
       videoRef.current.src = url
@@ -487,9 +555,11 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       videoRef.current.onerror = () => {
         setError('Failed to load stream')
         onError?.('Failed to load stream')
+        const nextProtocol = nextProtocolAfterFailure(currentProtocol, stream, showAnnotatedStream)
+        if (nextProtocol) setCurrentProtocol(nextProtocol)
       }
     }
-  }, [stream.urls, currentProtocol, onConnected, onError])
+  }, [stream, currentProtocol, onConnected, onError, showAnnotatedStream])
 
   // ── Protocol switch ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -514,6 +584,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     return (
       <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
         <div className="camera-stream__frame">
+          <div className="camera-stream__protocol-badge">{protocolLabel}</div>
           {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
           {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
           <img src={stream.urls.mjpeg} alt={`Stream ${stream.stream_name}`} className="camera-stream__image" />
@@ -534,6 +605,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   return (
     <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
       <div className="camera-stream__frame" style={{ position: 'relative' }}>
+        <div className="camera-stream__protocol-badge">{protocolLabel}</div>
         {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
         {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
 
@@ -592,28 +664,6 @@ const CameraStream: React.FC<CameraStreamProps> = ({
             {detectionFps > 0 && <div>🤖 AI {detectionFps.toFixed(1)} fps</div>}
             {showAnnotatedStream && <div>🖌 Server overlay</div>}
           </div>
-        )}
-
-        {/* Overlay toggle button */}
-        {!showAnnotatedStream && (
-          <button
-            onClick={() => setShowCanvas((v) => !v)}
-            style={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              background: showCanvas ? 'rgba(0,180,80,0.8)' : 'rgba(60,60,60,0.7)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 4,
-              padding: '2px 8px',
-              fontSize: 11,
-              cursor: 'pointer',
-            }}
-            title="Toggle AI overlay"
-          >
-            {showCanvas ? '👁 AI ON' : '👁 AI OFF'}
-          </button>
         )}
 
         {stream.status !== 'active' && <div className="camera-stream__status">Stream: {stream.status}</div>}

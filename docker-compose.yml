@@ -30,7 +30,11 @@ services:
       - ./gstreamer:/app
     devices:
       - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+      - /dev/video2:/dev/video2
+      - /dev/video3:/dev/video3
       - /dev/video4:/dev/video4
+      - /dev/v4l:/dev/v4l
       - /dev/dri:/dev/dri  # For hardware acceleration (VAAPI)
     depends_on:
       - mediamtx
@@ -58,6 +62,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    gpus: all
     environment:
       - POSTGRES_SERVER=db
       - POSTGRES_USER=postgres
@@ -85,6 +90,7 @@ services:
       - "/dev/video1:/dev/video1"
       - "/dev/video2:/dev/video2"
       - "/dev/video3:/dev/video3"
+      - "/dev/v4l:/dev/v4l"
     privileged: true
 
   db:

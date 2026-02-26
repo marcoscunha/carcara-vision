@@ -10,7 +10,8 @@ import os
 import subprocess
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend, DeviceInfo
+from .base import AcceleratorBackend
+from .base import DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class JetsonBackend(AcceleratorBackend):
                 return True
 
         except Exception as e:
-            logger.warning(f"Jetson detection failed: {e}")
+            logger.debug(f"Jetson detection fallback failed: {e}")
 
         self._is_jetson = False
         return False
@@ -113,7 +114,7 @@ class JetsonBackend(AcceleratorBackend):
                 self._jetson_type = "nano"  # Default fallback
 
         except Exception as e:
-            logger.warning(f"Could not determine Jetson type: {e}")
+            logger.debug(f"Could not determine Jetson type: {e}")
             self._jetson_type = "nano"  # Default to Nano
 
     def get_device_info(self) -> DeviceInfo:
@@ -342,5 +343,6 @@ class JetsonBackend(AcceleratorBackend):
 
         return None
 
+        return None
         return None
         return None

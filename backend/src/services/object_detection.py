@@ -129,6 +129,13 @@ class ObjectDetectionService:
         return "cpu"
 
     @property
+    def engine(self) -> YOLOEngine:
+        """Expose underlying inference engine for worker integrations."""
+        if self._engine is None:
+            raise RuntimeError("Inference engine not initialized")
+        return self._engine
+
+    @property
     def is_loaded(self) -> bool:
         """Check if engine is loaded."""
         return self._engine is not None and self._engine.is_loaded

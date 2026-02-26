@@ -75,7 +75,7 @@ async def ws_stream_detections(stream_id: int, websocket: WebSocket):
 
     if not subscribed:
         await websocket.send_text(json.dumps({"error": f"No active inference worker for stream {stream_id}"}))
-        await websocket.close(code=1011)
+        await websocket.close(code=1000)
         return
 
     logger.debug("WebSocket client subscribed to stream %d detections", stream_id)

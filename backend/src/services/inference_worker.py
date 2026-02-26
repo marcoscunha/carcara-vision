@@ -24,6 +24,7 @@ import asyncio
 import logging
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from typing import Any
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
+from ..core.config import settings
 from ..ml.annotator import FrameAnnotator
 from ..ml.registry import TASK_TYPE_DETECT
 from ..ml.registry import TASK_TYPE_POSE
@@ -128,6 +130,26 @@ class InferenceWorker:
         # Rolling inference stats
         self._frame_count: int = 0
         self._total_inference_ms: float = 0.0
+        self._event_intervals_ms: deque[float] = deque(maxlen=120)
+        self._last_event_time: float | None = None
+        self._read_failures_total: int = 0
+        self._max_consecutive_read_failures: int = 0
+        self._reconnect_count: int = 0
+        self._dropped_events_total: int = 0
+        self._missed_slots_total: int = 0
+
+        # Rolling per-stage timings (milliseconds)
+        self._stage_timings_ms: dict[str, deque[float]] = {
+            "read": deque(maxlen=240),
+            "inference_total": deque(maxlen=240),
+            "inference_engine": deque(maxlen=240),
+            "annotate": deque(maxlen=240),
+            "resize": deque(maxlen=240),
+            "publish_annotated": deque(maxlen=240),
+            "broadcast": deque(maxlen=240),
+            "alarm_callback": deque(maxlen=240),
+            "loop_total": deque(maxlen=240),
+        }
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -190,11 +212,28 @@ class InferenceWorker:
         if self._frame_count > 0:
             avg_ms = self._total_inference_ms / self._frame_count
             fps = 1000 / avg_ms if avg_ms > 0 else 0.0
+
+        intervals = list(self._event_intervals_ms)
+        avg_event_interval_ms = sum(intervals) / len(intervals) if intervals else 0.0
+        max_event_interval_ms = max(intervals) if intervals else 0.0
+        min_event_interval_ms = min(intervals) if intervals else 0.0
+
+        stage_timings = self._stage_timing_snapshot()
+
         return {
             "stream_id": self._config.stream_id,
             "frames_processed": self._frame_count,
             "avg_inference_ms": round(avg_ms, 2),
             "fps": round(fps, 2),
+            "avg_event_interval_ms": round(avg_event_interval_ms, 2),
+            "min_event_interval_ms": round(min_event_interval_ms, 2),
+            "max_event_interval_ms": round(max_event_interval_ms, 2),
+            "read_failures_total": self._read_failures_total,
+            "max_consecutive_read_failures": self._max_consecutive_read_failures,
+            "reconnect_count": self._reconnect_count,
+            "missed_slots_total": self._missed_slots_total,
+            "dropped_events_total": self._dropped_events_total,
+            "stage_timings_ms": stage_timings,
             "model": self._config.model_name,
             "task_type": self._config.task_type,
             "running": self.is_running(),
@@ -225,6 +264,7 @@ class InferenceWorker:
         while not self._stop_event.is_set():
             cap = self._open_capture()
             if cap is None:
+                self._reconnect_count += 1
                 if not self._stop_event.wait(timeout=3.0):
                     continue
                 break
@@ -237,6 +277,7 @@ class InferenceWorker:
             if self._stop_event.is_set():
                 break
             # Brief pause before reconnect
+            self._reconnect_count += 1
             self._stop_event.wait(timeout=2.0)
 
     def _open_capture(self) -> cv2.VideoCapture | None:
@@ -250,36 +291,95 @@ class InferenceWorker:
 
     def _capture_loop(self, cap: cv2.VideoCapture, min_interval: float) -> None:
         """Frame read → infer → annotate → broadcast loop."""
-        last_inference_time = 0.0
+        consecutive_read_failures = 0
+        max_consecutive_read_failures = 25
+        next_inference_at = time.monotonic()
 
         while not self._stop_event.is_set():
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                logger.debug("Frame read failed for stream %d", self._config.stream_id)
-                break
-
+            loop_started = time.perf_counter()
             now = time.monotonic()
-            if now - last_inference_time < min_interval:
-                continue  # throttle
-            last_inference_time = now
+            if now < next_inference_at:
+                self._stop_event.wait(timeout=min(next_inference_at - now, 0.02))
+                continue
+
+            read_started = time.perf_counter()
+            ret, frame = cap.read()
+            read_ms = (time.perf_counter() - read_started) * 1000.0
+            if not ret or frame is None:
+                consecutive_read_failures += 1
+                self._read_failures_total += 1
+                if consecutive_read_failures > self._max_consecutive_read_failures:
+                    self._max_consecutive_read_failures = consecutive_read_failures
+                if consecutive_read_failures >= max_consecutive_read_failures:
+                    logger.debug(
+                        "Frame read failed repeatedly for stream %d (%d failures)",
+                        self._config.stream_id,
+                        consecutive_read_failures,
+                    )
+                    break
+                self._stop_event.wait(timeout=0.04)
+                continue
+
+            consecutive_read_failures = 0
+            self._record_stage_timing("read", read_ms)
 
             try:
+                inference_started = time.perf_counter()
                 detections, inference_ms = self._run_inference(frame)
+                inference_total_ms = (time.perf_counter() - inference_started) * 1000.0
             except Exception as exc:
                 logger.error("Inference error for stream %d: %s", self._config.stream_id, exc)
+                next_inference_at = time.monotonic() + min_interval
                 continue
+
+            self._record_stage_timing("inference_total", inference_total_ms)
+            self._record_stage_timing("inference_engine", inference_ms)
 
             # Accumulate stats
             self._frame_count += 1
             self._total_inference_ms += inference_ms
 
-            # Annotate frame copy
-            annotated = frame.copy()
-            self._annotate(annotated, detections)
+            # Annotate/resize only when annotated output is enabled.
+            annotated = None
+            annotate_ms = 0.0
+            resize_ms = 0.0
+            if self._annotated_writer:
+                annotate_started = time.perf_counter()
+                annotated = frame.copy()
+                self._annotate(annotated, detections)
+                annotate_ms = (time.perf_counter() - annotate_started) * 1000.0
+
+                if annotated.shape[1] != self._config.width or annotated.shape[0] != self._config.height:
+                    resize_started = time.perf_counter()
+                    annotated = cv2.resize(
+                        annotated,
+                        (self._config.width, self._config.height),
+                        interpolation=cv2.INTER_LINEAR,
+                    )
+                    resize_ms = (time.perf_counter() - resize_started) * 1000.0
+
+            self._record_stage_timing("annotate", annotate_ms)
+            self._record_stage_timing("resize", resize_ms)
 
             # Push annotated frame to MediaMTX
-            if self._annotated_writer:
-                self._annotated_writer.push_frame(annotated)
+            publish_ms = 0.0
+            if self._annotated_writer and annotated is not None:
+                try:
+                    publish_started = time.perf_counter()
+                    self._annotated_writer.push_frame(annotated)
+                    publish_ms = (time.perf_counter() - publish_started) * 1000.0
+                except Exception as exc:
+                    logger.warning(
+                        "Annotated stream publish disabled for stream %d: %s",
+                        self._config.stream_id,
+                        exc,
+                    )
+                    try:
+                        self._annotated_writer.stop()
+                    except Exception:
+                        pass
+                    self._annotated_writer = None
+            self._record_stage_timing("publish_annotated", publish_ms)
 
             # Build event and broadcast
             event = DetectionEvent(
@@ -292,13 +392,38 @@ class InferenceWorker:
                 inference_time_ms=inference_ms,
                 fps=1000 / inference_ms if inference_ms > 0 else 0.0,
             )
-            self._broadcast(event)
 
+            event_tick = time.monotonic()
+            if self._last_event_time is not None:
+                self._event_intervals_ms.append((event_tick - self._last_event_time) * 1000.0)
+            self._last_event_time = event_tick
+
+            broadcast_started = time.perf_counter()
+            dropped_events = self._broadcast(event)
+            broadcast_ms = (time.perf_counter() - broadcast_started) * 1000.0
+            self._record_stage_timing("broadcast", broadcast_ms)
+            self._dropped_events_total += dropped_events
+
+            alarm_ms = 0.0
             if self._alarm_callback:
                 try:
+                    alarm_started = time.perf_counter()
                     self._alarm_callback(event)
+                    alarm_ms = (time.perf_counter() - alarm_started) * 1000.0
                 except Exception as exc:
                     logger.error("Alarm callback error for stream %d: %s", self._config.stream_id, exc)
+            self._record_stage_timing("alarm_callback", alarm_ms)
+
+            now = time.monotonic()
+            next_inference_at += min_interval
+
+            if now > next_inference_at:
+                missed_slots = int((now - next_inference_at) / min_interval) + 1
+                self._missed_slots_total += missed_slots
+                next_inference_at += missed_slots * min_interval
+
+            loop_total_ms = (time.perf_counter() - loop_started) * 1000.0
+            self._record_stage_timing("loop_total", loop_total_ms)
 
     # ------------------------------------------------------------------ #
     # Inference strategy
@@ -379,19 +504,44 @@ class InferenceWorker:
     # Observer broadcast
     # ------------------------------------------------------------------ #
 
-    def _broadcast(self, event: DetectionEvent) -> None:
+    def _broadcast(self, event: DetectionEvent) -> int:
         """Put the event into every registered subscriber queue."""
-        payload = event.to_dict()
+        dropped = 0
         with self._subscribers_lock:
+            if not self._subscribers:
+                return dropped
+
+            payload = event.to_dict()
             dead: set[asyncio.Queue] = set()
             for queue in self._subscribers:
                 try:
                     queue.put_nowait(payload)
                 except asyncio.QueueFull:
-                    pass  # slow consumer — drop frame
+                    dropped += 1  # slow consumer — drop frame
                 except Exception:
                     dead.add(queue)
             self._subscribers -= dead
+        return dropped
+
+    def _record_stage_timing(self, stage: str, value_ms: float) -> None:
+        timings = self._stage_timings_ms.get(stage)
+        if timings is not None:
+            timings.append(value_ms)
+
+    def _stage_timing_snapshot(self) -> dict[str, dict[str, float]]:
+        snapshot: dict[str, dict[str, float]] = {}
+        for stage, samples in self._stage_timings_ms.items():
+            values = list(samples)
+            if not values:
+                snapshot[stage] = {"avg": 0.0, "max": 0.0, "last": 0.0}
+                continue
+
+            snapshot[stage] = {
+                "avg": round(sum(values) / len(values), 2),
+                "max": round(max(values), 2),
+                "last": round(values[-1], 2),
+            }
+        return snapshot
 
     # ------------------------------------------------------------------ #
     # Builder helpers
@@ -407,16 +557,32 @@ class InferenceWorker:
         except ValueError:
             accelerator = HardwareAccelerator.CPU
 
-        detector = ObjectDetectionService(
-            model_name=self._config.model_name,
-            accelerator=accelerator,
-        )
-        detector.set_confidence_threshold(self._config.confidence)
-        logger.info(
-            "Loaded model '%s' (task=%s, accel=%s) for stream %d",
-            self._config.model_name,
-            self._config.task_type,
-            self._config.accelerator,
-            self._config.stream_id,
-        )
-        return detector
+        try:
+            detector = ObjectDetectionService(
+                model_name=self._config.model_name,
+                accelerator=accelerator,
+            )
+            detector.set_confidence_threshold(self._config.confidence)
+            logger.info(
+                "Loaded model '%s' (task=%s, accel=%s) for stream %d",
+                self._config.model_name,
+                self._config.task_type,
+                self._config.accelerator,
+                self._config.stream_id,
+            )
+            return detector
+        except Exception as exc:
+            fallback_model = settings.DEFAULT_MODEL
+            logger.warning(
+                "Failed to load model '%s' for stream %d (%s). Falling back to '%s'.",
+                self._config.model_name,
+                self._config.stream_id,
+                exc,
+                fallback_model,
+            )
+            detector = ObjectDetectionService(
+                model_name=fallback_model,
+                accelerator=accelerator,
+            )
+            detector.set_confidence_threshold(self._config.confidence)
+            return detector

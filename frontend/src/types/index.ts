@@ -33,6 +33,7 @@ export interface Stream {
   status: string
   current_frame: number
   urls: StreamURLs | null
+  worker_active?: boolean
   stream_metadata: Record<string, any>
   detection_enabled?: boolean
   detection_model?: string

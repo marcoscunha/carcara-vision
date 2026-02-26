@@ -50,11 +50,13 @@ const Streams: React.FC = () => {
     status: 'stopped',
     current_frame: 0,
     detection_enabled: true,
+    detection_task_type: 'detect',
     stream_metadata: {},
   })
   const [runtimeForm, setRuntimeForm] = useState({
     model_name: '',
     accelerator: 'cpu',
+    task_type: 'detect',
   })
 
   // TanStack Query hooks for server state management
@@ -81,6 +83,7 @@ const Streams: React.FC = () => {
       setRuntimeForm({
         model_name: runtimeConfig.model_name,
         accelerator: runtimeConfig.accelerator,
+        task_type: runtimeConfig.task_type,
       })
     }
   }, [runtimeConfig])
@@ -96,6 +99,7 @@ const Streams: React.FC = () => {
           typeof stream.detection_enabled === 'boolean'
             ? stream.detection_enabled
             : Boolean(stream.stream_metadata?.detection_enabled),
+        detection_task_type: stream.detection_task_type || stream.stream_metadata?.detection_task_type || 'detect',
         stream_metadata: stream.stream_metadata,
       })
     } else {
@@ -105,6 +109,7 @@ const Streams: React.FC = () => {
         status: 'stopped',
         current_frame: 0,
         detection_enabled: true,
+        detection_task_type: 'detect',
         stream_metadata: {},
       })
     }
@@ -119,6 +124,7 @@ const Streams: React.FC = () => {
       status: 'stopped',
       current_frame: 0,
       detection_enabled: true,
+      detection_task_type: 'detect',
       stream_metadata: {},
     })
   }
@@ -128,12 +134,19 @@ const Streams: React.FC = () => {
     await updateRuntimeMutation.mutateAsync({
       model_name: runtimeForm.model_name,
       accelerator: runtimeForm.accelerator,
+      task_type: runtimeForm.task_type,
     })
 
+    const streamPayload = {
+      ...formData,
+      detection_model: runtimeForm.model_name,
+      detection_task_type: runtimeForm.task_type,
+    }
+
     if (selectedStream) {
-      updateMutation.mutate({ id: selectedStream.id, data: formData }, { onSuccess: () => handleClose() })
+      updateMutation.mutate({ id: selectedStream.id, data: streamPayload }, { onSuccess: () => handleClose() })
     } else {
-      createMutation.mutate(formData, { onSuccess: () => handleClose() })
+      createMutation.mutate(streamPayload, { onSuccess: () => handleClose() })
     }
   }
 
@@ -165,20 +178,6 @@ const Streams: React.FC = () => {
       default:
         return 'warning'
     }
-  }
-
-  const isDetectionEnabled = (stream: Stream) => {
-    if (typeof stream.detection_enabled === 'boolean') {
-      return stream.detection_enabled
-    }
-    return Boolean(stream.stream_metadata?.detection_enabled)
-  }
-
-  const handleToggleDetection = (stream: Stream, enabled: boolean) => {
-    updateMutation.mutate({
-      id: stream.id,
-      data: { detection_enabled: enabled },
-    })
   }
 
   return (
@@ -237,6 +236,11 @@ const Streams: React.FC = () => {
           <Box className="card-grid--streams">
             {streamList.map((stream: Stream) => {
               const camera = cameraList.find((c: Camera) => c.id === stream.camera_id)
+              const detectionEnabled =
+                typeof stream.detection_enabled === 'boolean'
+                  ? stream.detection_enabled
+                  : Boolean(stream.stream_metadata?.detection_enabled)
+              const showNoWorkerBadge = detectionEnabled && !stream.worker_active
               return (
                 <Card key={stream.id}>
                   <CardContent className="card-content">
@@ -253,6 +257,10 @@ const Streams: React.FC = () => {
                         className={`status-chip chip-capitalize ${stream.status === 'running' ? 'status-chip--active' : ''}`}
                       />
                     </Box>
+
+                    {showNoWorkerBadge && (
+                      <Chip label="No active worker" size="small" color="warning" sx={{ mt: 1, mb: 1 }} />
+                    )}
 
                     {/* Stream Preview */}
                     <Box className="stream-preview-wrapper">
@@ -275,17 +283,6 @@ const Streams: React.FC = () => {
                       Inference: {realtimeMetrics?.per_stream?.[stream.id]?.avg_inference_time_ms || 0} ms • FPS:{' '}
                       {realtimeMetrics?.per_stream?.[stream.id]?.fps || 0}
                     </Typography>
-
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={isDetectionEnabled(stream)}
-                          onChange={(e) => handleToggleDetection(stream, e.target.checked)}
-                          disabled={updateMutation.isPending}
-                        />
-                      }
-                      label="Detection"
-                    />
 
                     {/* Actions */}
                     <Box className="card-actions">
@@ -367,8 +364,23 @@ const Streams: React.FC = () => {
               </Select>
             </FormControl>
 
+            <FormControl fullWidth margin="dense">
+              <InputLabel>System Task Type</InputLabel>
+              <Select
+                value={runtimeForm.task_type}
+                label="System Task Type"
+                onChange={(e) => setRuntimeForm({ ...runtimeForm, task_type: e.target.value })}
+              >
+                {(runtimeConfig?.available_task_types || ['detect', 'pose', 'segment']).map((taskType) => (
+                  <MenuItem key={taskType} value={taskType}>
+                    {taskType}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
             <Typography variant="caption" color="text.secondary">
-              Model and accelerator selection are applied globally to all streams.
+              Model, accelerator, and task type are applied globally to all streams.
             </Typography>
           </DialogContent>
           <DialogActions>

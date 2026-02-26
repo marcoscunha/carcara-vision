@@ -37,6 +37,7 @@ from urllib.parse import urlparse
 
 from ..core.config import settings
 from ..ml.registry import TASK_TYPE_DETECT
+from ..ml.registry import model_registry
 from .inference_worker import InferenceWorker
 from .inference_worker import WorkerConfig
 
@@ -66,8 +67,11 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
     metadata = stream.stream_metadata or {}
     rt = runtime or inference_runtime_service.get()
 
-    # Model / task come from stream metadata first, then global runtime
+    # Persisted stream metadata is authoritative; runtime is fallback.
     model_name = metadata.get("detection_model") or rt.model_name
+    model_info = model_registry.get_model(model_name) if model_name else None
+    if model_info and model_info.path:
+        model_name = model_info.path
     task_type = metadata.get("detection_task_type") or getattr(rt, "task_type", TASK_TYPE_DETECT)
     confidence = float(metadata.get("detection_confidence", 0.5))
     classes_filter = metadata.get("detection_classes") or None
@@ -94,6 +98,13 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
     )
 
 
+def _is_detection_enabled(stream: Stream) -> bool:
+    metadata = stream.stream_metadata or {}
+    if "detection_enabled" in metadata:
+        return bool(metadata.get("detection_enabled"))
+    return bool(getattr(stream, "detection_enabled", False))
+
+
 class InferenceWorkerManager:
     """
     Global manager for all per-stream InferenceWorkers.
@@ -115,8 +126,7 @@ class InferenceWorkerManager:
 
         Silently skips if detection is not enabled on the stream.
         """
-        metadata = stream.stream_metadata or {}
-        if not metadata.get("detection_enabled", False):
+        if not _is_detection_enabled(stream):
             logger.debug("Detection not enabled for stream %d — no worker started", stream.id)
             return
         if not stream.stream_name:
@@ -191,8 +201,7 @@ class InferenceWorkerManager:
         available.
         """
         for stream in active_streams:
-            metadata = stream.stream_metadata or {}
-            if metadata.get("detection_enabled") and stream.status == "active":
+            if _is_detection_enabled(stream) and stream.status == "active":
                 self.start_worker(stream, runtime)
 
     # ------------------------------------------------------------------ #
@@ -208,7 +217,5 @@ class InferenceWorkerManager:
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
-# ---------------------------------------------------------------------------
-inference_worker_manager = InferenceWorkerManager()
 # ---------------------------------------------------------------------------
 inference_worker_manager = InferenceWorkerManager()

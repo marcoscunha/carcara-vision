@@ -10,7 +10,11 @@ import platform
 import subprocess
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend, DeviceInfo
+from .base import AcceleratorBackend
+from .base import DeviceInfo
+from .cuda import CUDABackend
+from .jetson import JetsonBackend
+from .raspberry import RaspberryPiBackend
 
 logger = logging.getLogger(__name__)
 
@@ -236,3 +240,10 @@ class HardwareDetector:
 
         return False
         return False
+
+
+# Register built-in backends on module import
+HardwareDetector.register_backend(HardwareAccelerator.CUDA, CUDABackend)
+HardwareDetector.register_backend(HardwareAccelerator.JETSON, JetsonBackend)
+HardwareDetector.register_backend(HardwareAccelerator.RPI, RaspberryPiBackend)
+HardwareDetector.register_backend(HardwareAccelerator.RPI, RaspberryPiBackend)

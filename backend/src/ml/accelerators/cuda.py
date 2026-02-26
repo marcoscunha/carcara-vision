@@ -4,10 +4,12 @@ CUDA Backend - NVIDIA GPU acceleration using CUDA.
 
 import logging
 import os
+import shutil
 import subprocess
 
 from ..base import HardwareAccelerator
-from .base import AcceleratorBackend, DeviceInfo
+from .base import AcceleratorBackend
+from .base import DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +37,27 @@ class CUDABackend(AcceleratorBackend):
             return self._cuda_available
 
         try:
-            # Check nvidia-smi
-            result = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode != 0:
+            # Primary check: PyTorch CUDA runtime
+            import torch
+
+            if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+                self._cuda_available = True
+                return True
+
+            # Fallback check: NVIDIA CLI visibility (optional)
+            if shutil.which("nvidia-smi") is None:
                 self._cuda_available = False
                 return False
 
-            # Check PyTorch CUDA
-            import torch
-
-            self._cuda_available = torch.cuda.is_available()
+            result = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self._cuda_available = result.returncode == 0
             return self._cuda_available
 
+        except FileNotFoundError:
+            self._cuda_available = False
+            return False
         except Exception as e:
-            logger.warning(f"CUDA check failed: {e}")
+            logger.debug(f"CUDA check fallback failed: {e}")
             self._cuda_available = False
             return False
 
@@ -219,6 +228,4 @@ class CUDABackend(AcceleratorBackend):
             torch.cuda.synchronize()
             logger.info("CUDA memory cache cleared")
         except Exception as e:
-            logger.warning(f"Failed to clear CUDA memory: {e}")
-            logger.warning(f"Failed to clear CUDA memory: {e}")
-            logger.warning(f"Failed to clear CUDA memory: {e}")
+            logger.debug(f"Failed to clear CUDA memory: {e}")

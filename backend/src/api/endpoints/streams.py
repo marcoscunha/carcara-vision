@@ -43,7 +43,7 @@ def _get_detection_settings(stream: Stream) -> dict:
     runtime = inference_runtime_service.get()
     return {
         "enabled": bool(metadata.get("detection_enabled", False)),
-        # Per-stream model takes precedence over the global runtime
+        # Persisted stream metadata is authoritative; runtime is fallback.
         "model": metadata.get("detection_model") or runtime.model_name,
         "accelerator": runtime.accelerator,
         "task_type": metadata.get("detection_task_type") or getattr(runtime, "task_type", "detect"),
@@ -192,6 +192,8 @@ def _generate_stream_name(camera: Camera, stream_id: int) -> str:
 def _build_stream_response(stream: Stream, host: str | None = None) -> StreamResponse:
     """Build a StreamResponse with URLs from MediaMTX."""
     detection_settings = _get_detection_settings(stream)
+    worker = inference_worker_manager.get_worker(stream.id)
+    worker_active = bool(worker and worker.is_running())
     urls = None
     if stream.stream_name:
         url_dict = gstreamer_service.get_stream_urls(stream.stream_name, host=host)
@@ -204,6 +206,7 @@ def _build_stream_response(stream: Stream, host: str | None = None) -> StreamRes
         current_frame=stream.current_frame or 0,
         stream_name=stream.stream_name,
         urls=urls,
+        worker_active=worker_active,
         stream_metadata=stream.stream_metadata,
         detection_enabled=detection_settings["enabled"],
         detection_model=detection_settings["model"],

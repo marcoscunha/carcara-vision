@@ -162,4 +162,3 @@ class InferenceMetricsService:
 
 inference_runtime_service = InferenceRuntimeService()
 inference_metrics_service = InferenceMetricsService()
-inference_metrics_service = InferenceMetricsService()

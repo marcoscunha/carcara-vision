@@ -107,6 +107,52 @@ class YOLOEngine(BaseInferenceEngine):
         self._is_loaded = False
         logger.info("YOLO model unloaded")
 
+    @staticmethod
+    def _to_numpy(value) -> np.ndarray:
+        """Convert tensor-like values to a NumPy array with minimal overhead."""
+        if value is None:
+            return np.array([])
+
+        if hasattr(value, "detach"):
+            value = value.detach()
+        if hasattr(value, "cpu"):
+            value = value.cpu()
+        if hasattr(value, "numpy"):
+            return value.numpy()
+
+        return np.asarray(value)
+
+    def _iter_detections(self, yolo_result):
+        """Yield normalized detection tuples parsed from a YOLO result."""
+        if not hasattr(yolo_result, "boxes") or yolo_result.boxes is None:
+            return
+
+        boxes = yolo_result.boxes
+        xyxy = self._to_numpy(boxes.xyxy)
+        conf = self._to_numpy(boxes.conf).reshape(-1)
+        cls = self._to_numpy(boxes.cls).reshape(-1)
+
+        if xyxy.size == 0:
+            return
+
+        track_ids = None
+        if hasattr(boxes, "id") and boxes.id is not None:
+            track_ids = self._to_numpy(boxes.id).reshape(-1)
+
+        n = int(xyxy.shape[0])
+        for idx in range(n):
+            class_id = int(cls[idx])
+            class_name = self._class_names.get(class_id, f"class_{class_id}")
+            track_id = int(track_ids[idx]) if track_ids is not None and idx < len(track_ids) else None
+
+            yield (
+                xyxy[idx].tolist(),
+                float(conf[idx]),
+                class_id,
+                class_name,
+                track_id,
+            )
+
     def infer(self, image: np.ndarray, classes: list[int] | None = None, **kwargs) -> InferenceResult:
         """
         Run YOLO inference on an image.
@@ -148,14 +194,8 @@ class YOLOEngine(BaseInferenceEngine):
         if results and len(results) > 0:
             yolo_result = results[0]
 
-            if hasattr(yolo_result, "boxes") and yolo_result.boxes is not None:
-                for box in yolo_result.boxes:
-                    bbox = box.xyxy[0].cpu().numpy().tolist()
-                    confidence = float(box.conf[0].cpu().numpy())
-                    class_id = int(box.cls[0].cpu().numpy())
-                    class_name = self._class_names.get(class_id, f"class_{class_id}")
-
-                    result.add_detection(bbox=bbox, class_name=class_name, class_id=class_id, confidence=confidence)
+            for bbox, confidence, class_id, class_name, _track_id in self._iter_detections(yolo_result):
+                result.add_detection(bbox=bbox, class_name=class_name, class_id=class_id, confidence=confidence)
 
             # Handle segmentation results
             if hasattr(yolo_result, "masks") and yolo_result.masks is not None:
@@ -206,14 +246,8 @@ class YOLOEngine(BaseInferenceEngine):
                 hardware_used=self._current_accelerator or HardwareAccelerator.CPU,
             )
 
-            if hasattr(yolo_result, "boxes") and yolo_result.boxes is not None:
-                for box in yolo_result.boxes:
-                    bbox = box.xyxy[0].cpu().numpy().tolist()
-                    confidence = float(box.conf[0].cpu().numpy())
-                    class_id = int(box.cls[0].cpu().numpy())
-                    class_name = self._class_names.get(class_id, f"class_{class_id}")
-
-                    result.add_detection(bbox=bbox, class_name=class_name, class_id=class_id, confidence=confidence)
+            for bbox, confidence, class_id, class_name, _track_id in self._iter_detections(yolo_result):
+                result.add_detection(bbox=bbox, class_name=class_name, class_id=class_id, confidence=confidence)
 
             results.append(result)
 
@@ -287,26 +321,13 @@ class YOLOEngine(BaseInferenceEngine):
         if results and len(results) > 0:
             yolo_result = results[0]
 
-            if hasattr(yolo_result, "boxes") and yolo_result.boxes is not None:
-                for box in yolo_result.boxes:
-                    bbox = box.xyxy[0].cpu().numpy().tolist()
-                    confidence = float(box.conf[0].cpu().numpy())
-                    class_id = int(box.cls[0].cpu().numpy())
-                    class_name = self._class_names.get(class_id, f"class_{class_id}")
-
-                    # Get track ID if available
-                    track_id = None
-                    if box.id is not None:
-                        track_id = int(box.id[0].cpu().numpy())
-
-                    result.add_detection(
-                        bbox=bbox,
-                        class_name=class_name,
-                        class_id=class_id,
-                        confidence=confidence,
-                        track_id=track_id,
-                    )
-
-        return result
+            for bbox, confidence, class_id, class_name, track_id in self._iter_detections(yolo_result):
+                result.add_detection(
+                    bbox=bbox,
+                    class_name=class_name,
+                    class_id=class_id,
+                    confidence=confidence,
+                    track_id=track_id,
+                )
 
         return result

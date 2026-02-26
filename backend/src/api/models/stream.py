@@ -53,6 +53,7 @@ class StreamResponse(StreamBase):
     current_frame: int
     stream_name: str | None = None
     urls: StreamURLs | None = None
+    worker_active: bool = False
     stream_metadata: dict[str, Any] | None = None
     detection_enabled: bool
     detection_model: str
