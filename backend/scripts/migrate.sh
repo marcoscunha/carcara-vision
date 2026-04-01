@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Activate the virtual environment
 source /app/.venv/bin/activate
 
@@ -36,6 +38,18 @@ echo "Database is ready!"
 
 # Run migration
 echo "Running migration..."
-/app/.venv/bin/alembic upgrade head
+if ! UPGRADE_OUTPUT=$(/app/.venv/bin/alembic upgrade head 2>&1); then
+  echo "$UPGRADE_OUTPUT"
+
+  if echo "$UPGRADE_OUTPUT" | grep -q "Can't locate revision identified by"; then
+    echo "Detected unknown Alembic revision in database. Repairing revision state..."
+    # Purge stale revision markers and stamp to known baseline before upgrading.
+    /app/.venv/bin/alembic stamp --purge 20260221_0001
+    /app/.venv/bin/alembic upgrade head
+  else
+    echo "Migration failed with a non-recoverable error."
+    exit 1
+  fi
+fi
 
 echo "Migration completed!"
