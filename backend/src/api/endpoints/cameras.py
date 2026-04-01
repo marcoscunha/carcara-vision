@@ -15,6 +15,37 @@ from ...services.object_detection import ObjectDetectionService
 
 router = APIRouter()
 detection_service = ObjectDetectionService()
+LOCAL_CAMERA_TYPES = {"local", "usb"}
+LOCAL_CAMERA_IDENTITY_FIELDS = (
+    "device_id",
+    "device_path",
+    "physical_address",
+    "usb_vendor_id",
+    "usb_product_id",
+    "usb_serial_number",
+)
+
+
+def _local_camera_payload_from_resolution(
+    resolved: dict | None,
+    *,
+    fallback: dict,
+) -> dict:
+    payload = {field: fallback.get(field) for field in LOCAL_CAMERA_IDENTITY_FIELDS}
+    if resolved is None:
+        return payload
+
+    for field in LOCAL_CAMERA_IDENTITY_FIELDS:
+        payload[field] = resolved.get(field)
+    return payload
+
+
+def _resolve_local_camera_payload(camera_data: dict, existing_camera: Camera | None = None) -> dict:
+    merged_identity = {
+        field: camera_data.get(field, getattr(existing_camera, field, None)) for field in LOCAL_CAMERA_IDENTITY_FIELDS
+    }
+    resolved = CameraService.resolve_local_camera(**merged_identity)
+    return _local_camera_payload_from_resolution(resolved, fallback=merged_identity)
 
 
 @router.post("/", response_model=CameraResponse)
@@ -24,22 +55,14 @@ def create_camera(
     db: Session = Depends(get_db),
 ):
     """Create a new camera. Requires authentication."""
-    # For local cameras, resolve the current device_id from device_path
-    device_id = camera.device_id
-    device_path = camera.device_path
-    if camera.camera_type in ("local", "usb") and device_path:
-        resolved_id = CameraService.resolve_device_index(device_path)
-        if resolved_id is not None:
-            device_id = resolved_id
+    camera_data = camera.model_dump()
+    if camera.camera_type in LOCAL_CAMERA_TYPES:
+        camera_data.update(_resolve_local_camera_payload(camera_data))
+    else:
+        for field in LOCAL_CAMERA_IDENTITY_FIELDS:
+            camera_data[field] = None
 
-    db_camera = Camera(
-        name=camera.name,
-        camera_type=camera.camera_type,
-        device_id=device_id,
-        device_path=device_path,
-        rtsp_url=camera.rtsp_url,
-        is_active=camera.is_active,
-    )
+    db_camera = Camera(**camera_data)
     db.add(db_camera)
     db.commit()
     db.refresh(db_camera)
@@ -62,6 +85,9 @@ class CameraInfo(BaseModel):
     device_id: int
     device_path: str  # Persistent path (e.g. /dev/v4l/by-id/...)
     physical_address: str | None
+    usb_vendor_id: str | None
+    usb_product_id: str | None
+    usb_serial_number: str | None
     usb_id: str | None
     name: str
     friendly_name: str | None
@@ -145,7 +171,16 @@ def update_camera(
     if db_camera is None:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    for field, value in camera_update.dict(exclude_unset=True).items():
+    update_data = camera_update.model_dump(exclude_unset=True)
+    target_camera_type = update_data.get("camera_type", db_camera.camera_type)
+
+    if target_camera_type in LOCAL_CAMERA_TYPES:
+        update_data.update(_resolve_local_camera_payload(update_data, existing_camera=db_camera))
+    elif "camera_type" in update_data:
+        for field in LOCAL_CAMERA_IDENTITY_FIELDS:
+            update_data[field] = None
+
+    for field, value in update_data.items():
         setattr(db_camera, field, value)
 
     db.commit()
@@ -176,16 +211,6 @@ async def delete_camera(
             except Exception as e:
                 # Log but don't fail if GStreamer cleanup fails
                 print(f"Warning: Failed to remove stream {stream.stream_name} from GStreamer: {e}")
-
-    # Delete camera (cascade will delete related streams, detections, alarms, ROIs)
-    db.delete(db_camera)
-    db.commit()
-    return {"message": "Camera deleted successfully"}
-
-    # Delete camera (cascade will delete related streams, detections, alarms, ROIs)
-    db.delete(db_camera)
-    db.commit()
-    return {"message": "Camera deleted successfully"}
 
     # Delete camera (cascade will delete related streams, detections, alarms, ROIs)
     db.delete(db_camera)

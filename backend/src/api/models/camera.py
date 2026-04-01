@@ -8,6 +8,10 @@ class CameraBase(BaseModel):
     camera_type: str = "rtsp"
     device_id: int | None = None
     device_path: str | None = None  # Persistent device path (e.g. /dev/v4l/by-id/...)
+    physical_address: str | None = None
+    usb_vendor_id: str | None = None
+    usb_product_id: str | None = None
+    usb_serial_number: str | None = None
     rtsp_url: str | None = None
     is_active: bool = True
 
@@ -21,6 +25,10 @@ class CameraUpdate(BaseModel):
     camera_type: str | None = None
     device_id: int | None = None
     device_path: str | None = None
+    physical_address: str | None = None
+    usb_vendor_id: str | None = None
+    usb_product_id: str | None = None
+    usb_serial_number: str | None = None
     rtsp_url: str | None = None
     is_active: bool | None = None
 

@@ -15,8 +15,222 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+LOCAL_CAMERA_SCAN_LIMIT = 256
+
+
 class CameraService:
     """Handles camera-related operations such as scanning and streaming."""
+
+    @staticmethod
+    def _read_udev_properties(device_node: str) -> dict[str, str]:
+        """Read udev properties for a device node, returning an empty dict on failure."""
+        if not shutil.which("udevadm"):
+            return {}
+
+        try:
+            result = subprocess.run(
+                ["udevadm", "info", "--query=property", "--name", device_node],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
+        except Exception as exc:
+            logger.warning("Error retrieving udev properties for %s: %s", device_node, exc)
+            return {}
+
+        properties: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            properties[key.strip()] = value.strip()
+        return properties
+
+    @staticmethod
+    def _get_sysfs_device_dir(device_node: str) -> str | None:
+        """Return the resolved sysfs directory for a V4L2 device node."""
+        video_name = os.path.basename(os.path.realpath(device_node))
+        sysfs_path = os.path.join("/sys/class/video4linux", video_name, "device")
+        if not os.path.exists(sysfs_path):
+            return None
+        return os.path.realpath(sysfs_path)
+
+    @staticmethod
+    def _read_sysfs_attribute(start_dir: str | None, attr_name: str) -> str | None:
+        """Walk parent sysfs directories until the requested USB attribute is found."""
+        current = start_dir
+        while current and current != "/":
+            candidate = os.path.join(current, attr_name)
+            if os.path.isfile(candidate):
+                try:
+                    with open(candidate) as file_handle:
+                        value = file_handle.read().strip().rstrip("\x00")
+                    return value or None
+                except OSError:
+                    return None
+
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+        return None
+
+    @staticmethod
+    def describe_local_device(device_id: int | None = None, *, device_path: str | None = None) -> dict[str, Any]:
+        """
+        Return stable identity data for a local V4L2 device.
+
+        The returned dictionary is designed to be persisted and later used to
+        rebind a logical camera to the current ``/dev/videoX`` node after a
+        reboot or device re-enumeration.
+        """
+        dev = CameraService._dev_path_or_index(device_path, device_id)
+        real_dev = CameraService.resolve_device_path(dev)
+        resolved_device_id = CameraService.resolve_device_index(real_dev)
+        udev = CameraService._read_udev_properties(real_dev)
+        sysfs_dir = CameraService._get_sysfs_device_dir(real_dev)
+
+        usb_vendor_id = udev.get("ID_VENDOR_ID") or CameraService._read_sysfs_attribute(sysfs_dir, "idVendor")
+        usb_product_id = udev.get("ID_MODEL_ID") or CameraService._read_sysfs_attribute(sysfs_dir, "idProduct")
+        usb_serial_number = udev.get("ID_SERIAL_SHORT") or CameraService._read_sysfs_attribute(sysfs_dir, "serial")
+        physical_address = (
+            udev.get("ID_PATH")
+            or udev.get("DEVPATH")
+            or (CameraService._get_device_path_fallback(resolved_device_id) if resolved_device_id is not None else None)
+        )
+
+        persistent_path = None
+        if resolved_device_id is not None:
+            persistent_path = CameraService.get_persistent_device_path(resolved_device_id)
+
+        return {
+            "device_id": resolved_device_id,
+            "device_path": persistent_path or real_dev,
+            "physical_address": physical_address,
+            "usb_vendor_id": usb_vendor_id,
+            "usb_product_id": usb_product_id,
+            "usb_serial_number": usb_serial_number,
+            "usb_id": f"{usb_vendor_id}:{usb_product_id}" if usb_vendor_id and usb_product_id else None,
+        }
+
+    @staticmethod
+    def _camera_identity_score(
+        candidate: dict[str, Any],
+        *,
+        device_path: str | None = None,
+        physical_address: str | None = None,
+        usb_vendor_id: str | None = None,
+        usb_product_id: str | None = None,
+        usb_serial_number: str | None = None,
+    ) -> int | None:
+        """Score how well a scanned camera matches a stored identity."""
+        score = 0
+
+        candidate_path = candidate.get("device_path")
+        candidate_vendor = candidate.get("usb_vendor_id")
+        candidate_product = candidate.get("usb_product_id")
+        candidate_serial = candidate.get("usb_serial_number")
+        candidate_physical = candidate.get("physical_address")
+
+        if usb_serial_number:
+            if candidate_serial != usb_serial_number:
+                return None
+            score += 100
+
+        if physical_address:
+            if candidate_physical == physical_address:
+                score += 60
+            elif not usb_serial_number:
+                return None
+
+        if usb_vendor_id:
+            if candidate_vendor != usb_vendor_id:
+                return None
+            score += 20
+
+        if usb_product_id:
+            if candidate_product != usb_product_id:
+                return None
+            score += 20
+
+        if device_path and candidate_path:
+            if candidate_path == device_path:
+                score += 40
+            elif os.path.basename(candidate_path) == os.path.basename(device_path):
+                score += 20
+
+        return score
+
+    @staticmethod
+    def resolve_local_camera(
+        device_id: int | None = None,
+        *,
+        device_path: str | None = None,
+        physical_address: str | None = None,
+        usb_vendor_id: str | None = None,
+        usb_product_id: str | None = None,
+        usb_serial_number: str | None = None,
+        max_devices: int = LOCAL_CAMERA_SCAN_LIMIT,
+    ) -> dict[str, Any] | None:
+        """
+        Resolve a logical local camera to the current live device node.
+
+        Matching prefers USB serial number when available, then falls back to
+        physical address, persistent path, and finally vendor/product pairs.
+        Ambiguous weak matches intentionally return ``None``.
+        """
+        direct_candidate = None
+        if device_path or device_id is not None:
+            try:
+                direct_candidate = CameraService.describe_local_device(device_id=device_id, device_path=device_path)
+            except Exception:
+                direct_candidate = None
+
+        has_stable_identity = any((device_path, physical_address, usb_vendor_id, usb_product_id, usb_serial_number))
+        if direct_candidate and not has_stable_identity:
+            return direct_candidate
+
+        candidates = CameraService.scan_local_cameras(max_devices=max_devices)
+        scored_candidates: list[tuple[int, dict[str, Any]]] = []
+
+        for candidate in candidates:
+            score = CameraService._camera_identity_score(
+                candidate,
+                device_path=device_path,
+                physical_address=physical_address,
+                usb_vendor_id=usb_vendor_id,
+                usb_product_id=usb_product_id,
+                usb_serial_number=usb_serial_number,
+            )
+            if score is not None and score > 0:
+                scored_candidates.append((score, candidate))
+
+        if direct_candidate:
+            score = CameraService._camera_identity_score(
+                direct_candidate,
+                device_path=device_path,
+                physical_address=physical_address,
+                usb_vendor_id=usb_vendor_id,
+                usb_product_id=usb_product_id,
+                usb_serial_number=usb_serial_number,
+            )
+            if score is not None and score > 0:
+                scored_candidates.append((score + 1, direct_candidate))
+
+        if not scored_candidates:
+            return direct_candidate if direct_candidate and not has_stable_identity else None
+
+        scored_candidates.sort(key=lambda item: item[0], reverse=True)
+        best_score = scored_candidates[0][0]
+        best_matches = [candidate for score, candidate in scored_candidates if score == best_score]
+        if len(best_matches) > 1:
+            return None
+
+        best_match = best_matches[0]
+        if best_score < 40 and usb_serial_number is None and physical_address is None:
+            return None
+        return best_match
 
     # ------------------------------------------------------------------ #
     #  Persistent device path helpers                                     #
@@ -223,19 +437,8 @@ class CameraService:
         Returns:
             A string representing the physical address of the camera, or None if unavailable.
         """
-        if not shutil.which("udevadm"):
-            return CameraService._get_device_path_fallback(device_id)
         try:
-            result = subprocess.run(
-                ["udevadm", "info", f"/dev/video{device_id}"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
-            for line in result.stdout.splitlines():
-                if "DEVPATH=" in line:
-                    return line.split("=")[1].strip()
+            return CameraService.describe_local_device(device_id=device_id).get("physical_address")
         except Exception as e:
             logger.warning("Error retrieving physical address for camera %d: %s", device_id, e)
             return CameraService._get_device_path_fallback(device_id)
@@ -251,25 +454,8 @@ class CameraService:
         Returns:
             A string representing the USB ID of the camera (e.g., "1d6b:0002"), or None if unavailable.
         """
-        if not shutil.which("udevadm"):
-            return None
         try:
-            result = subprocess.run(
-                ["udevadm", "info", f"/dev/video{device_id}"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
-            vendor_id = None
-            model_id = None
-            for line in result.stdout.splitlines():
-                if "ID_VENDOR_ID" in line:
-                    vendor_id = line.split("=")[1].strip()
-                if "ID_MODEL_ID" in line:
-                    model_id = line.split("=")[1].strip()
-            if vendor_id and model_id:
-                return f"{vendor_id}:{model_id}"
+            return CameraService.describe_local_device(device_id=device_id).get("usb_id")
         except Exception as e:
             logger.warning("Error retrieving USB ID for camera %d: %s", device_id, e)
             return None
@@ -288,16 +474,8 @@ class CameraService:
         if not shutil.which("udevadm"):
             return None
         try:
-            result = subprocess.run(
-                ["udevadm", "info", f"/dev/video{device_id}"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
-            for line in result.stdout.splitlines():
-                if "ID_MODEL_FROM_DATABASE" in line or "ID_MODEL" in line:
-                    return line.split("=")[1].strip()
+            props = CameraService._read_udev_properties(f"/dev/video{device_id}")
+            return props.get("ID_MODEL_FROM_DATABASE") or props.get("ID_V4L_PRODUCT") or props.get("ID_MODEL")
         except Exception as e:
             logger.warning("Error retrieving friendly name for camera %d: %s", device_id, e)
             return None
@@ -359,7 +537,7 @@ class CameraService:
             List of dictionaries containing device information.
         """
         available_cameras = []
-        seen_devices = set()  # Track unique combinations of physical address and USB ID
+        seen_devices = set()
 
         # Only probe /dev/video* devices that actually exist instead of
         # blindly iterating indices, which causes OpenCV errors for
@@ -378,18 +556,15 @@ class CameraService:
 
                 cap = cv2.VideoCapture(device_id)
                 if cap.isOpened():
-                    # Get physical address
-                    physical_address = CameraService.get_camera_physical_address(device_id)
-                    # Get USB ID
-                    usb_id = CameraService.get_camera_usb_id(device_id)
-
-                    # Use a combination of physical address and USB ID to ensure uniqueness
-                    # If physical_address is unavailable (e.g., udevadm not installed), use device_id as fallback
-                    if physical_address:
-                        unique_device_key = (physical_address, usb_id)
-                    else:
-                        # Fallback: use device path from /sys/class/video4linux if available
-                        unique_device_key = CameraService._get_device_path_fallback(device_id) or f"device_{device_id}"
+                    device_identity = CameraService.describe_local_device(device_id=device_id)
+                    unique_device_key = (
+                        device_identity.get("usb_vendor_id"),
+                        device_identity.get("usb_product_id"),
+                        device_identity.get("usb_serial_number")
+                        or device_identity.get("physical_address")
+                        or device_identity.get("device_path")
+                        or f"device_{device_id}",
+                    )
 
                     if unique_device_key in seen_devices:
                         cap.release()
@@ -407,14 +582,14 @@ class CameraService:
                     # Use the method to get supported resolutions
                     supported_resolutions = CameraService.get_supported_resolutions(device_id)
 
-                    # Obtain a persistent device path (survives reboots)
-                    persistent_path = CameraService.get_persistent_device_path(device_id)
-
                     camera_info = {
                         "device_id": device_id,
-                        "device_path": persistent_path or f"/dev/video{device_id}",
-                        "physical_address": physical_address,
-                        "usb_id": usb_id,
+                        "device_path": device_identity.get("device_path") or f"/dev/video{device_id}",
+                        "physical_address": device_identity.get("physical_address"),
+                        "usb_vendor_id": device_identity.get("usb_vendor_id"),
+                        "usb_product_id": device_identity.get("usb_product_id"),
+                        "usb_serial_number": device_identity.get("usb_serial_number"),
+                        "usb_id": device_identity.get("usb_id"),
                         "name": CameraService.get_camera_name(device_id),
                         "friendly_name": CameraService.get_camera_friendly_name(device_id),
                         "resolution": (width, height),

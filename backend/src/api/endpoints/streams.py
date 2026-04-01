@@ -36,6 +36,83 @@ from ...services.object_detection import ObjectDetectionService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 camera_service = CameraService()
+LOCAL_CAMERA_TYPES = {"local", "usb"}
+LOCAL_CAMERA_IDENTITY_FIELDS = (
+    "device_id",
+    "device_path",
+    "physical_address",
+    "usb_vendor_id",
+    "usb_product_id",
+    "usb_serial_number",
+)
+
+
+def _local_camera_identity(camera: Camera, source_config: dict | None = None) -> dict:
+    identity = {}
+    for field in LOCAL_CAMERA_IDENTITY_FIELDS:
+        config_value = (source_config or {}).get(field)
+        identity[field] = config_value if config_value is not None else getattr(camera, field, None)
+    return identity
+
+
+def _apply_resolved_camera_binding(camera: Camera, resolved_camera: dict | None) -> None:
+    if resolved_camera is None:
+        return
+    for field in LOCAL_CAMERA_IDENTITY_FIELDS:
+        setattr(camera, field, resolved_camera.get(field))
+
+
+def _resolve_local_capture_source(camera: Camera, source_config: dict | None = None) -> dict:
+    identity = _local_camera_identity(camera, source_config)
+    resolved = camera_service.resolve_local_camera(**identity)
+    effective = resolved or identity
+
+    return {
+        "camera_type": "local",
+        "stream_url": camera.rtsp_url,
+        **{field: effective.get(field) for field in LOCAL_CAMERA_IDENTITY_FIELDS},
+    }
+
+
+def _build_source_config_for_camera(
+    camera: Camera,
+    *,
+    width: int,
+    height: int,
+    codec: str,
+    source_config: dict | None = None,
+) -> tuple[dict, dict | None]:
+    if camera.camera_type in LOCAL_CAMERA_TYPES:
+        resolved_source = _resolve_local_capture_source(camera, source_config)
+        return (
+            gstreamer_service.build_source_config(
+                camera_type=camera.camera_type,
+                rtsp_url=camera.rtsp_url,
+                device_id=resolved_source.get("device_id"),
+                device_path=resolved_source.get("device_path"),
+                physical_address=resolved_source.get("physical_address"),
+                usb_vendor_id=resolved_source.get("usb_vendor_id"),
+                usb_product_id=resolved_source.get("usb_product_id"),
+                usb_serial_number=resolved_source.get("usb_serial_number"),
+                width=width,
+                height=height,
+                codec=codec,
+            ),
+            resolved_source,
+        )
+
+    return (
+        gstreamer_service.build_source_config(
+            camera_type=camera.camera_type,
+            rtsp_url=camera.rtsp_url,
+            device_id=camera.device_id,
+            device_path=camera.device_path,
+            width=width,
+            height=height,
+            codec=codec,
+        ),
+        None,
+    )
 
 
 def _get_detection_settings(stream: Stream) -> dict:
@@ -78,12 +155,7 @@ def _get_capture_source(stream: Stream, camera: Camera) -> dict:
     source_type = source_config.get("source_type")
 
     if source_type == "v4l2":
-        return {
-            "camera_type": "local",
-            "stream_url": camera.rtsp_url,
-            "device_id": source_config.get("device_id", camera.device_id),
-            "device_path": source_config.get("device_path") or getattr(camera, "device_path", None),
-        }
+        return _resolve_local_capture_source(camera, source_config)
 
     if source_type == "rtsp":
         return {
@@ -92,6 +164,9 @@ def _get_capture_source(stream: Stream, camera: Camera) -> dict:
             "device_id": None,
             "device_path": None,
         }
+
+    if camera.camera_type in LOCAL_CAMERA_TYPES:
+        return _resolve_local_capture_source(camera, source_config)
 
     return {
         "camera_type": camera.camera_type,
@@ -249,17 +324,16 @@ async def create_stream(
 
     # Build source configuration based on camera type
     try:
-        source_config = gstreamer_service.build_source_config(
-            camera_type=camera.camera_type,
-            rtsp_url=camera.rtsp_url,
-            device_id=camera.device_id,
-            device_path=camera.device_path,
+        source_config, resolved_source = _build_source_config_for_camera(
+            camera,
             width=stream.width or 640,
             height=stream.height or 360,
             codec=stream.codec or "h264",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    _apply_resolved_camera_binding(camera, resolved_source)
 
     stream_metadata = {
         "source_config": source_config,
@@ -445,6 +519,26 @@ async def restart_stream(
     source_config = db_stream.stream_metadata.get("source_config") if db_stream.stream_metadata else None
     if not source_config:
         raise HTTPException(status_code=400, detail="Stream source configuration not found")
+
+    camera = db.query(Camera).filter(Camera.id == db_stream.camera_id).first()
+    if camera is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    try:
+        source_config, resolved_source = _build_source_config_for_camera(
+            camera,
+            width=source_config.get("width", 640),
+            height=source_config.get("height", 360),
+            codec=source_config.get("codec", "h264"),
+            source_config=source_config,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    _apply_resolved_camera_binding(camera, resolved_source)
+    metadata = dict(db_stream.stream_metadata or {})
+    metadata["source_config"] = source_config
+    db_stream.stream_metadata = metadata
 
     # Remove and re-add stream
     await gstreamer_service.remove_stream(db_stream.stream_name)
