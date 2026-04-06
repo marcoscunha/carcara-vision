@@ -264,6 +264,74 @@ def _generate_stream_name(camera: Camera, stream_id: int) -> str:
     return f"camera_{camera.id}_{stream_id}_{safe_name}"
 
 
+async def restore_active_stream_pipelines(db: Session) -> tuple[int, int]:
+    """
+    Re-register active DB streams in GStreamer/MediaMTX after service restarts.
+
+    Returns:
+        Tuple of (restored_count, failed_count).
+    """
+    active_streams = db.query(Stream).filter(Stream.status == "active").all()
+    restored = 0
+    failed = 0
+
+    for db_stream in active_streams:
+        camera = db.query(Camera).filter(Camera.id == db_stream.camera_id).first()
+        if camera is None:
+            db_stream.status = "error"
+            failed += 1
+            logger.error("Cannot restore stream %s: camera %s not found", db_stream.id, db_stream.camera_id)
+            continue
+
+        metadata = dict(db_stream.stream_metadata or {})
+        previous_source_config = metadata.get("source_config") or {}
+
+        try:
+            source_config, resolved_source = _build_source_config_for_camera(
+                camera,
+                width=int(previous_source_config.get("width") or metadata.get("width") or 640),
+                height=int(previous_source_config.get("height") or metadata.get("height") or 360),
+                codec=previous_source_config.get("codec") or metadata.get("codec") or "h264",
+                source_config=previous_source_config,
+            )
+
+            if not db_stream.stream_name:
+                db_stream.stream_name = _generate_stream_name(camera, db_stream.id)
+
+            _apply_resolved_camera_binding(camera, resolved_source)
+            metadata["source_config"] = source_config
+            db_stream.stream_metadata = metadata
+
+            # Ensure idempotent startup restore: remove stale stream if present, then add.
+            await gstreamer_service.remove_stream(db_stream.stream_name)
+            success = await gstreamer_service.add_stream(
+                name=db_stream.stream_name,
+                source_type=source_config["source_type"],
+                source_uri=source_config.get("source_uri"),
+                device_id=source_config.get("device_id"),
+                device_path=source_config.get("device_path"),
+                width=source_config.get("width", 640),
+                height=source_config.get("height", 360),
+                codec=source_config.get("codec", "h264"),
+            )
+
+            if success:
+                db_stream.status = "active"
+                restored += 1
+                logger.info("Restored active stream '%s'", db_stream.stream_name)
+            else:
+                db_stream.status = "error"
+                failed += 1
+                logger.error("Failed restoring stream '%s'", db_stream.stream_name)
+        except Exception as exc:
+            db_stream.status = "error"
+            failed += 1
+            logger.exception("Error restoring stream %s: %s", db_stream.id, exc)
+
+    db.commit()
+    return restored, failed
+
+
 def _build_stream_response(stream: Stream, host: str | None = None) -> StreamResponse:
     """Build a StreamResponse with URLs from MediaMTX."""
     detection_settings = _get_detection_settings(stream)

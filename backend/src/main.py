@@ -36,9 +36,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"AUTH_ENABLED: {settings.AUTH_ENABLED}")
 
-    # Restore inference workers for streams that were already active
+    # Re-register active stream pipelines, then restore inference workers.
     db = SessionLocal()
     try:
+        restored, failed = await streams.restore_active_stream_pipelines(db)
+        logger.info("Startup stream pipeline restore: %d restored, %d failed", restored, failed)
+
         active_streams = db.query(Stream).filter(Stream.status == "active").all()
         inference_worker_manager.restore_workers(active_streams)
         logger.info("Restored %d active-stream workers", len(active_streams))
