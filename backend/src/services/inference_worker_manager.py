@@ -79,6 +79,11 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
 
     width = int(metadata.get("width", 640))
     height = int(metadata.get("height", 360))
+    max_inference_fps = int(metadata.get("max_inference_fps", metadata.get("detection_max_inference_fps", 10)))
+    output_fps = int(metadata.get("output_fps", metadata.get("fps", 25)))
+
+    max_inference_fps = max(1, min(max_inference_fps, 60))
+    output_fps = max(1, min(output_fps, 60))
 
     rtsp_base = _mediamtx_rtsp_base()
     rtsp_url = f"{rtsp_base}/{stream.stream_name}"
@@ -95,6 +100,8 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
         accelerator=accelerator,
         width=width,
         height=height,
+        max_inference_fps=max_inference_fps,
+        output_fps=output_fps,
     )
 
 

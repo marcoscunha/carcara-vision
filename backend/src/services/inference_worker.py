@@ -4,10 +4,13 @@ Inference Worker — continuous per-stream AI background task.
 Each active stream with detection enabled gets one ``InferenceWorker``.
 The worker:
   1. Opens the stream's MediaMTX RTSP URL with OpenCV.
-  2. Reads frames in a non-blocking loop, throttled to ``max_inference_fps``.
-  3. Runs the YOLO engine (detect / pose / segment) via a persistent
-     ``ObjectDetectionService`` — *model loaded once, reused forever*.
-  4. Annotates the frame and pushes it to ``AnnotatedStreamWriter``.
+  2. Reads every source frame in a non-blocking loop at full source fps.
+  3. Runs the YOLO engine throttled to ``max_inference_fps`` (inference cadence)
+      and caches the latest detections for reuse on non-inferred frames.
+      A separate ``ObjectDetectionService`` — *model loaded once, reused forever*.
+  4. Overlays the cached detections on every frame and pushes all frames to
+      ``AnnotatedStreamWriter`` at ``output_fps`` — the annotated stream is
+      always smooth regardless of inference speed.
   5. Broadcasts detection JSON to all subscribed WebSocket clients.
   6. Evaluates alarm rules and emits alarm events when conditions match.
 
@@ -63,6 +66,7 @@ class WorkerConfig:
     width: int = 640
     height: int = 360
     max_inference_fps: int = 10  # cap inference to reduce CPU pressure
+    output_fps: int = 25  # annotated stream frame-rate (decoupled from inference rate)
 
 
 @dataclass
@@ -119,6 +123,9 @@ class InferenceWorker:
 
         # Annotated stream writer
         self._annotated_writer: AnnotatedStreamWriter | None = None
+
+        # Last known detections — reused for every frame between inference cycles
+        self._last_detections: list[dict[str, Any]] = []
 
         # Observer: set of asyncio.Queue for WebSocket subscribers
         self._subscribers: set[asyncio.Queue] = set()
@@ -207,16 +214,19 @@ class InferenceWorker:
     # ------------------------------------------------------------------ #
 
     def get_stats(self) -> dict[str, Any]:
-        fps = 0.0
+        throughput_fps = 0.0
         avg_ms = 0.0
         if self._frame_count > 0:
             avg_ms = self._total_inference_ms / self._frame_count
-            fps = 1000 / avg_ms if avg_ms > 0 else 0.0
+            throughput_fps = 1000 / avg_ms if avg_ms > 0 else 0.0
 
         intervals = list(self._event_intervals_ms)
         avg_event_interval_ms = sum(intervals) / len(intervals) if intervals else 0.0
         max_event_interval_ms = max(intervals) if intervals else 0.0
         min_event_interval_ms = min(intervals) if intervals else 0.0
+
+        cadence_fps = 1000 / avg_event_interval_ms if avg_event_interval_ms > 0 else throughput_fps
+        fps = min(cadence_fps, float(self._config.max_inference_fps))
 
         stage_timings = self._stage_timing_snapshot()
 
@@ -225,6 +235,9 @@ class InferenceWorker:
             "frames_processed": self._frame_count,
             "avg_inference_ms": round(avg_ms, 2),
             "fps": round(fps, 2),
+            "inference_throughput_fps": round(throughput_fps, 2),
+            "target_inference_fps": self._config.max_inference_fps,
+            "output_fps": self._config.output_fps,
             "avg_event_interval_ms": round(avg_event_interval_ms, 2),
             "min_event_interval_ms": round(min_event_interval_ms, 2),
             "max_event_interval_ms": round(max_event_interval_ms, 2),
@@ -235,6 +248,7 @@ class InferenceWorker:
             "dropped_events_total": self._dropped_events_total,
             "stage_timings_ms": stage_timings,
             "model": self._config.model_name,
+            "accelerator": self._config.accelerator,
             "task_type": self._config.task_type,
             "running": self.is_running(),
         }
@@ -252,7 +266,7 @@ class InferenceWorker:
                 mediamtx_rtsp_url=self._config.mediamtx_rtsp_base,
                 width=self._config.width,
                 height=self._config.height,
-                fps=self._config.max_inference_fps,
+                fps=self._config.output_fps,
             )
         except Exception as exc:
             logger.error("Worker init failed for stream %d: %s", self._config.stream_id, exc)
@@ -297,11 +311,6 @@ class InferenceWorker:
 
         while not self._stop_event.is_set():
             loop_started = time.perf_counter()
-            now = time.monotonic()
-            if now < next_inference_at:
-                self._stop_event.wait(timeout=min(next_inference_at - now, 0.02))
-                continue
-
             read_started = time.perf_counter()
             ret, frame = cap.read()
             read_ms = (time.perf_counter() - read_started) * 1000.0
@@ -323,30 +332,40 @@ class InferenceWorker:
             consecutive_read_failures = 0
             self._record_stage_timing("read", read_ms)
 
+            now = time.monotonic()
+            run_inference = now >= next_inference_at
+
             try:
-                inference_started = time.perf_counter()
-                detections, inference_ms = self._run_inference(frame)
-                inference_total_ms = (time.perf_counter() - inference_started) * 1000.0
+                if run_inference:
+                    inference_started = time.perf_counter()
+                    detections, inference_ms = self._run_inference(frame)
+                    inference_total_ms = (time.perf_counter() - inference_started) * 1000.0
+                    self._last_detections = detections
+                    self._record_stage_timing("inference_total", inference_total_ms)
+                    self._record_stage_timing("inference_engine", inference_ms)
+                    self._frame_count += 1
+                    self._total_inference_ms += inference_ms
+                    # Advance the inference cadence clock
+                    next_inference_at += min_interval
+                    if time.monotonic() > next_inference_at:
+                        missed_slots = int((time.monotonic() - next_inference_at) / min_interval) + 1
+                        self._missed_slots_total += missed_slots
+                        next_inference_at += missed_slots * min_interval
+                else:
+                    inference_ms = 0.0
             except Exception as exc:
                 logger.error("Inference error for stream %d: %s", self._config.stream_id, exc)
                 next_inference_at = time.monotonic() + min_interval
-                continue
+                inference_ms = 0.0
 
-            self._record_stage_timing("inference_total", inference_total_ms)
-            self._record_stage_timing("inference_engine", inference_ms)
-
-            # Accumulate stats
-            self._frame_count += 1
-            self._total_inference_ms += inference_ms
-
-            # Annotate/resize only when annotated output is enabled.
+            # Annotate every frame with the last known detections (keeps stream fluent).
             annotated = None
             annotate_ms = 0.0
             resize_ms = 0.0
             if self._annotated_writer:
                 annotate_started = time.perf_counter()
                 annotated = frame.copy()
-                self._annotate(annotated, detections)
+                self._annotate(annotated, self._last_detections)
                 annotate_ms = (time.perf_counter() - annotate_started) * 1000.0
 
                 if annotated.shape[1] != self._config.width or annotated.shape[0] != self._config.height:
@@ -361,7 +380,7 @@ class InferenceWorker:
             self._record_stage_timing("annotate", annotate_ms)
             self._record_stage_timing("resize", resize_ms)
 
-            # Push annotated frame to MediaMTX
+            # Push annotated frame to MediaMTX (every frame, not just inferred ones)
             publish_ms = 0.0
             if self._annotated_writer and annotated is not None:
                 try:
@@ -381,46 +400,45 @@ class InferenceWorker:
                     self._annotated_writer = None
             self._record_stage_timing("publish_annotated", publish_ms)
 
-            # Build event and broadcast
-            event = DetectionEvent(
-                stream_id=self._config.stream_id,
-                stream_name=self._config.stream_name,
-                timestamp=time.time(),
-                task_type=self._config.task_type,
-                model_name=self._config.model_name,
-                detections=detections,
-                inference_time_ms=inference_ms,
-                fps=1000 / inference_ms if inference_ms > 0 else 0.0,
-            )
-
-            event_tick = time.monotonic()
-            if self._last_event_time is not None:
-                self._event_intervals_ms.append((event_tick - self._last_event_time) * 1000.0)
-            self._last_event_time = event_tick
-
-            broadcast_started = time.perf_counter()
-            dropped_events = self._broadcast(event)
-            broadcast_ms = (time.perf_counter() - broadcast_started) * 1000.0
-            self._record_stage_timing("broadcast", broadcast_ms)
-            self._dropped_events_total += dropped_events
-
+            # Broadcast detection events and fire alarm callbacks only on inference frames.
+            broadcast_ms = 0.0
             alarm_ms = 0.0
-            if self._alarm_callback:
-                try:
-                    alarm_started = time.perf_counter()
-                    self._alarm_callback(event)
-                    alarm_ms = (time.perf_counter() - alarm_started) * 1000.0
-                except Exception as exc:
-                    logger.error("Alarm callback error for stream %d: %s", self._config.stream_id, exc)
+            if run_inference and inference_ms > 0.0:
+                event_fps = min(
+                    1000 / inference_ms if inference_ms > 0 else 0.0,
+                    float(self._config.max_inference_fps),
+                )
+                event = DetectionEvent(
+                    stream_id=self._config.stream_id,
+                    stream_name=self._config.stream_name,
+                    timestamp=time.time(),
+                    task_type=self._config.task_type,
+                    model_name=self._config.model_name,
+                    detections=self._last_detections,
+                    inference_time_ms=inference_ms,
+                    fps=event_fps,
+                )
+
+                event_tick = time.monotonic()
+                if self._last_event_time is not None:
+                    self._event_intervals_ms.append((event_tick - self._last_event_time) * 1000.0)
+                self._last_event_time = event_tick
+
+                broadcast_started = time.perf_counter()
+                dropped_events = self._broadcast(event)
+                broadcast_ms = (time.perf_counter() - broadcast_started) * 1000.0
+                self._dropped_events_total += dropped_events
+
+                if self._alarm_callback:
+                    try:
+                        alarm_started = time.perf_counter()
+                        self._alarm_callback(event)
+                        alarm_ms = (time.perf_counter() - alarm_started) * 1000.0
+                    except Exception as exc:
+                        logger.error("Alarm callback error for stream %d: %s", self._config.stream_id, exc)
+
+            self._record_stage_timing("broadcast", broadcast_ms)
             self._record_stage_timing("alarm_callback", alarm_ms)
-
-            now = time.monotonic()
-            next_inference_at += min_interval
-
-            if now > next_inference_at:
-                missed_slots = int((now - next_inference_at) / min_interval) + 1
-                self._missed_slots_total += missed_slots
-                next_inference_at += missed_slots * min_interval
 
             loop_total_ms = (time.perf_counter() - loop_started) * 1000.0
             self._record_stage_timing("loop_total", loop_total_ms)
@@ -533,11 +551,12 @@ class InferenceWorker:
         for stage, samples in self._stage_timings_ms.items():
             values = list(samples)
             if not values:
-                snapshot[stage] = {"avg": 0.0, "max": 0.0, "last": 0.0}
+                snapshot[stage] = {"avg": 0.0, "min": 0.0, "max": 0.0, "last": 0.0}
                 continue
 
             snapshot[stage] = {
                 "avg": round(sum(values) / len(values), 2),
+                "min": round(min(values), 2),
                 "max": round(max(values), 2),
                 "last": round(values[-1], 2),
             }

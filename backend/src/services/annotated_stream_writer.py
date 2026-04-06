@@ -19,8 +19,9 @@ Architecture::
         ▼
     MediaMTX  →  WebRTC / HLS / RTSP to browser
 
-The writer starts FFmpeg lazily on the first ``push_frame`` call and
-restarts it automatically if the process dies.
+The writer keeps only the latest frame in memory and sends frames to FFmpeg
+from a dedicated background thread. If encoding or RTSP publishing falls
+behind, older frames are dropped instead of blocking the inference thread.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -69,7 +71,11 @@ class AnnotatedStreamWriter:
 
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
-        self._started = False
+        self._process_lock = threading.Lock()
+        self._frame_ready = threading.Condition(self._lock)
+        self._latest_frame: np.ndarray | None = None
+        self._worker_stop = threading.Event()
+        self._worker_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -81,24 +87,30 @@ class AnnotatedStreamWriter:
 
     def push_frame(self, frame: np.ndarray) -> None:
         """
-        Write a single BGR frame to the FFmpeg input pipe.
+        Publish the latest BGR frame without blocking the caller.
 
-        Silently drops the frame if FFmpeg is not running; the next call
-        will restart the process.
+        If the output path falls behind, older queued frames are replaced by
+        the newest frame so the stream stays near real time.
         """
         with self._lock:
-            self._ensure_process_running()
-            if self._process is None or self._process.stdin is None:
-                return
-            try:
-                self._process.stdin.write(frame.tobytes())
-            except BrokenPipeError:
-                logger.warning("FFmpeg pipe broken for '%s', restarting", self._stream_name)
-                self._terminate_process()
+            self._ensure_worker_running()
+            self._latest_frame = frame
+            self._frame_ready.notify()
 
     def stop(self) -> None:
         """Cleanly terminate the FFmpeg child process."""
         with self._lock:
+            self._worker_stop.set()
+            self._frame_ready.notify_all()
+
+        if self._worker_thread and self._worker_thread.is_alive():
+            self._worker_thread.join(timeout=3)
+
+        with self._lock:
+            self._latest_frame = None
+            self._worker_thread = None
+
+        with self._process_lock:
             self._terminate_process()
         logger.info("AnnotatedStreamWriter stopped for '%s'", self._stream_name)
 
@@ -106,8 +118,20 @@ class AnnotatedStreamWriter:
     # Private helpers
     # ------------------------------------------------------------------ #
 
+    def _ensure_worker_running(self) -> None:
+        if self._worker_thread is not None and self._worker_thread.is_alive():
+            return
+
+        self._worker_stop.clear()
+        self._worker_thread = threading.Thread(
+            target=self._writer_loop,
+            name=f"annotated-stream-writer-{self._stream_name}",
+            daemon=True,
+        )
+        self._worker_thread.start()
+
     def _ensure_process_running(self) -> None:
-        """Start or restart FFmpeg if it is not running (called under lock)."""
+        """Start or restart FFmpeg if it is not running (called under process lock)."""
         if self._process is not None and self._process.poll() is None:
             return  # still alive
 
@@ -120,7 +144,49 @@ class AnnotatedStreamWriter:
             )
 
         self._process = self._spawn_ffmpeg()
-        self._started = True
+
+    def _writer_loop(self) -> None:
+        frame_interval = 1.0 / max(self._fps, 1)
+        next_frame_at = time.monotonic()
+
+        while not self._worker_stop.is_set():
+            frame = self._wait_for_frame(timeout=frame_interval)
+            if frame is None:
+                continue
+
+            now = time.monotonic()
+            if now < next_frame_at:
+                if self._worker_stop.wait(timeout=next_frame_at - now):
+                    break
+
+            if not self._write_frame(frame):
+                self._worker_stop.wait(timeout=0.1)
+
+            next_frame_at = max(next_frame_at + frame_interval, time.monotonic())
+
+    def _wait_for_frame(self, timeout: float) -> np.ndarray | None:
+        with self._lock:
+            if self._latest_frame is None and not self._worker_stop.is_set():
+                self._frame_ready.wait(timeout=timeout)
+            return self._latest_frame
+
+    def _write_frame(self, frame: np.ndarray) -> bool:
+        with self._process_lock:
+            self._ensure_process_running()
+            if self._process is None or self._process.stdin is None:
+                return False
+
+            try:
+                self._process.stdin.write(frame.tobytes())
+                return True
+            except BrokenPipeError:
+                logger.warning("FFmpeg pipe broken for '%s', restarting", self._stream_name)
+                self._terminate_process()
+                return False
+            except Exception as exc:
+                logger.warning("FFmpeg write failed for '%s': %s", self._stream_name, exc)
+                self._terminate_process()
+                return False
 
     def _spawn_ffmpeg(self) -> subprocess.Popen:
         """Spawn the FFmpeg child process."""
@@ -173,7 +239,7 @@ class AnnotatedStreamWriter:
         )
 
     def _terminate_process(self) -> None:
-        """Terminate FFmpeg and close the stdin pipe."""
+        """Terminate FFmpeg and close the stdin pipe (called under process lock)."""
         if self._process is None:
             return
         try:
