@@ -5,9 +5,9 @@ Each active stream with detection enabled gets one ``InferenceWorker``.
 The worker:
   1. Opens the stream's MediaMTX RTSP URL with OpenCV.
   2. Reads every source frame in a non-blocking loop at full source fps.
-  3. Runs the YOLO engine throttled to ``max_inference_fps`` (inference cadence)
+  3. Runs the SDK pipeline throttled to ``max_inference_fps`` (inference cadence)
       and caches the latest detections for reuse on non-inferred frames.
-      A separate ``ObjectDetectionService`` — *model loaded once, reused forever*.
+      The pipeline is loaded once and reused for the worker lifetime.
   4. Overlays the cached detections on every frame and pushes all frames to
       ``AnnotatedStreamWriter`` at ``output_fps`` — the annotated stream is
       always smooth regardless of inference speed.
@@ -41,11 +41,15 @@ if TYPE_CHECKING:
 
 from ..core.config import settings
 from ..ml.annotator import FrameAnnotator
+from ..ml.base import HardwareAccelerator
 from ..ml.registry import TASK_TYPE_DETECT
 from ..ml.registry import TASK_TYPE_POSE
 from ..ml.registry import TASK_TYPE_SEGMENT
+from ..ml.sdk import BaseTaskPipeline
+from ..ml.sdk import Detection
+from ..ml.sdk import DetectionResult
+from ..ml.sdk import pipeline as build_sdk_pipeline
 from ..services.annotated_stream_writer import AnnotatedStreamWriter
-from ..services.object_detection import ObjectDetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,9 @@ class WorkerConfig:
     mediamtx_rtsp_base: str  # e.g. "rtsp://mediamtx:8554"
     model_name: str
     task_type: str = TASK_TYPE_DETECT
+    runtime: str = "auto"
+    dtype: str = "auto"
+    providers: list[str] | None = None
     confidence: float = 0.5
     classes_filter: list[int] | None = None
     accelerator: str = "cpu"
@@ -118,8 +125,9 @@ class InferenceWorker:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
-        # Persistent detector — loaded once, never recreated per-request
-        self._detector: ObjectDetectionService | None = None
+        # Persistent pipeline + backing engine handle (for track/pose/segment parsing)
+        self._pipeline: BaseTaskPipeline | None = None
+        self._engine: Any | None = None
 
         # Annotated stream writer
         self._annotated_writer: AnnotatedStreamWriter | None = None
@@ -186,9 +194,10 @@ class InferenceWorker:
         if self._annotated_writer:
             self._annotated_writer.stop()
             self._annotated_writer = None
-        if self._detector:
-            self._detector.engine.unload() if hasattr(self._detector, "engine") else None
-            self._detector = None
+        if self._pipeline:
+            self._pipeline.close()
+            self._pipeline = None
+            self._engine = None
         logger.info("InferenceWorker stopped for stream '%s'", self._config.stream_name)
 
     def is_running(self) -> bool:
@@ -249,6 +258,9 @@ class InferenceWorker:
             "stage_timings_ms": stage_timings,
             "model": self._config.model_name,
             "accelerator": self._config.accelerator,
+            "runtime": self._config.runtime,
+            "dtype": self._config.dtype,
+            "providers": self._config.providers or [],
             "task_type": self._config.task_type,
             "running": self.is_running(),
         }
@@ -260,7 +272,8 @@ class InferenceWorker:
     def _run_loop(self) -> None:
         """Entry point for the worker thread."""
         try:
-            self._detector = self._build_detector()
+            self._pipeline = self._build_pipeline()
+            self._engine = getattr(self._pipeline, "_engine", None)
             self._annotated_writer = AnnotatedStreamWriter(
                 stream_name=self._config.stream_name,
                 mediamtx_rtsp_url=self._config.mediamtx_rtsp_base,
@@ -453,22 +466,48 @@ class InferenceWorker:
 
         Selects the right engine call based on task_type.
         """
-        assert self._detector is not None
+        assert self._pipeline is not None
 
-        if self._config.task_type == TASK_TYPE_POSE:
-            result = self._detector.engine.infer(frame, classes=self._config.classes_filter)
+        if self._config.task_type == TASK_TYPE_POSE and self._engine is not None:
+            result = self._engine.infer(frame, classes=self._config.classes_filter)
             detections = self._parse_pose_result(result)
             return detections, result.inference_time_ms
 
-        if self._config.task_type == TASK_TYPE_SEGMENT:
-            result = self._detector.engine.infer(frame, classes=self._config.classes_filter)
+        if self._config.task_type == TASK_TYPE_SEGMENT and self._engine is not None:
+            result = self._engine.infer(frame, classes=self._config.classes_filter)
             detections = self._parse_segment_result(result)
             return detections, result.inference_time_ms
 
-        # Default: TASK_TYPE_DETECT with tracking
-        result = self._detector.engine.track(frame, persist=True)
-        detections = result.detections
-        return detections, result.inference_time_ms
+        # Default: TASK_TYPE_DETECT (prefer engine tracking if available).
+        if self._engine is not None and hasattr(self._engine, "track"):
+            result = self._engine.track(frame, persist=True)
+            return result.detections, result.inference_time_ms
+
+        result: DetectionResult = self._pipeline(
+            frame,
+            classes=self._config.classes_filter,
+            confidence=self._config.confidence,
+        )
+        detections = [self._sdk_detection_to_legacy(det) for det in result.detections]
+        return detections, result.latency_ms
+
+    @staticmethod
+    def _sdk_detection_to_legacy(det: Detection) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "bbox": det.bbox.to_list(),
+            "confidence": det.score,
+            "class_name": det.label,
+            "class_id": det.class_id,
+        }
+        if det.track_id is not None:
+            payload["track_id"] = det.track_id
+        if det.keypoints is not None:
+            payload["keypoints"] = det.keypoints
+        if det.mask is not None:
+            payload["mask"] = det.mask
+        if det.extra:
+            payload.update(det.extra)
+        return payload
 
     @staticmethod
     def _parse_pose_result(result: Any) -> list[dict[str, Any]]:
@@ -566,30 +605,44 @@ class InferenceWorker:
     # Builder helpers
     # ------------------------------------------------------------------ #
 
-    def _build_detector(self) -> ObjectDetectionService:
-        """Build and warm-up the ObjectDetectionService for this worker."""
-        from ..ml.base import HardwareAccelerator
+    def _build_pipeline(self) -> BaseTaskPipeline:
+        """Build and warm-up the SDK pipeline for this worker."""
 
-        accelerator = None
+        task_map = {
+            TASK_TYPE_DETECT: "object-detection",
+            TASK_TYPE_POSE: "pose-estimation",
+            TASK_TYPE_SEGMENT: "instance-segmentation",
+        }
+        task = task_map.get(self._config.task_type, "object-detection")
+
+        accelerator = HardwareAccelerator.CPU
         try:
             accelerator = HardwareAccelerator(self._config.accelerator)
-        except ValueError:
-            accelerator = HardwareAccelerator.CPU
+        except Exception:
+            pass
 
         try:
-            detector = ObjectDetectionService(
-                model_name=self._config.model_name,
-                accelerator=accelerator,
+            sdk_pipe = build_sdk_pipeline(
+                task=task,
+                model=self._config.model_name,
+                device=accelerator.value,
+                runtime=self._config.runtime,
+                dtype=self._config.dtype,
+                providers=self._config.providers,
+                confidence=self._config.confidence,
             )
-            detector.set_confidence_threshold(self._config.confidence)
+
+            info = sdk_pipe.info()
             logger.info(
-                "Loaded model '%s' (task=%s, accel=%s) for stream %d",
+                "Loaded model '%s' (task=%s, accel=%s, runtime=%s, dtype=%s) for stream %d",
                 self._config.model_name,
                 self._config.task_type,
-                self._config.accelerator,
+                info.get("accelerator", self._config.accelerator),
+                info.get("runtime", self._config.runtime),
+                info.get("dtype", self._config.dtype),
                 self._config.stream_id,
             )
-            return detector
+            return sdk_pipe
         except Exception as exc:
             fallback_model = settings.DEFAULT_MODEL
             logger.warning(
@@ -599,9 +652,11 @@ class InferenceWorker:
                 exc,
                 fallback_model,
             )
-            detector = ObjectDetectionService(
-                model_name=fallback_model,
-                accelerator=accelerator,
+            return build_sdk_pipeline(
+                task=task,
+                model=fallback_model,
+                device=accelerator.value,
+                runtime="auto",
+                dtype="auto",
+                confidence=self._config.confidence,
             )
-            detector.set_confidence_threshold(self._config.confidence)
-            return detector

@@ -73,6 +73,11 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
     if model_info and model_info.path:
         model_name = model_info.path
     task_type = metadata.get("detection_task_type") or getattr(rt, "task_type", TASK_TYPE_DETECT)
+    runtime = metadata.get("detection_runtime", "auto")
+    dtype = metadata.get("detection_dtype", "auto")
+    providers = metadata.get("detection_providers")
+    if providers is not None and not isinstance(providers, list):
+        providers = None
     confidence = float(metadata.get("detection_confidence", 0.5))
     classes_filter = metadata.get("detection_classes") or None
     accelerator = rt.accelerator.value if hasattr(rt.accelerator, "value") else str(rt.accelerator)
@@ -95,6 +100,9 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
         mediamtx_rtsp_base=rtsp_base,
         model_name=model_name,
         task_type=task_type,
+        runtime=runtime,
+        dtype=dtype,
+        providers=providers,
         confidence=confidence,
         classes_filter=classes_filter,
         accelerator=accelerator,
