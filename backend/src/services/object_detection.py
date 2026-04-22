@@ -11,10 +11,15 @@ from typing import Any
 import numpy as np
 
 from ..core.config import settings
-from ..ml import InferenceEngineFactory
 from ..ml.accelerators.detector import HardwareDetector
 from ..ml.base import HardwareAccelerator
 from ..ml.engines.yolo import YOLOEngine
+from ..ml.sdk import BaseTaskPipeline
+from ..ml.sdk import Detection
+from ..ml.sdk import DetectionBatchResult
+from ..ml.sdk import DetectionResult
+from ..ml.sdk import VLMResult
+from ..ml.sdk import pipeline as build_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +61,8 @@ class ObjectDetectionService:
         else:
             self._accelerator = accelerator
 
-        # Initialize engine
+        # Initialize SDK pipeline and compatibility engine handle
+        self._pipeline: BaseTaskPipeline | None = None
         self._engine: YOLOEngine | None = None
         self._initialize_engine()
 
@@ -89,33 +95,42 @@ class ObjectDetectionService:
         return HardwareAccelerator.CPU
 
     def _initialize_engine(self) -> None:
-        """Initialize the inference engine."""
+        """Initialize the SDK pipeline (and expose engine for compatibility)."""
         logger.info(f"Initializing {self.model_type} engine with {self.model_name}")
         logger.info(f"Target accelerator: {self._accelerator}")
 
         try:
             if self.model_type == "yolo":
-                self._engine = InferenceEngineFactory.create_yolo(
-                    model_path=self.model_name,
+                self._pipeline = build_pipeline(
+                    task="object-detection",
+                    model=self.model_name,
+                    device=self._accelerator.value,
                     confidence=self.confidence_threshold,
-                    accelerator=self._accelerator,
+                    warmup_iterations=2,
                 )
             elif self.model_type == "vlm":
-                self._engine = InferenceEngineFactory.create_vlm(
-                    model_name=self.model_name,
-                    backend=getattr(settings, "VLM_BACKEND", "ollama"),
+                backend = getattr(settings, "VLM_BACKEND", "ollama")
+                runtime = {
+                    "openai": "openai_vlm",
+                    "ollama": "ollama_vlm",
+                    "local": "local_vlm",
+                }.get(backend, "ollama_vlm")
+
+                self._pipeline = build_pipeline(
+                    task="image-text-to-text",
+                    model=self.model_name,
+                    device=self._accelerator.value,
+                    runtime=runtime,
+                    warmup_iterations=1,
                 )
             else:
                 raise ValueError(f"Unknown model type: {self.model_type}")
 
-            # Load the model
-            if not self._engine.load():
-                raise RuntimeError(f"Failed to load model: {self.model_name}")
+            self._engine = getattr(self._pipeline, "_engine", None)
+            if self._engine is None:
+                raise RuntimeError("SDK pipeline did not expose a backing engine")
 
-            # Warmup
-            self._engine.warmup(iterations=2)
-
-            logger.info(f"Engine initialized on {self._engine.current_accelerator}")
+            logger.info("Engine initialized on %s", self.device)
 
         except Exception as e:
             logger.error(f"Failed to initialize engine: {e}")
@@ -138,7 +153,19 @@ class ObjectDetectionService:
     @property
     def is_loaded(self) -> bool:
         """Check if engine is loaded."""
-        return self._engine is not None and self._engine.is_loaded
+        return self._pipeline is not None and self._engine is not None and self._engine.is_loaded
+
+    @staticmethod
+    def _to_legacy_detection(det: Detection) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "bbox": det.bbox.to_list(),
+            "confidence": det.score,
+            "class_name": det.label,
+            "class_id": det.class_id,
+        }
+        if det.track_id is not None:
+            payload["track_id"] = det.track_id
+        return payload
 
     def detect(
         self,
@@ -170,18 +197,26 @@ class ObjectDetectionService:
             detection_frame = frame[y : y + h, x : x + w]
             roi_offset = (x, y)
 
-        # Run inference
-        result = self._engine.infer(detection_frame, classes=classes)
+        if self._pipeline is None or not callable(self._pipeline):
+            raise RuntimeError("Object detection pipeline is not initialized")
+
+        # Run inference through SDK pipeline
+        result: DetectionResult = self._pipeline(
+            detection_frame,
+            confidence=self.confidence_threshold,
+            classes=classes,
+        )
 
         # Update statistics
         self._inference_count += 1
-        self._total_inference_time += result.inference_time_ms
-        self._min_inference_time = min(self._min_inference_time, result.inference_time_ms)
-        self._max_inference_time = max(self._max_inference_time, result.inference_time_ms)
+        self._total_inference_time += result.latency_ms
+        self._min_inference_time = min(self._min_inference_time, result.latency_ms)
+        self._max_inference_time = max(self._max_inference_time, result.latency_ms)
 
         # Adjust bounding boxes for ROI offset
-        detections = []
-        for det in result.detections:
+        detections: list[dict[str, Any]] = []
+        for sdk_det in result.detections:
+            det = self._to_legacy_detection(sdk_det)
             if roi_offset != (0, 0):
                 bbox = det["bbox"]
                 det["bbox"] = [
@@ -212,15 +247,24 @@ class ObjectDetectionService:
         if not self.is_loaded:
             raise RuntimeError("Model not loaded")
 
-        if isinstance(self._engine, YOLOEngine):
-            results = self._engine.infer_batch(frames, classes=classes)
-            self._inference_count += len(frames)
-            for r in results:
-                self._total_inference_time += r.inference_time_ms
-            return [r.detections for r in results]
-        else:
-            # Fallback to sequential for non-batched engines
+        if self._pipeline is None or not hasattr(self._pipeline, "batch"):
             return [self.detect(f, classes=classes) for f in frames]
+
+        batch_result = self._pipeline.batch(
+            frames,
+            confidence=self.confidence_threshold,
+            classes=classes,
+        )
+        if not isinstance(batch_result, DetectionBatchResult):
+            return [self.detect(f, classes=classes) for f in frames]
+
+        self._inference_count += len(batch_result.items)
+        self._total_inference_time += batch_result.total_latency_ms
+        for item in batch_result.items:
+            self._min_inference_time = min(self._min_inference_time, item.latency_ms)
+            self._max_inference_time = max(self._max_inference_time, item.latency_ms)
+
+        return [[self._to_legacy_detection(det) for det in item.detections] for item in batch_result.items]
 
     def analyze_image(
         self,
@@ -237,20 +281,30 @@ class ObjectDetectionService:
         Returns:
             Text analysis from VLM
         """
-        from ..ml.engines.vlm import VLMEngine
+        if self.model_type == "vlm" and self._pipeline is not None:
+            result: VLMResult = self._pipeline(frame, prompt=prompt)
+            return result.text
 
-        if not isinstance(self._engine, VLMEngine):
-            # Create a temporary VLM engine for analysis
-            vlm = InferenceEngineFactory.create_vlm(
-                model_name=getattr(settings, "VLM_MODEL", "llava"),
-            )
-            vlm.load()
-            result = vlm.infer(frame, prompt=prompt)
-            vlm.unload()
-            return result.text_response or ""
+        # Fallback: create a transient VLM SDK pipeline for analysis.
+        vlm_model = getattr(settings, "VLM_MODEL", "llava")
+        backend = getattr(settings, "VLM_BACKEND", "ollama")
+        runtime = {
+            "openai": "openai_vlm",
+            "ollama": "ollama_vlm",
+            "local": "local_vlm",
+        }.get(backend, "ollama_vlm")
 
-        result = self._engine.infer(frame, prompt=prompt)
-        return result.text_response or ""
+        temp = build_pipeline(
+            task="image-text-to-text",
+            model=vlm_model,
+            device=self._accelerator.value,
+            runtime=runtime,
+        )
+        try:
+            result: VLMResult = temp(frame, prompt=prompt)
+            return result.text
+        finally:
+            temp.close()
 
     def track(
         self,
@@ -287,9 +341,11 @@ class ObjectDetectionService:
         """
         logger.info(f"Switching model to {model_name}")
 
-        # Unload current engine
-        if self._engine:
-            self._engine.unload()
+        # Unload current pipeline
+        if self._pipeline:
+            self._pipeline.close()
+        self._pipeline = None
+        self._engine = None
 
         # Update settings
         self.model_name = model_name
@@ -305,7 +361,7 @@ class ObjectDetectionService:
     def set_confidence_threshold(self, threshold: float) -> None:
         """Set confidence threshold for detections."""
         self.confidence_threshold = threshold
-        if self._engine:
+        if self._engine and hasattr(self._engine, "config"):
             self._engine.config.confidence_threshold = threshold
 
     def get_available_models(self) -> list[str]:
@@ -403,9 +459,9 @@ class ObjectDetectionService:
 
     def __del__(self):
         """Cleanup on destruction."""
-        if self._engine:
+        if self._pipeline:
             try:
-                self._engine.unload()
+                self._pipeline.close()
             except Exception:
                 pass
 

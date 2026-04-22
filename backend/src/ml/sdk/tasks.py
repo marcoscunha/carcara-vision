@@ -5,13 +5,10 @@ Each adapter owns:
   - ``__call__`` for single-input inference
   - ``batch`` for batched input
   - ``stream`` for iterator/generator input
+  - ``benchmark`` for throughput/latency measurement
 
 Adapters translate between the engine's InferenceResult and the SDK's
-stable output types (DetectionResult, VLMResult, …).
-
-PR 1 note: The adapters delegate to real engines.  The internal
-``_infer_one`` implementation is kept minimal and will be filled out in
-PR 2 (resolver + engine wiring for object-detection).
+stable output types (DetectionResult, VLMResult, ...).
 """
 
 from __future__ import annotations
@@ -126,6 +123,43 @@ class BaseTaskPipeline(ABC):
         for _ in range(iterations):
             self._infer_one(dummy)
 
+    def benchmark(
+        self,
+        samples: int = 100,
+        frame_size: tuple[int, int] = (640, 640),
+        warmup: int = 5,
+    ) -> dict[str, float]:
+        """
+        Measure throughput and latency over *samples* synthetic frames.
+
+        Returns a dict with keys:
+        ``samples``, ``warmup``, ``total_ms``, ``mean_ms``, ``min_ms``,
+        ``max_ms``, ``throughput_fps``.
+        """
+        dummy = np.zeros((*frame_size, 3), dtype=np.uint8)
+
+        # warmup pass (not counted)
+        for _ in range(warmup):
+            self._infer_one(dummy)
+
+        latencies: list[float] = []
+        t_total_start = time.perf_counter()
+        for _ in range(samples):
+            t0 = time.perf_counter()
+            self._infer_one(dummy)
+            latencies.append((time.perf_counter() - t0) * 1000)
+        total_ms = (time.perf_counter() - t_total_start) * 1000
+
+        return {
+            "samples": samples,
+            "warmup": warmup,
+            "total_ms": round(total_ms, 3),
+            "mean_ms": round(sum(latencies) / len(latencies), 3),
+            "min_ms": round(min(latencies), 3),
+            "max_ms": round(max(latencies), 3),
+            "throughput_fps": round(samples / max(total_ms / 1000, 1e-9), 2),
+        }
+
     def info(self) -> dict[str, Any]:
         """Return a summary of the resolved plan (runtime, device, dtype, …)."""
         return {
@@ -177,9 +211,10 @@ class ObjectDetectionPipeline(BaseTaskPipeline):
 
     def _infer_one(self, frame: Any, **kwargs: Any) -> DetectionResult:
         confidence = kwargs.get("confidence", self._config.confidence)
+        engine_kwargs = {k: v for k, v in kwargs.items() if k != "confidence"}
 
         t0 = time.perf_counter()
-        raw: InferenceResult = self._engine.infer(frame)
+        raw: InferenceResult = self._engine.infer(frame, **engine_kwargs)
         latency_ms = (time.perf_counter() - t0) * 1000
 
         detections = [
