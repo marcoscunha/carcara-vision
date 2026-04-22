@@ -90,6 +90,10 @@ Everybody is invited and welcome to contribute to Carcara NVC! There's a lot to 
 - [x] Hardware accelerator abstraction layer
 - [x] VLM integration (Ollama, OpenAI)
 - [x] Frontend basic structure (React)
+- [x] Alarms and ROI management
+- [x] Per-stream inference workers with real-time WebSocket events
+- [x] Hardware auto-detection (CPU, platform, NVIDIA/Hailo/Coral/etc.)
+- [x] Model registry with on-demand download
 - [ ] Hardware acceleration validation on real devices
 - [ ] End-to-end testing on Jetson devices
 - [ ] End-to-end testing on Raspberry Pi
