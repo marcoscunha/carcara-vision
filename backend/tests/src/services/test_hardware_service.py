@@ -280,7 +280,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
         self.assertEqual(len(cpu_accelerators), 1)
         self.assertEqual(cpu_accelerators[0].status, AcceleratorStatus.AVAILABLE)
 
-    @patch("subprocess.run")
+    @patch("src.services.hardware.subprocess.run")
     def test_detect_nvidia_gpu_available(self, mock_run):
         """Test NVIDIA GPU detection when available."""
         mock_run.return_value = MagicMock(
@@ -295,7 +295,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
         self.assertEqual(result[0].status, AcceleratorStatus.AVAILABLE)
         self.assertIn("RTX 3080", result[0].name)
 
-    @patch("subprocess.run")
+    @patch("src.services.hardware.subprocess.run")
     def test_detect_nvidia_gpu_not_available(self, mock_run):
         """Test NVIDIA GPU detection when nvidia-smi fails."""
         mock_run.side_effect = FileNotFoundError()
@@ -304,7 +304,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
 
         self.assertEqual(len(result), 0)
 
-    @patch("subprocess.run")
+    @patch("src.services.hardware.subprocess.run")
     def test_detect_hailo_available(self, mock_run):
         """Test Hailo detection when available."""
         mock_run.return_value = MagicMock(returncode=0, stdout="Hailo-8\nFirmware Version: 4.17.0")
@@ -315,7 +315,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
         self.assertEqual(result[0].type, AcceleratorType.HAILO_8)
         self.assertEqual(result[0].status, AcceleratorStatus.AVAILABLE)
 
-    @patch("subprocess.run")
+    @patch("src.services.hardware.subprocess.run")
     def test_detect_hailo_8l(self, mock_run):
         """Test Hailo-8L detection."""
         mock_run.return_value = MagicMock(returncode=0, stdout="Hailo-8L\nFirmware Version: 4.17.0")
@@ -325,7 +325,7 @@ class TestAcceleratorDetection(TestHardwareDetectionService):
         self.assertGreater(len(result), 0)
         self.assertEqual(result[0].type, AcceleratorType.HAILO_8L)
 
-    @patch("subprocess.run")
+    @patch("src.services.hardware.subprocess.run")
     def test_detect_coral_usb(self, mock_run):
         """Test Google Coral USB detection."""
 
@@ -549,12 +549,12 @@ class TestEdgeCases(TestHardwareDetectionService):
 
         self.assertIsInstance(result, CPUInfo)
 
-    @patch("subprocess.run")
+    @patch("src.services.hardware.subprocess.run")
     def test_handles_subprocess_timeout(self, mock_run):
         """Test that subprocess timeouts are handled gracefully."""
-        import subprocess
+        from subprocess import TimeoutExpired
 
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=5)
+        mock_run.side_effect = TimeoutExpired(cmd="test", timeout=5)
 
         # Should not raise
         result = self.service._detect_nvidia_gpu()

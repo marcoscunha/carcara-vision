@@ -734,38 +734,62 @@ async def get_global_realtime_metrics(
     current_user: AuthenticatedUser,
     db: Session = Depends(get_db),
 ):
-    """Get realtime global and per-stream model inference metrics."""
-    active_streams = db.query(Stream).filter(Stream.status == "active").all()
+    """Get realtime global and per-stream model inference metrics from active workers."""
+    worker_stats = inference_worker_manager.list_stats()
+    if not worker_stats:
+        return {
+            "global": {
+                "samples": 0,
+                "avg_inference_time_ms": 0.0,
+                "min_inference_time_ms": 0.0,
+                "max_inference_time_ms": 0.0,
+                "fps": 0.0,
+            },
+            "per_stream": {},
+        }
 
-    for stream in active_streams:
-        detection_settings = _get_detection_settings(stream)
-        if not detection_settings["enabled"]:
-            continue
-        if not stream.stream_name:
-            continue
+    per_stream: dict[int, dict] = {}
+    all_avg_ms: list[float] = []
 
-        camera = db.query(Camera).filter(Camera.id == stream.camera_id).first()
-        if camera is None:
-            continue
+    for stats in worker_stats:
+        stage_inference = (stats.get("stage_timings_ms") or {}).get("inference_engine", {})
+        avg_ms = float(stats.get("avg_inference_ms", 0.0) or 0.0)
+        min_ms = float(stage_inference.get("min", avg_ms) or 0.0)
+        max_ms = float(stage_inference.get("max", avg_ms) or 0.0)
 
-        mediamtx_host = _get_internal_mediamtx_host()
-        rtsp_stream_url = f"rtsp://{mediamtx_host}:{gstreamer_service.rtsp_port}/{stream.stream_name}"
+        stream_id = int(stats["stream_id"])
+        per_stream[stream_id] = {
+            "stream_id": stream_id,
+            "samples": int(stats.get("frames_processed", 0) or 0),
+            "avg_inference_time_ms": round(avg_ms, 2),
+            "min_inference_time_ms": round(min_ms, 2),
+            "max_inference_time_ms": round(max_ms, 2),
+            "fps": round(float(stats.get("fps", 0.0) or 0.0), 2),
+            "last_inference_time_ms": round(float(stage_inference.get("last", avg_ms) or 0.0), 2),
+            "model_name": stats.get("model"),
+            "accelerator": stats.get("accelerator"),
+        }
+        if avg_ms > 0:
+            all_avg_ms.append(avg_ms)
 
-        try:
-            _detect_stream_frame(
-                stream,
-                camera,
-                capture_source_override={
-                    "camera_type": "rtsp",
-                    "stream_url": rtsp_stream_url,
-                    "device_id": None,
-                    "device_path": None,
-                },
-            )
-        except HTTPException as exc:
-            if exc.status_code != 400:
-                logger.warning(f"Failed to update realtime inference metrics for stream {stream.id}: {exc}")
-        except Exception as exc:
-            logger.warning(f"Failed to update realtime inference metrics for stream {stream.id}: {exc}")
+    if all_avg_ms:
+        global_avg_ms = sum(all_avg_ms) / len(all_avg_ms)
+        global_min_ms = min(all_avg_ms)
+        global_max_ms = max(all_avg_ms)
+        global_fps = round(1000 / global_avg_ms, 2) if global_avg_ms > 0 else 0.0
+    else:
+        global_avg_ms = 0.0
+        global_min_ms = 0.0
+        global_max_ms = 0.0
+        global_fps = 0.0
 
-    return inference_metrics_service.snapshot()
+    return {
+        "global": {
+            "samples": sum(int(stats.get("frames_processed", 0) or 0) for stats in worker_stats),
+            "avg_inference_time_ms": round(global_avg_ms, 2),
+            "min_inference_time_ms": round(global_min_ms, 2),
+            "max_inference_time_ms": round(global_max_ms, 2),
+            "fps": global_fps,
+        },
+        "per_stream": per_stream,
+    }
