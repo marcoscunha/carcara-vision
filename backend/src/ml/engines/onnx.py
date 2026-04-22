@@ -16,7 +16,10 @@ from typing import Any
 import cv2
 import numpy as np
 
-from ..base import BaseInferenceEngine, HardwareAccelerator, InferenceResult, ModelConfig
+from ..base import BaseInferenceEngine
+from ..base import HardwareAccelerator
+from ..base import InferenceResult
+from ..base import ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +115,14 @@ class ONNXEngine(BaseInferenceEngine):
         import onnxruntime as ort
 
         available = ort.get_available_providers()
+
+        explicit = self.config.options.get("providers")
+        if isinstance(explicit, list) and explicit:
+            providers = [p for p in explicit if p in available or p == "CPUExecutionProvider"]
+            if "CPUExecutionProvider" not in providers:
+                providers.append("CPUExecutionProvider")
+            return providers
+
         providers = []
 
         # Try preferred first

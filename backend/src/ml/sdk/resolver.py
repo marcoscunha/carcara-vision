@@ -57,8 +57,17 @@ _DEVICE_TO_ACCELERATOR: dict[str, HardwareAccelerator] = {
 _RUNTIME_REQUIRES_IMPORT: dict[str, str] = {
     "tensorrt": "tensorrt",
     "onnxruntime": "onnxruntime",
+    "openai_vlm": "openai",
     "ollama_vlm": "ollama",
     "local_vlm": "transformers",
+}
+
+_VLM_RUNTIMES: set[str] = {"openai_vlm", "ollama_vlm", "local_vlm"}
+_VISION_RUNTIMES: set[str] = {"yolo", "onnxruntime", "tensorrt"}
+_VALID_ORT_PROVIDERS: set[str] = {
+    "CPUExecutionProvider",
+    "CUDAExecutionProvider",
+    "TensorrtExecutionProvider",
 }
 
 # dtype -> ort dtype string (informational only at this layer)
@@ -140,12 +149,18 @@ def resolve(config: PipelineConfig) -> ResolvedPlan:
     RuntimeNotSupportedError
         When the explicitly requested runtime is not installed.
     """
-    model_path = _resolve_model_path(config.model)
+    model_path = _resolve_model_path(config.model, config.task)
     model_type = _resolve_model_type(config.task, model_path)
     accelerator = _resolve_accelerator(config.device)
-    runtime = _resolve_runtime(config.runtime, model_path, accelerator)
+    runtime = _resolve_runtime(config.task, config.runtime, model_path, accelerator)
     dtype = _resolve_dtype(config.dtype, runtime, accelerator)
-    providers = _resolve_ort_providers(runtime, accelerator)
+    providers = _resolve_ort_providers(runtime, accelerator, config.providers)
+
+    extra: dict[str, Any] = {}
+    if providers:
+        extra["providers"] = providers
+    if runtime in _VLM_RUNTIMES:
+        extra["vlm_backend"] = runtime.removesuffix("_vlm")
 
     plan = ResolvedPlan(
         config=config,
@@ -155,7 +170,7 @@ def resolve(config: PipelineConfig) -> ResolvedPlan:
         runtime=runtime,
         dtype=dtype,
         providers=providers,
-        extra={},
+        extra=extra,
     )
 
     logger.info(
@@ -174,7 +189,7 @@ def resolve(config: PipelineConfig) -> ResolvedPlan:
 # --------------------------------------------------------------------------- #
 
 
-def _resolve_model_path(model: str) -> str:
+def _resolve_model_path(model: str, task: str) -> str:
     """
     Turn a model identifier into an absolute path.
 
@@ -192,6 +207,11 @@ def _resolve_model_path(model: str) -> str:
     info = registry.get_model(model)
     if info is not None and os.path.isfile(info.path):
         return os.path.abspath(info.path)
+
+    # VLM model identifiers are often logical names (e.g. llava, gpt-4o),
+    # not local files. Preserve the raw model id for the VLM engine.
+    if task == "image-text-to-text":
+        return model
 
     raise ModelNotFoundError(model)
 
@@ -229,11 +249,15 @@ def _resolve_accelerator(device: str) -> HardwareAccelerator:
     return accelerator
 
 
-def _resolve_runtime(runtime: str, model_path: str, accelerator: HardwareAccelerator) -> str:
+def _resolve_runtime(task: str, runtime: str, model_path: str, accelerator: HardwareAccelerator) -> str:
     """Infer or validate the runtime string."""
     if runtime != "auto":
+        _validate_task_runtime(task, runtime)
         _assert_runtime_available(runtime)
         return runtime
+
+    if task == "image-text-to-text":
+        return _resolve_vlm_runtime(model_path)
 
     # Auto-infer from extension
     ext = os.path.splitext(model_path)[1].lower()
@@ -252,6 +276,24 @@ def _resolve_runtime(runtime: str, model_path: str, accelerator: HardwareAcceler
     return "yolo"
 
 
+def _resolve_vlm_runtime(model_id: str) -> str:
+    """Auto-select VLM runtime based on model naming conventions."""
+    name = model_id.lower()
+    if "gpt" in name or "openai" in name:
+        return "openai_vlm"
+    if any(k in name for k in ["llava", "llama", "bakllava", "moondream"]):
+        return "ollama_vlm"
+    return "local_vlm"
+
+
+def _validate_task_runtime(task: str, runtime: str) -> None:
+    """Ensure runtime family matches task family."""
+    if task == "image-text-to-text" and runtime in _VISION_RUNTIMES:
+        raise RuntimeNotSupportedError(runtime, "Vision runtime cannot be used for VLM task.")
+    if task != "image-text-to-text" and runtime in _VLM_RUNTIMES:
+        raise RuntimeNotSupportedError(runtime, "VLM runtime cannot be used for vision detection task.")
+
+
 def _resolve_dtype(dtype: str, runtime: str, accelerator: HardwareAccelerator) -> str:
     """Pick a concrete dtype if 'auto' was requested."""
     if dtype != "auto":
@@ -263,10 +305,26 @@ def _resolve_dtype(dtype: str, runtime: str, accelerator: HardwareAccelerator) -
     return "fp32"
 
 
-def _resolve_ort_providers(runtime: str, accelerator: HardwareAccelerator) -> list[str]:
+def _resolve_ort_providers(
+    runtime: str,
+    accelerator: HardwareAccelerator,
+    explicit_providers: list[str] | None = None,
+) -> list[str]:
     """Build the ORT ExecutionProvider list when runtime is onnxruntime."""
     if runtime != "onnxruntime":
         return []
+
+    if explicit_providers is not None:
+        unknown = [p for p in explicit_providers if p not in _VALID_ORT_PROVIDERS]
+        if unknown:
+            raise RuntimeNotSupportedError(
+                runtime,
+                f"Unknown ONNX Runtime provider(s): {unknown}",
+            )
+        providers = list(explicit_providers)
+        if "CPUExecutionProvider" not in providers:
+            providers.append("CPUExecutionProvider")
+        return providers
 
     providers: list[str] = []
     if accelerator == HardwareAccelerator.TENSORRT:

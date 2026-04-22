@@ -50,6 +50,7 @@ class PipelineConfig:
     device: DeviceLiteral = "auto"
     runtime: RuntimeLiteral = "auto"
     dtype: DTypeLiteral = "auto"
+    providers: list[str] | None = None
 
     # Inference parameters
     batch_size: int = 1
@@ -82,6 +83,9 @@ class PipelineConfig:
         if not (0.0 < self.iou <= 1.0):
             raise ValueError("iou must be in (0, 1]")
 
+        if self.providers is not None and not all(isinstance(p, str) for p in self.providers):
+            raise ValueError("providers must be a list[str] when provided")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "task": self.task,
@@ -89,6 +93,7 @@ class PipelineConfig:
             "device": self.device,
             "runtime": self.runtime,
             "dtype": self.dtype,
+            "providers": self.providers,
             "batch_size": self.batch_size,
             "confidence": self.confidence,
             "iou": self.iou,

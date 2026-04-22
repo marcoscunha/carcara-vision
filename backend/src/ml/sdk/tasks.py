@@ -254,13 +254,21 @@ class VLMPipeline(BaseTaskPipeline):
 
     def _infer_one(self, frame: Any, **kwargs: Any) -> VLMResult:
         t0 = time.perf_counter()
-        raw: InferenceResult = self._engine.infer(frame)
+        raw: InferenceResult = self._engine.infer(frame, **kwargs)
         latency_ms = (time.perf_counter() - t0) * 1000
+
+        tokens_used = None
+        if isinstance(raw.metadata, dict):
+            tokens_used = raw.metadata.get("tokens_used")
+            if tokens_used is None:
+                tokens_used = raw.metadata.get("total_tokens")
 
         return VLMResult(
             text=raw.text_response or "",
             latency_ms=latency_ms,
             runtime_info=self._make_runtime_info(),
+            tokens_used=tokens_used,
+            extra=raw.metadata if isinstance(raw.metadata, dict) else {},
         )
 
     def _wrap_batch(self, results: list[VLMResult], total_ms: float, fps: float) -> list[VLMResult]:

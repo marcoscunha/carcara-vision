@@ -41,6 +41,7 @@ def pipeline(
     device: str = "auto",
     runtime: str = "auto",
     dtype: str = "auto",
+    providers: list[str] | None = None,
     batch_size: int = 1,
     confidence: float = 0.5,
     iou: float = 0.45,
@@ -70,6 +71,9 @@ def pipeline(
     dtype:
         Numeric precision.  ``"auto"`` selects fp16 on CUDA/TRT, fp32 on CPU.
         Choices: ``auto | fp32 | fp16 | int8``.
+    providers:
+        Optional ONNX Runtime ExecutionProvider chain in priority order.
+        Example: ``["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]``.
     batch_size:
         Default batch size used by ``adapter.batch()``.
     confidence:
@@ -104,6 +108,7 @@ def pipeline(
         device=device,
         runtime=runtime,
         dtype=dtype,
+        providers=providers,
         batch_size=batch_size,
         confidence=confidence,
         iou=iou,
