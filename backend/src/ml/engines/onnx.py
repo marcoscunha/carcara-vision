@@ -255,41 +255,42 @@ class ONNXEngine(BaseInferenceEngine):
         scale_x = orig_w / input_w
         scale_y = orig_h / input_h
 
-        for row in output:
-            # YOLO format: [x_center, y_center, width, height, class_scores...]
-            if len(row) < 5:
-                continue
+        # Guard against malformed output tensors
+        if output.shape[1] < 5:
+            return self._apply_nms(detections)
 
-            x_center, y_center, width, height = row[:4]
-            class_scores = row[4:]
+        # ---- Vectorized parsing (replaces row-by-row Python loop) ----
+        # output shape: (N, 4 + num_classes)
+        boxes_raw = output[:, :4]  # (N, 4)  x_c, y_c, w, h
+        class_scores = output[:, 4:]  # (N, num_classes)
 
-            # Get best class
-            class_id = np.argmax(class_scores)
-            confidence = class_scores[class_id]
+        class_ids = np.argmax(class_scores, axis=1)  # (N,)
+        confidences = class_scores[np.arange(len(output)), class_ids]  # (N,)
 
-            if confidence < self.config.confidence_threshold:
-                continue
+        # Confidence filter
+        keep = confidences >= self.config.confidence_threshold
+        if not np.any(keep):
+            return detections
 
-            # Convert to corner format and scale
-            x1 = (x_center - width / 2) * scale_x
-            y1 = (y_center - height / 2) * scale_y
-            x2 = (x_center + width / 2) * scale_x
-            y2 = (y_center + height / 2) * scale_y
+        boxes_raw = boxes_raw[keep]
+        class_ids = class_ids[keep]
+        confidences = confidences[keep]
 
-            # Clamp to image bounds
-            x1 = max(0, min(orig_w, x1))
-            y1 = max(0, min(orig_h, y1))
-            x2 = max(0, min(orig_w, x2))
-            y2 = max(0, min(orig_h, y2))
+        # Convert to corner format, scale to original image, and clamp
+        x1 = np.clip((boxes_raw[:, 0] - boxes_raw[:, 2] / 2) * scale_x, 0, orig_w)
+        y1 = np.clip((boxes_raw[:, 1] - boxes_raw[:, 3] / 2) * scale_y, 0, orig_h)
+        x2 = np.clip((boxes_raw[:, 0] + boxes_raw[:, 2] / 2) * scale_x, 0, orig_w)
+        y2 = np.clip((boxes_raw[:, 1] + boxes_raw[:, 3] / 2) * scale_y, 0, orig_h)
 
-            detections.append(
-                {
-                    "bbox": [float(x1), float(y1), float(x2), float(y2)],
-                    "class_id": int(class_id),
-                    "class_name": self._class_names.get(int(class_id), f"class_{class_id}"),
-                    "confidence": float(confidence),
-                }
-            )
+        detections = [
+            {
+                "bbox": [float(x1[i]), float(y1[i]), float(x2[i]), float(y2[i])],
+                "class_id": int(class_ids[i]),
+                "class_name": self._class_names.get(int(class_ids[i]), f"class_{class_ids[i]}"),
+                "confidence": float(confidences[i]),
+            }
+            for i in range(len(x1))
+        ]
 
         # Apply NMS
         detections = self._apply_nms(detections)
