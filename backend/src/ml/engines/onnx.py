@@ -175,7 +175,9 @@ class ONNXEngine(BaseInferenceEngine):
         start_time = time.perf_counter()
 
         # Preprocess
+        preprocess_start = time.perf_counter()
         input_tensor = self._preprocess(image)
+        preprocess_ms = (time.perf_counter() - preprocess_start) * 1000
 
         # Run inference
         outputs = self._session.run(self._output_names, {self._input_name: input_tensor})
@@ -183,11 +185,13 @@ class ONNXEngine(BaseInferenceEngine):
         inference_time = (time.perf_counter() - start_time) * 1000
 
         # Parse results
+        postprocess_start = time.perf_counter()
         result = InferenceResult(
             model_name=self.config.model_name,
             inference_time_ms=inference_time,
             hardware_used=self._current_accelerator or HardwareAccelerator.CPU,
             raw_output=outputs,
+            preprocess_ms=preprocess_ms,
         )
 
         # Parse detections (YOLO format)
@@ -195,6 +199,7 @@ class ONNXEngine(BaseInferenceEngine):
         for det in detections:
             result.add_detection(**det)
 
+        result.postprocess_ms = (time.perf_counter() - postprocess_start) * 1000
         return result
 
     def _preprocess(self, image: np.ndarray) -> np.ndarray:

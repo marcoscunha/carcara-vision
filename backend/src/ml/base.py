@@ -77,6 +77,10 @@ class InferenceResult:
     inference_time_ms: float
     hardware_used: HardwareAccelerator
 
+    # Per-stage timing breakdown (milliseconds, 0.0 when not measured)
+    preprocess_ms: float = 0.0  # image preprocessing (resize, colour, norm, layout)
+    postprocess_ms: float = 0.0  # output parsing and NMS
+
     # Object detection fields
     detections: list[dict[str, Any]] = field(default_factory=list)
 

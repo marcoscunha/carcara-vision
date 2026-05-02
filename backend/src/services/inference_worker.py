@@ -161,6 +161,8 @@ class InferenceWorker:
             "read": deque(maxlen=240),
             "inference_total": deque(maxlen=240),
             "inference_engine": deque(maxlen=240),
+            "preprocess": deque(maxlen=240),
+            "postprocess": deque(maxlen=240),
             "annotate": deque(maxlen=240),
             "resize": deque(maxlen=240),
             "publish_annotated": deque(maxlen=240),
@@ -355,11 +357,13 @@ class InferenceWorker:
             try:
                 if run_inference:
                     inference_started = time.perf_counter()
-                    detections, inference_ms = self._run_inference(frame)
+                    detections, inference_ms, preprocess_ms, postprocess_ms = self._run_inference(frame)
                     inference_total_ms = (time.perf_counter() - inference_started) * 1000.0
                     self._last_detections = detections
                     self._record_stage_timing("inference_total", inference_total_ms)
                     self._record_stage_timing("inference_engine", inference_ms)
+                    self._record_stage_timing("preprocess", preprocess_ms)
+                    self._record_stage_timing("postprocess", postprocess_ms)
                     self._frame_count += 1
                     self._total_inference_ms += inference_ms
                     # Advance the inference cadence clock
@@ -370,10 +374,14 @@ class InferenceWorker:
                         next_inference_at += missed_slots * min_interval
                 else:
                     inference_ms = 0.0
+                    preprocess_ms = 0.0
+                    postprocess_ms = 0.0
             except Exception as exc:
                 logger.error("Inference error for stream %d: %s", self._config.stream_id, exc)
                 next_inference_at = time.monotonic() + min_interval
                 inference_ms = 0.0
+                preprocess_ms = 0.0
+                postprocess_ms = 0.0
 
             # Annotate every frame with the last known detections (keeps stream fluent).
             # When there are no active detections skip frame.copy() — nothing to draw.
@@ -470,9 +478,9 @@ class InferenceWorker:
     # Inference strategy
     # ------------------------------------------------------------------ #
 
-    def _run_inference(self, frame: np.ndarray) -> tuple[list[dict[str, Any]], float]:
+    def _run_inference(self, frame: np.ndarray) -> tuple[list[dict[str, Any]], float, float, float]:
         """
-        Run inference and return (detections, inference_time_ms).
+        Run inference and return (detections, inference_time_ms, preprocess_ms, postprocess_ms).
 
         Selects the right engine call based on task_type.
         """
@@ -481,17 +489,17 @@ class InferenceWorker:
         if self._config.task_type == TASK_TYPE_POSE and self._engine is not None:
             result = self._engine.infer(frame, classes=self._config.classes_filter)
             detections = self._parse_pose_result(result)
-            return detections, result.inference_time_ms
+            return detections, result.inference_time_ms, result.preprocess_ms, result.postprocess_ms
 
         if self._config.task_type == TASK_TYPE_SEGMENT and self._engine is not None:
             result = self._engine.infer(frame, classes=self._config.classes_filter)
             detections = self._parse_segment_result(result)
-            return detections, result.inference_time_ms
+            return detections, result.inference_time_ms, result.preprocess_ms, result.postprocess_ms
 
         # Default: TASK_TYPE_DETECT (prefer engine tracking if available).
         if self._engine is not None and hasattr(self._engine, "track"):
             result = self._engine.track(frame, persist=True)
-            return result.detections, result.inference_time_ms
+            return result.detections, result.inference_time_ms, result.preprocess_ms, result.postprocess_ms
 
         result: DetectionResult = self._pipeline(
             frame,
@@ -499,7 +507,7 @@ class InferenceWorker:
             confidence=self._config.confidence,
         )
         detections = [self._sdk_detection_to_legacy(det) for det in result.detections]
-        return detections, result.latency_ms
+        return detections, result.latency_ms, 0.0, 0.0
 
     @staticmethod
     def _sdk_detection_to_legacy(det: Detection) -> dict[str, Any]:
