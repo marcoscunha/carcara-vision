@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -49,6 +50,7 @@ from ..ml.sdk import BaseTaskPipeline
 from ..ml.sdk import Detection
 from ..ml.sdk import DetectionResult
 from ..ml.sdk import pipeline as build_sdk_pipeline
+from ..ml.sdk.exceptions import ModelNotFoundError
 from ..services.annotated_stream_writer import AnnotatedStreamWriter
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ class WorkerConfig:
     height: int = 360
     max_inference_fps: int = 10  # cap inference to reduce CPU pressure
     output_fps: int = 25  # annotated stream frame-rate (decoupled from inference rate)
+    encoder_mode: str = "x264"  # resolved hardware encoder: nvenc | jetson | v4l2 | x264
 
 
 @dataclass
@@ -280,6 +283,7 @@ class InferenceWorker:
                 width=self._config.width,
                 height=self._config.height,
                 fps=self._config.output_fps,
+                encoder_mode=self._config.encoder_mode,
             )
         except Exception as exc:
             logger.error("Worker init failed for stream %d: %s", self._config.stream_id, exc)
@@ -590,7 +594,15 @@ class InferenceWorker:
         for stage, samples in self._stage_timings_ms.items():
             values = list(samples)
             if not values:
-                snapshot[stage] = {"avg": 0.0, "min": 0.0, "max": 0.0, "last": 0.0}
+                snapshot[stage] = {
+                    "avg": 0.0,
+                    "min": 0.0,
+                    "max": 0.0,
+                    "last": 0.0,
+                    "p50": 0.0,
+                    "p95": 0.0,
+                    "p99": 0.0,
+                }
                 continue
 
             snapshot[stage] = {
@@ -598,8 +610,25 @@ class InferenceWorker:
                 "min": round(min(values), 2),
                 "max": round(max(values), 2),
                 "last": round(values[-1], 2),
+                "p50": round(self._percentile(values, 50), 2),
+                "p95": round(self._percentile(values, 95), 2),
+                "p99": round(self._percentile(values, 99), 2),
             }
         return snapshot
+
+    @staticmethod
+    def _percentile(values: list[float], percentile: float) -> float:
+        if not values:
+            return 0.0
+        sorted_values = sorted(values)
+        if len(sorted_values) == 1:
+            return sorted_values[0]
+
+        rank = (len(sorted_values) - 1) * (percentile / 100.0)
+        low = int(rank)
+        high = min(low + 1, len(sorted_values) - 1)
+        fraction = rank - low
+        return sorted_values[low] * (1.0 - fraction) + sorted_values[high] * fraction
 
     # ------------------------------------------------------------------ #
     # Builder helpers
@@ -621,42 +650,56 @@ class InferenceWorker:
         except Exception:
             pass
 
-        try:
-            sdk_pipe = build_sdk_pipeline(
-                task=task,
-                model=self._config.model_name,
-                device=accelerator.value,
-                runtime=self._config.runtime,
-                dtype=self._config.dtype,
-                providers=self._config.providers,
-                confidence=self._config.confidence,
-            )
+        model_candidates = [self._config.model_name, settings.DEFAULT_MODEL, "yolov8n", "yolov8n.pt"]
 
-            info = sdk_pipe.info()
-            logger.info(
-                "Loaded model '%s' (task=%s, accel=%s, runtime=%s, dtype=%s) for stream %d",
-                self._config.model_name,
-                self._config.task_type,
-                info.get("accelerator", self._config.accelerator),
-                info.get("runtime", self._config.runtime),
-                info.get("dtype", self._config.dtype),
-                self._config.stream_id,
-            )
-            return sdk_pipe
-        except Exception as exc:
-            fallback_model = settings.DEFAULT_MODEL
-            logger.warning(
-                "Failed to load model '%s' for stream %d (%s). Falling back to '%s'.",
-                self._config.model_name,
-                self._config.stream_id,
-                exc,
-                fallback_model,
-            )
-            return build_sdk_pipeline(
-                task=task,
-                model=fallback_model,
-                device=accelerator.value,
-                runtime="auto",
-                dtype="auto",
-                confidence=self._config.confidence,
-            )
+        # Add stem candidates to handle names like "yolov8n.pt" -> "yolov8n".
+        extra_candidates: list[str] = []
+        for candidate in model_candidates:
+            if not isinstance(candidate, str):
+                continue
+            stem, ext = os.path.splitext(candidate)
+            if ext.lower() in {".pt", ".onnx", ".engine", ".trt"} and stem:
+                extra_candidates.append(stem)
+        model_candidates.extend(extra_candidates)
+
+        # De-duplicate while preserving order.
+        ordered_candidates: list[str] = []
+        for candidate in model_candidates:
+            if candidate and candidate not in ordered_candidates:
+                ordered_candidates.append(candidate)
+
+        last_error: Exception | None = None
+        for candidate in ordered_candidates:
+            try:
+                sdk_pipe = build_sdk_pipeline(
+                    task=task,
+                    model=candidate,
+                    device=accelerator.value,
+                    runtime=self._config.runtime,
+                    dtype=self._config.dtype,
+                    providers=self._config.providers,
+                    confidence=self._config.confidence,
+                )
+
+                info = sdk_pipe.info()
+                logger.info(
+                    "Loaded model '%s' (task=%s, accel=%s, runtime=%s, dtype=%s) for stream %d",
+                    candidate,
+                    self._config.task_type,
+                    info.get("accelerator", self._config.accelerator),
+                    info.get("runtime", self._config.runtime),
+                    info.get("dtype", self._config.dtype),
+                    self._config.stream_id,
+                )
+                return sdk_pipe
+            except ModelNotFoundError as exc:
+                last_error = exc
+                logger.warning(
+                    "Model candidate '%s' unavailable for stream %d; trying next fallback",
+                    candidate,
+                    self._config.stream_id,
+                )
+
+        raise RuntimeError(
+            f"Failed to load any model candidate for stream {self._config.stream_id}: {ordered_candidates}"
+        ) from last_error

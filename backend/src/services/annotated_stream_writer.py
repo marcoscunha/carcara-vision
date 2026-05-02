@@ -52,7 +52,20 @@ class AnnotatedStreamWriter:
         width:  Frame width in pixels.
         height: Frame height in pixels.
         fps:    Target output frame-rate.
+        encoder_mode: Hardware encoder selection — one of
+                      ``auto``, ``nvenc``, ``jetson``, ``v4l2``, ``x264``.
+                      ``auto`` and ``nvenc`` map to ``h264_nvenc``;
+                      ``jetson`` maps to ``h264_omx``;
+                      ``v4l2`` maps to ``h264_v4l2m2m``;
+                      anything else falls back to ``libx264``.
     """
+
+    # Mapping from resolved encoder mode to (ffmpeg_codec, extra_args)
+    _ENCODER_MAP: dict[str, tuple[str, list[str]]] = {
+        "nvenc": ("h264_nvenc", ["-preset", "p4", "-tune", "ll"]),
+        "jetson": ("h264_omx", ["-b:v", "1500k"]),
+        "v4l2": ("h264_v4l2m2m", ["-b:v", "1500k"]),
+    }
 
     def __init__(
         self,
@@ -61,6 +74,7 @@ class AnnotatedStreamWriter:
         width: int = 640,
         height: int = 360,
         fps: int = 15,
+        encoder_mode: str = "x264",
     ) -> None:
         self._stream_name = stream_name
         self._annotated_path = f"annotated_{stream_name}"
@@ -68,6 +82,7 @@ class AnnotatedStreamWriter:
         self._width = width
         self._height = height
         self._fps = fps
+        self._encoder_mode = encoder_mode
 
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
@@ -188,23 +203,15 @@ class AnnotatedStreamWriter:
                 self._terminate_process()
                 return False
 
-    def _spawn_ffmpeg(self) -> subprocess.Popen:
-        """Spawn the FFmpeg child process."""
-        cmd = [
-            _FFMPEG_BINARY,
-            "-y",
-            # Input: raw BGR frames from stdin
-            "-f",
-            "rawvideo",
-            "-video_size",
-            f"{self._width}x{self._height}",
-            "-pixel_format",
-            "bgr24",
-            "-framerate",
-            str(self._fps),
-            "-i",
-            "pipe:0",
-            # Encode
+    def _build_encoder_args(self) -> list[str]:
+        """Return FFmpeg codec/encoder arguments for the configured encoder_mode."""
+        mode = self._encoder_mode
+        if mode in self._ENCODER_MAP:
+            codec, extra = self._ENCODER_MAP[mode]
+            return ["-c:v", codec, *extra, "-pix_fmt", "yuv420p"]
+
+        # Default: software libx264 (auto, x264, or any unrecognised value)
+        return [
             "-c:v",
             "libx264",
             "-preset",
@@ -223,6 +230,27 @@ class AnnotatedStreamWriter:
             "3000k",
             "-pix_fmt",
             "yuv420p",
+        ]
+
+    def _spawn_ffmpeg(self) -> subprocess.Popen:
+        """Spawn the FFmpeg child process."""
+        encoder_args = self._build_encoder_args()
+        cmd = [
+            _FFMPEG_BINARY,
+            "-y",
+            # Input: raw BGR frames from stdin
+            "-f",
+            "rawvideo",
+            "-video_size",
+            f"{self._width}x{self._height}",
+            "-pixel_format",
+            "bgr24",
+            "-framerate",
+            str(self._fps),
+            "-i",
+            "pipe:0",
+            # Encode (hardware-aware)
+            *encoder_args,
             # Output: RTSP push to MediaMTX
             "-f",
             "rtsp",

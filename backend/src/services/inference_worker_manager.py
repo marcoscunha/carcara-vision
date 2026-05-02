@@ -92,6 +92,7 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
 
     rtsp_base = _mediamtx_rtsp_base()
     rtsp_url = f"{rtsp_base}/{stream.stream_name}"
+    encoder_mode = getattr(rt, "accel_encoder_mode", "x264")
 
     return WorkerConfig(
         stream_id=stream.id,
@@ -110,6 +111,7 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
         height=height,
         max_inference_fps=max_inference_fps,
         output_fps=output_fps,
+        encoder_mode=encoder_mode,
     )
 
 
