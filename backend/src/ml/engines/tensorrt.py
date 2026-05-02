@@ -219,27 +219,67 @@ class TensorRTEngine(BaseInferenceEngine):
         return result
 
     def _preprocess(self, image: np.ndarray) -> np.ndarray:
-        """Preprocess image for TensorRT model."""
+        """Preprocess image for TensorRT model.
+
+        Uses the torch.cuda path when pycuda and torch.cuda are both available,
+        which avoids redundant CPU work before the host-to-device copy.
+        Falls back to the CPU path otherwise.
+        """
+        if self._should_use_cuda_preprocess():
+            return self._preprocess_cuda(image)
+        return self._preprocess_cpu(image)
+
+    def _should_use_cuda_preprocess(self) -> bool:
+        """Return True when GPU preprocessing is viable."""
+        try:
+            import torch
+
+            return bool(torch.cuda.is_available())
+        except ImportError:
+            return False
+
+    def _preprocess_cpu(self, image: np.ndarray) -> np.ndarray:
+        """CPU preprocessing path (always available)."""
         target_w, target_h = self.config.input_size
-
-        # Resize
         resized = cv2.resize(image, (target_w, target_h))
-
-        # BGR to RGB
         if self.config.bgr_to_rgb:
             resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        if self.config.normalize:
+            resized = resized.astype(np.float32) / 255.0
+        tensor = resized.transpose(2, 0, 1)
+        tensor = np.expand_dims(tensor, axis=0)
+        return np.ascontiguousarray(tensor, dtype=np.float32)
+
+    def _preprocess_cuda(self, image: np.ndarray) -> np.ndarray:
+        """GPU preprocessing path via torch.cuda.
+
+        Fuses BGR→RGB, HWC→CHW, normalize, and bilinear resize into a single
+        GPU pass, returning a contiguous float32 numpy array ready to be copied
+        into the TensorRT host input buffer.
+        """
+        import torch
+        import torch.nn.functional
+
+        target_w, target_h = self.config.input_size
+
+        # Upload HWC uint8 frame to GPU
+        t = torch.from_numpy(image).cuda()  # HWC uint8
+
+        # BGR -> RGB (in-place channel reorder)
+        if self.config.bgr_to_rgb:
+            t = t[..., [2, 1, 0]]
+
+        # HWC -> 1CHW float
+        t = t.permute(2, 0, 1).unsqueeze(0).float()
 
         # Normalize
         if self.config.normalize:
-            resized = resized.astype(np.float32) / 255.0
+            t = t / 255.0
 
-        # HWC to CHW
-        tensor = resized.transpose(2, 0, 1)
+        # Resize to model input size
+        t = torch.nn.functional.interpolate(t, size=(target_h, target_w), mode="bilinear", align_corners=False)
 
-        # Add batch dimension
-        tensor = np.expand_dims(tensor, axis=0)
-
-        return np.ascontiguousarray(tensor, dtype=np.float32)
+        return np.ascontiguousarray(t.squeeze(0).unsqueeze(0).cpu().numpy(), dtype=np.float32)
 
     def _parse_yolo_output(self, outputs: list[np.ndarray], original_shape: tuple[int, int]) -> list[dict[str, Any]]:
         """Parse YOLO-format TensorRT output."""
