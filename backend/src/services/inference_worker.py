@@ -376,16 +376,22 @@ class InferenceWorker:
                 inference_ms = 0.0
 
             # Annotate every frame with the last known detections (keeps stream fluent).
+            # When there are no active detections skip frame.copy() — nothing to draw.
             annotated = None
             annotate_ms = 0.0
             resize_ms = 0.0
             if self._annotated_writer:
-                annotate_started = time.perf_counter()
-                annotated = frame.copy()
-                self._annotate(annotated, self._last_detections)
-                annotate_ms = (time.perf_counter() - annotate_started) * 1000.0
+                needs_resize = frame.shape[1] != self._config.width or frame.shape[0] != self._config.height
+                if self._last_detections:
+                    annotate_started = time.perf_counter()
+                    annotated = frame.copy()
+                    self._annotate(annotated, self._last_detections)
+                    annotate_ms = (time.perf_counter() - annotate_started) * 1000.0
+                else:
+                    # No detections — use the raw frame (no copy, no draw)
+                    annotated = frame
 
-                if annotated.shape[1] != self._config.width or annotated.shape[0] != self._config.height:
+                if needs_resize:
                     resize_started = time.perf_counter()
                     annotated = cv2.resize(
                         annotated,
