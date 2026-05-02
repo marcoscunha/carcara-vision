@@ -1,0 +1,9 @@
+{
+    "scenario_name": "1stream_annotated_off",
+    "duration_seconds": 300,
+    "stream_count": 1,
+    "resolution": "1280x720",
+    "model_name": "yolov8n.pt",
+    "annotation_enabled": false,
+    "notes": "Annotation disabled — isolates inference latency from frame copy and draw cost"
+}

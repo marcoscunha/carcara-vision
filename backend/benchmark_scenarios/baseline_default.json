@@ -1,0 +1,9 @@
+{
+    "scenario_name": "baseline_default",
+    "duration_seconds": 300,
+    "stream_count": 1,
+    "resolution": "640x360",
+    "model_name": "yolov8n.pt",
+    "annotation_enabled": true,
+    "notes": "Baseline scenario for initial observability and reproducible benchmark runs"
+}

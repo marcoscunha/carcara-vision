@@ -1,0 +1,9 @@
+{
+    "scenario_name": "4streams_production",
+    "duration_seconds": 300,
+    "stream_count": 4,
+    "resolution": "1280x720",
+    "model_name": "yolov8n.pt",
+    "annotation_enabled": true,
+    "notes": "Four concurrent HD streams — stress test for multi-stream scalability ceiling"
+}

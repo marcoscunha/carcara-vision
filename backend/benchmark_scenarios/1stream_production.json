@@ -1,0 +1,9 @@
+{
+    "scenario_name": "1stream_production",
+    "duration_seconds": 300,
+    "stream_count": 1,
+    "resolution": "1280x720",
+    "model_name": "yolov8n.pt",
+    "annotation_enabled": true,
+    "notes": "Single stream at production HD resolution — primary performance reference point"
+}

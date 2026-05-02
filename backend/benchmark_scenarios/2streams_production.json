@@ -1,0 +1,9 @@
+{
+    "scenario_name": "2streams_production",
+    "duration_seconds": 300,
+    "stream_count": 2,
+    "resolution": "1280x720",
+    "model_name": "yolov8n.pt",
+    "annotation_enabled": true,
+    "notes": "Two concurrent HD streams — measures contention on GPU and encoder resources"
+}

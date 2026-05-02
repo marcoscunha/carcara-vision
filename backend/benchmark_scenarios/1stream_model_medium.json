@@ -1,0 +1,9 @@
+{
+    "scenario_name": "1stream_model_medium",
+    "duration_seconds": 300,
+    "stream_count": 1,
+    "resolution": "1280x720",
+    "model_name": "yolov8m.pt",
+    "annotation_enabled": true,
+    "notes": "Medium-size YOLOv8 model — evaluates accuracy vs latency trade-off vs nano baseline"
+}

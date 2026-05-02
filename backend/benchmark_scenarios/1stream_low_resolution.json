@@ -1,0 +1,9 @@
+{
+    "scenario_name": "1stream_low_resolution",
+    "duration_seconds": 300,
+    "stream_count": 1,
+    "resolution": "320x180",
+    "model_name": "yolov8n.pt",
+    "annotation_enabled": true,
+    "notes": "Measures throughput gains from reduced resolution preprocessing workload"
+}
