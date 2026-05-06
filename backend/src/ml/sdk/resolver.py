@@ -208,6 +208,16 @@ def _resolve_model_path(model: str, task: str) -> str:
     if info is not None and os.path.isfile(info.path):
         return os.path.abspath(info.path)
 
+    # For YOLO family identifiers, allow logical model ids even when a local
+    # artifact is not present. Ultralytics can resolve/download known model ids
+    # like "yolov8n.pt" at runtime.
+    if info is not None and info.model_type == ModelType.YOLO:
+        return info.path
+
+    ext = os.path.splitext(model)[1].lower()
+    if ext == ".pt" and model.lower().startswith("yolo"):
+        return model
+
     # VLM model identifiers are often logical names (e.g. llava, gpt-4o),
     # not local files. Preserve the raw model id for the VLM engine.
     if task == "image-text-to-text":

@@ -38,9 +38,31 @@ import {
   useInferenceRuntimeConfig,
   useUpdateInferenceRuntimeConfig,
   useRealtimeInferenceMetrics,
+  useBenchmarkScenarioTemplate,
+  useExportBenchmarkMetrics,
 } from '../hooks/useQueries'
-import { Stream, Camera } from '../types'
-import CameraStream from '../components/CameraStream'
+import { Stream, Camera, StreamInferenceMetrics } from '../types'
+import CameraStream, { CameraStreamStatsSnapshot } from '../components/CameraStream'
+
+const formatMetricNumber = (value: number | null | undefined, digits = 1): string => {
+  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) {
+    return '--'
+  }
+
+  return value.toFixed(digits)
+}
+
+const getPerformanceTone = (metrics?: StreamInferenceMetrics): 'success' | 'warning' | 'default' => {
+  if (!metrics || metrics.samples === 0) {
+    return 'default'
+  }
+
+  if (metrics.avg_inference_time_ms <= 40) {
+    return 'success'
+  }
+
+  return 'warning'
+}
 
 const Streams: React.FC = () => {
   const [open, setOpen] = useState(false)
@@ -58,6 +80,7 @@ const Streams: React.FC = () => {
     accelerator: 'cpu',
     task_type: 'detect',
   })
+  const [streamPreviewStats, setStreamPreviewStats] = useState<Record<number, CameraStreamStatsSnapshot>>({})
 
   // TanStack Query hooks for server state management
   const {
@@ -74,9 +97,11 @@ const Streams: React.FC = () => {
   const updateMutation = useUpdateStream()
   const deleteMutation = useDeleteStream()
   const updateRuntimeMutation = useUpdateInferenceRuntimeConfig()
+  const exportBenchmarkMutation = useExportBenchmarkMetrics()
 
   const { data: runtimeConfig } = useInferenceRuntimeConfig()
   const { data: realtimeMetrics } = useRealtimeInferenceMetrics()
+  const { data: benchmarkTemplate } = useBenchmarkScenarioTemplate()
 
   useEffect(() => {
     if (runtimeConfig) {
@@ -169,6 +194,34 @@ const Streams: React.FC = () => {
   const streamList = Array.isArray(streams) ? streams : []
   const cameraList = Array.isArray(cameras) ? cameras : []
 
+  const handleStreamStatsChange = (streamId: number, stats: CameraStreamStatsSnapshot) => {
+    setStreamPreviewStats((prev) => ({ ...prev, [streamId]: stats }))
+  }
+
+  const handleExportBenchmark = async () => {
+    const template =
+      benchmarkTemplate ||
+      ({
+        scenario_name: 'baseline_default',
+        duration_seconds: 300,
+        stream_count: 1,
+        resolution: '640x360',
+        model_name: 'yolov8n.pt',
+        annotation_enabled: true,
+        notes: null,
+      } as const)
+
+    const activeStreams = streamList.filter((stream) => stream.status === 'active').length
+
+    await exportBenchmarkMutation.mutateAsync({
+      ...template,
+      scenario_name: `frontend_snapshot_${new Date().toISOString().replace(/[:.]/g, '-')}`,
+      stream_count: Math.max(activeStreams, 1),
+      model_name: runtimeConfig?.model_name || template.model_name,
+      notes: 'Export triggered from Streams frontend page',
+    })
+  }
+
   const getStatusColor = (status: string): ChipProps['color'] => {
     switch (status) {
       case 'running':
@@ -195,6 +248,14 @@ const Streams: React.FC = () => {
         <Box className="page-header__actions">
           <Button
             variant="outlined"
+            onClick={handleExportBenchmark}
+            disabled={exportBenchmarkMutation.isPending}
+            className="page-header__action page-header__action--outline"
+          >
+            {exportBenchmarkMutation.isPending ? 'Exporting...' : 'Export Benchmark'}
+          </Button>
+          <Button
+            variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={() => refetchStreams()}
             className="page-header__action page-header__action--outline"
@@ -211,6 +272,19 @@ const Streams: React.FC = () => {
           </Button>
         </Box>
       </Box>
+
+      {exportBenchmarkMutation.isSuccess && exportBenchmarkMutation.data?.data && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Benchmark exported: {exportBenchmarkMutation.data.data.run_id} (
+          {exportBenchmarkMutation.data.data.streams_count} streams)
+        </Alert>
+      )}
+
+      {exportBenchmarkMutation.isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to export benchmark snapshot.
+        </Alert>
+      )}
 
       {/* Streams Section */}
       <Box className="section section--compact">
@@ -236,6 +310,7 @@ const Streams: React.FC = () => {
           <Box className="card-grid--streams">
             {streamList.map((stream: Stream) => {
               const camera = cameraList.find((c: Camera) => c.id === stream.camera_id)
+              const performance = realtimeMetrics?.per_stream?.[stream.id]
               const detectionEnabled =
                 typeof stream.detection_enabled === 'boolean'
                   ? stream.detection_enabled
@@ -264,25 +339,128 @@ const Streams: React.FC = () => {
 
                     {/* Stream Preview */}
                     <Box className="stream-preview-wrapper">
-                      <CameraStream stream={stream} />
+                      <CameraStream
+                        stream={stream}
+                        showStats={false}
+                        onStatsChange={(stats) => handleStreamStatsChange(stream.id, stats)}
+                      />
                     </Box>
 
                     {/* Frame Counter */}
                     <Typography variant="body2" color="text.secondary" className="stream-frame-count">
                       Frame: {stream.current_frame.toLocaleString()}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
-                      Model:{' '}
-                      {realtimeMetrics?.per_stream?.[stream.id]?.model_name || runtimeConfig?.model_name || 'n/a'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
-                      Accelerator:{' '}
-                      {realtimeMetrics?.per_stream?.[stream.id]?.accelerator || runtimeConfig?.accelerator || 'n/a'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
-                      Inference: {realtimeMetrics?.per_stream?.[stream.id]?.avg_inference_time_ms || 0} ms • FPS:{' '}
-                      {realtimeMetrics?.per_stream?.[stream.id]?.fps || 0}
-                    </Typography>
+                    <Box
+                      sx={{
+                        mt: 1,
+                        mb: 2,
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                        display: 'grid',
+                        gap: 1,
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle2">Performance</Typography>
+                        <Chip
+                          size="small"
+                          label={
+                            performance?.samples
+                              ? `${performance.samples} sample${performance.samples === 1 ? '' : 's'}`
+                              : 'Waiting for samples'
+                          }
+                          color={getPerformanceTone(performance)}
+                          variant={performance?.samples ? 'filled' : 'outlined'}
+                        />
+                      </Box>
+
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                          gap: 1,
+                        }}
+                      >
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Throughput
+                          </Typography>
+                          <Typography variant="body2">{formatMetricNumber(performance?.fps)} fps</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Avg latency
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatMetricNumber(performance?.avg_inference_time_ms)} ms
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Last inference
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatMetricNumber(performance?.last_inference_time_ms)} ms
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Range
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatMetricNumber(performance?.min_inference_time_ms)}-
+                            {formatMetricNumber(performance?.max_inference_time_ms)} ms
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                          gap: 1,
+                        }}
+                      >
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Stream FPS
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatMetricNumber(streamPreviewStats[stream.id]?.fps)} fps
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Transmit speed
+                          </Typography>
+                          <Typography variant="body2">{streamPreviewStats[stream.id]?.throughput || '--'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Stream resolution
+                          </Typography>
+                          <Typography variant="body2">{streamPreviewStats[stream.id]?.resolution || '--'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            AI stream FPS
+                          </Typography>
+                          <Typography variant="body2">
+                            {formatMetricNumber(streamPreviewStats[stream.id]?.detectionFps)} fps
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      <Typography variant="body2" color="text.secondary">
+                        Model: {performance?.model_name || runtimeConfig?.model_name || 'n/a'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Accelerator: {performance?.accelerator || runtimeConfig?.accelerator || 'n/a'}
+                      </Typography>
+                    </Box>
 
                     {/* Actions */}
                     <Box className="card-actions">

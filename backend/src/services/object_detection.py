@@ -6,6 +6,7 @@ VLM-based image analysis, with automatic hardware acceleration selection.
 """
 
 import logging
+import os
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,7 @@ from ..ml.sdk import DetectionBatchResult
 from ..ml.sdk import DetectionResult
 from ..ml.sdk import VLMResult
 from ..ml.sdk import pipeline as build_pipeline
+from ..ml.sdk.exceptions import ModelNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -101,13 +103,43 @@ class ObjectDetectionService:
 
         try:
             if self.model_type == "yolo":
-                self._pipeline = build_pipeline(
-                    task="object-detection",
-                    model=self.model_name,
-                    device=self._accelerator.value,
-                    confidence=self.confidence_threshold,
-                    warmup_iterations=2,
-                )
+                model_candidates = [self.model_name]
+
+                # If a .pt/.onnx/.engine name is provided but the file does not exist,
+                # try the registry identifier without extension (e.g. yolov8n.pt -> yolov8n).
+                if (
+                    isinstance(self.model_name, str)
+                    and os.path.splitext(self.model_name)[1].lower() in {".pt", ".onnx", ".engine", ".trt"}
+                    and not os.path.isfile(self.model_name)
+                ):
+                    stem = os.path.splitext(self.model_name)[0]
+                    if stem and stem not in model_candidates:
+                        model_candidates.append(stem)
+
+                # Last-resort fallback for startup safety.
+                if "yolov8n" not in model_candidates:
+                    model_candidates.append("yolov8n")
+
+                last_error: Exception | None = None
+                for candidate in model_candidates:
+                    try:
+                        self._pipeline = build_pipeline(
+                            task="object-detection",
+                            model=candidate,
+                            device=self._accelerator.value,
+                            confidence=self.confidence_threshold,
+                            warmup_iterations=2,
+                        )
+                        self.model_name = candidate
+                        break
+                    except ModelNotFoundError as exc:
+                        last_error = exc
+                        logger.warning("Model candidate '%s' not available, trying next fallback", candidate)
+
+                if self._pipeline is None:
+                    raise RuntimeError(
+                        f"Unable to initialize YOLO pipeline from candidates: {model_candidates}"
+                    ) from last_error
             elif self.model_type == "vlm":
                 backend = getattr(settings, "VLM_BACKEND", "ollama")
                 runtime = {
@@ -134,7 +166,9 @@ class ObjectDetectionService:
 
         except Exception as e:
             logger.error(f"Failed to initialize engine: {e}")
-            raise
+            # Keep the API process alive even when an optional default model is missing.
+            self._pipeline = None
+            self._engine = None
 
     @property
     def device(self) -> str:

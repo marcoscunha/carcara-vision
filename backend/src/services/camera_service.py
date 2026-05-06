@@ -118,6 +118,7 @@ class CameraService:
     def _camera_identity_score(
         candidate: dict[str, Any],
         *,
+        device_id: int | None = None,
         device_path: str | None = None,
         physical_address: str | None = None,
         usb_vendor_id: str | None = None,
@@ -132,6 +133,9 @@ class CameraService:
         candidate_product = candidate.get("usb_product_id")
         candidate_serial = candidate.get("usb_serial_number")
         candidate_physical = candidate.get("physical_address")
+
+        if device_id is not None and candidate.get("device_id") == device_id:
+            score += 10
 
         if usb_serial_number:
             if candidate_serial != usb_serial_number:
@@ -191,12 +195,13 @@ class CameraService:
         if direct_candidate and not has_stable_identity:
             return direct_candidate
 
-        candidates = CameraService.scan_local_cameras(max_devices=max_devices)
+        candidates = CameraService.scan_local_camera_identities(max_devices=max_devices)
         scored_candidates: list[tuple[int, dict[str, Any]]] = []
 
         for candidate in candidates:
             score = CameraService._camera_identity_score(
                 candidate,
+                device_id=device_id,
                 device_path=device_path,
                 physical_address=physical_address,
                 usb_vendor_id=usb_vendor_id,
@@ -209,6 +214,7 @@ class CameraService:
         if direct_candidate:
             score = CameraService._camera_identity_score(
                 direct_candidate,
+                device_id=device_id,
                 device_path=device_path,
                 physical_address=physical_address,
                 usb_vendor_id=usb_vendor_id,
@@ -219,7 +225,20 @@ class CameraService:
                 scored_candidates.append((score + 1, direct_candidate))
 
         if not scored_candidates:
-            return direct_candidate if direct_candidate and not has_stable_identity else None
+            if direct_candidate and not has_stable_identity:
+                return direct_candidate
+
+            # Recovery heuristic for cameras created without stable USB identity:
+            # if there is only one active local camera, rebind to it.
+            if len(candidates) == 1:
+                return candidates[0]
+
+            # Prefer exact index match when available.
+            if device_id is not None:
+                exact_index = [c for c in candidates if c.get("device_id") == device_id]
+                if len(exact_index) == 1:
+                    return exact_index[0]
+            return None
 
         scored_candidates.sort(key=lambda item: item[0], reverse=True)
         best_score = scored_candidates[0][0]
@@ -231,6 +250,56 @@ class CameraService:
         if best_score < 40 and usb_serial_number is None and physical_address is None:
             return None
         return best_match
+
+    @staticmethod
+    def scan_local_camera_identities(max_devices: int = 10) -> list[dict[str, Any]]:
+        """
+        Scan local camera identities without opening video streams.
+
+        This method is intended for camera rebinding/reconnect logic where we
+        only need stable identity fields, not frame capture validation.
+        """
+        candidates: list[dict[str, Any]] = []
+        seen_devices: set[tuple[Any, ...]] = set()
+
+        existing_video_devices = sorted(
+            int(p.replace("/dev/video", "")) for p in glob.glob("/dev/video*") if p.replace("/dev/video", "").isdigit()
+        )
+        device_ids = [d for d in existing_video_devices if d < max_devices]
+
+        for device_id in device_ids:
+            try:
+                if not CameraService.is_capture_device(device_id=device_id):
+                    continue
+
+                identity = CameraService.describe_local_device(device_id=device_id)
+                unique_key = (
+                    identity.get("usb_vendor_id"),
+                    identity.get("usb_product_id"),
+                    identity.get("usb_serial_number")
+                    or identity.get("physical_address")
+                    or identity.get("device_path")
+                    or f"device_{device_id}",
+                )
+                if unique_key in seen_devices:
+                    continue
+
+                candidates.append(
+                    {
+                        "device_id": identity.get("device_id"),
+                        "device_path": identity.get("device_path") or f"/dev/video{device_id}",
+                        "physical_address": identity.get("physical_address"),
+                        "usb_vendor_id": identity.get("usb_vendor_id"),
+                        "usb_product_id": identity.get("usb_product_id"),
+                        "usb_serial_number": identity.get("usb_serial_number"),
+                        "usb_id": identity.get("usb_id"),
+                    }
+                )
+                seen_devices.add(unique_key)
+            except Exception as e:
+                logger.warning("Error reading camera identity for /dev/video%d: %s", device_id, e)
+
+        return candidates
 
     # ------------------------------------------------------------------ #
     #  Persistent device path helpers                                     #
@@ -338,9 +407,21 @@ class CameraService:
             return False
 
         if not shutil.which("v4l2-ctl"):
-            # If v4l2-ctl is not available, assume capture is possible
-            # and let downstream operations fail if the device is not valid
-            return True
+            # Fallback without v4l2-ctl: use sysfs capabilities bitmask when available.
+            try:
+                video_name = os.path.basename(os.path.realpath(dev))
+                caps_file = os.path.join("/sys/class/video4linux", video_name, "device", "capabilities")
+                if os.path.isfile(caps_file):
+                    with open(caps_file) as fh:
+                        raw = fh.read().strip()
+                    caps_value = int(raw, 16)
+                    # V4L2_CAP_VIDEO_CAPTURE = 0x00000001
+                    return bool(caps_value & 0x00000001)
+            except Exception as exc:
+                logger.debug("Could not read sysfs capabilities for %s: %s", dev, exc)
+
+            # Conservative fallback to reduce noisy probes on metadata/non-capture nodes.
+            return False
 
         try:
             result = subprocess.run(
@@ -422,8 +503,8 @@ class CameraService:
             device_path = f"/sys/class/video4linux/video{device_id}/device"
             if os.path.exists(device_path):
                 return os.path.realpath(device_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Error resolving sysfs fallback path for camera %d: %s", device_id, exc)
         return None
 
     @staticmethod

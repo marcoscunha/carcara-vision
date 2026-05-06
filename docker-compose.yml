@@ -78,8 +78,6 @@ services:
       - KEYCLOAK_ISSUER_URL=${KEYCLOAK_ISSUER_URL:-http://localhost:8280}
       - KEYCLOAK_REALM=carcara
       - KEYCLOAK_CLIENT_ID=carcara-backend
-    volumes:
-      - ./backend/src:/app/src
     depends_on:
       - db
       - mediamtx
@@ -91,6 +89,9 @@ services:
       - "/dev/video2:/dev/video2"
       - "/dev/video3:/dev/video3"
       - "/dev/v4l:/dev/v4l"
+    volumes:
+      - ./backend/src:/app/src
+      - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
 
   db:

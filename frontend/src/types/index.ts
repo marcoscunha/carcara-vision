@@ -89,6 +89,24 @@ export interface RealtimeInferenceMetrics {
   per_stream: Record<number, StreamInferenceMetrics>
 }
 
+export interface BenchmarkScenario {
+  scenario_name: string
+  duration_seconds: number
+  stream_count: number
+  resolution: string
+  model_name: string
+  annotation_enabled: boolean
+  notes?: string | null
+}
+
+export interface BenchmarkExportResponse {
+  run_id: string
+  json_report_path: string
+  csv_report_path: string
+  scenario_name: string
+  streams_count: number
+}
+
 export interface Detection {
   id: number
   camera_id: number

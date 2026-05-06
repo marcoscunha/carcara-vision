@@ -31,22 +31,31 @@ class Settings(BaseSettings):
     AUTH_ENABLED: bool = _env_bool("AUTH_ENABLED", True)
 
     # Object Detection
-    DEFAULT_MODEL: str = "yolov8n.pt"
+    DEFAULT_MODEL: str = os.getenv("DEFAULT_MODEL", "yolov8n")
     CONFIDENCE_THRESHOLD: float = 0.5
     SUPPORTED_MODELS: list[str] = [
-        "yolov8n.pt",
-        "yolov8s.pt",
-        "yolov8m.pt",
-        "yolov8l.pt",
-        "yolov8x.pt",
+        "yolov8n",
+        "yolov8s",
+        "yolov8m",
+        "yolov8l",
+        "yolov8x",
     ]
 
     # Hardware Acceleration
     CUDA_VISIBLE_DEVICES: str | None = os.getenv("CUDA_VISIBLE_DEVICES", None)
     USE_GPU: bool = os.getenv("USE_GPU", "False").lower() == "true"
+    ACCEL_PREPROCESS_MODE: str = os.getenv("ACCEL_PREPROCESS_MODE", "auto")
+    ACCEL_POSTPROCESS_MODE: str = os.getenv("ACCEL_POSTPROCESS_MODE", "auto")
+    ACCEL_ANNOTATE_MODE: str = os.getenv("ACCEL_ANNOTATE_MODE", "auto")
+    ACCEL_ENCODER_MODE: str = os.getenv("ACCEL_ENCODER_MODE", "auto")
+    ACCEL_STRICT: bool = _env_bool("ACCEL_STRICT", False)
 
     # GStreamer Configuration (replaces go2rtc)
     GSTREAMER_API_URL: str = os.getenv("GSTREAMER_API_URL", "http://gstreamer:8085")
+    GSTREAMER_SELF_HEAL_ENABLED: bool = _env_bool("GSTREAMER_SELF_HEAL_ENABLED", True)
+    GSTREAMER_SELF_HEAL_INTERVAL_SECONDS: int = int(os.getenv("GSTREAMER_SELF_HEAL_INTERVAL_SECONDS", "15"))
+    GSTREAMER_AUTO_RECREATE: bool = _env_bool("GSTREAMER_AUTO_RECREATE", True)
+    GSTREAMER_CONTAINER_NAME: str = os.getenv("GSTREAMER_CONTAINER_NAME", "gstreamer")
 
     # MediaMTX Configuration (media server for RTSP/WebRTC/HLS)
     MEDIAMTX_API_URL: str = os.getenv("MEDIAMTX_API_URL", "http://mediamtx:9997")

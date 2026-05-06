@@ -10,6 +10,9 @@ from ..ml.accelerators.detector import HardwareDetector
 from ..ml.base import HardwareAccelerator
 from ..ml.registry import TASK_TYPE_DETECT
 from ..ml.registry import model_registry
+from .acceleration_policy import AccelerationPolicyConfig
+from .acceleration_policy import ResolvedAccelerationPolicy
+from .acceleration_policy import resolve_policy
 
 
 def _resolve_default_accelerator() -> HardwareAccelerator:
@@ -24,6 +27,11 @@ class InferenceRuntimeConfig:
     model_name: str
     accelerator: HardwareAccelerator
     task_type: str = TASK_TYPE_DETECT  # detect | pose | segment
+    acceleration_profile: str = "generic"
+    accel_preprocess_mode: str = "python"
+    accel_postprocess_mode: str = "python"
+    accel_annotate_mode: str = "cpu"
+    accel_encoder_mode: str = "x264"
 
 
 class InferenceRuntimeService:
@@ -31,10 +39,16 @@ class InferenceRuntimeService:
 
     def __init__(self) -> None:
         self._lock = Lock()
+        self._acceleration = self._resolve_acceleration_policy()
         self._config = InferenceRuntimeConfig(
             model_name=settings.DEFAULT_MODEL,
             accelerator=_resolve_default_accelerator(),
             task_type=TASK_TYPE_DETECT,
+            acceleration_profile=self._acceleration.profile,
+            accel_preprocess_mode=self._acceleration.selected_preprocess_mode,
+            accel_postprocess_mode=self._acceleration.selected_postprocess_mode,
+            accel_annotate_mode=self._acceleration.selected_annotate_mode,
+            accel_encoder_mode=self._acceleration.selected_encoder_mode,
         )
 
     def get(self) -> InferenceRuntimeConfig:
@@ -43,6 +57,11 @@ class InferenceRuntimeService:
                 model_name=self._config.model_name,
                 accelerator=self._config.accelerator,
                 task_type=self._config.task_type,
+                acceleration_profile=self._config.acceleration_profile,
+                accel_preprocess_mode=self._config.accel_preprocess_mode,
+                accel_postprocess_mode=self._config.accel_postprocess_mode,
+                accel_annotate_mode=self._config.accel_annotate_mode,
+                accel_encoder_mode=self._config.accel_encoder_mode,
             )
 
     def update(
@@ -50,6 +69,7 @@ class InferenceRuntimeService:
         model_name: str | None = None,
         accelerator: str | HardwareAccelerator | None = None,
         task_type: str | None = None,
+        refresh_capabilities: bool = False,
     ) -> InferenceRuntimeConfig:
         with self._lock:
             if model_name:
@@ -58,10 +78,24 @@ class InferenceRuntimeService:
                 self._config.accelerator = self._coerce_accelerator(accelerator)
             if task_type is not None:
                 self._config.task_type = task_type
+            if refresh_capabilities:
+                self._acceleration = self._resolve_acceleration_policy(refresh_capabilities=True)
+
+            self._config.acceleration_profile = self._acceleration.profile
+            self._config.accel_preprocess_mode = self._acceleration.selected_preprocess_mode
+            self._config.accel_postprocess_mode = self._acceleration.selected_postprocess_mode
+            self._config.accel_annotate_mode = self._acceleration.selected_annotate_mode
+            self._config.accel_encoder_mode = self._acceleration.selected_encoder_mode
+
             return InferenceRuntimeConfig(
                 model_name=self._config.model_name,
                 accelerator=self._config.accelerator,
                 task_type=self._config.task_type,
+                acceleration_profile=self._config.acceleration_profile,
+                accel_preprocess_mode=self._config.accel_preprocess_mode,
+                accel_postprocess_mode=self._config.accel_postprocess_mode,
+                accel_annotate_mode=self._config.accel_annotate_mode,
+                accel_encoder_mode=self._config.accel_encoder_mode,
             )
 
     def list_available_models(self) -> list[str]:
@@ -77,6 +111,17 @@ class InferenceRuntimeService:
         if isinstance(accelerator, HardwareAccelerator):
             return accelerator
         return HardwareAccelerator(accelerator)
+
+    @staticmethod
+    def _resolve_acceleration_policy(refresh_capabilities: bool = False) -> ResolvedAccelerationPolicy:
+        policy_cfg = AccelerationPolicyConfig(
+            preprocess_mode=settings.ACCEL_PREPROCESS_MODE,
+            postprocess_mode=settings.ACCEL_POSTPROCESS_MODE,
+            annotate_mode=settings.ACCEL_ANNOTATE_MODE,
+            encoder_mode=settings.ACCEL_ENCODER_MODE,
+            strict=settings.ACCEL_STRICT,
+        )
+        return resolve_policy(policy_cfg, refresh_capabilities=refresh_capabilities)
 
 
 class InferenceMetricsService:

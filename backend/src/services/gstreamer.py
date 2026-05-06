@@ -6,7 +6,10 @@ for managing video streams, replacing go2rtc functionality.
 """
 
 import logging
+import os
+import socket
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -34,6 +37,35 @@ class GStreamerService:
         """Build API URL for MediaMTX."""
         return f"{self.mediamtx_api_url}/v3{endpoint}"
 
+    @staticmethod
+    def _docker_socket_available() -> bool:
+        return os.path.exists("/var/run/docker.sock")
+
+    @staticmethod
+    def _docker_api_request(method: str, path: str) -> tuple[int, str]:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        try:
+            sock.connect("/var/run/docker.sock")
+            request = f"{method} {path} HTTP/1.1\r\nHost: docker\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+            sock.sendall(request.encode("utf-8"))
+
+            chunks: list[bytes] = []
+            while True:
+                data = sock.recv(4096)
+                if not data:
+                    break
+                chunks.append(data)
+        finally:
+            sock.close()
+
+        response = b"".join(chunks).decode("utf-8", errors="replace")
+        head, _, body = response.partition("\r\n\r\n")
+        status_line = head.splitlines()[0] if head else "HTTP/1.1 500 Unknown"
+        parts = status_line.split()
+        status_code = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 500
+        return status_code, body
+
     async def health_check(self) -> bool:
         """Check if GStreamer and MediaMTX services are available."""
         try:
@@ -54,6 +86,29 @@ class GStreamerService:
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return False
+
+    async def restart_service_container(self, container_name: str | None = None) -> bool:
+        """Restart the GStreamer container through the Docker socket when available."""
+        target = container_name or settings.GSTREAMER_CONTAINER_NAME
+        if not self._docker_socket_available():
+            logger.warning("Docker socket not available; cannot auto-recreate container '%s'", target)
+            return False
+
+        try:
+            status_code, body = self._docker_api_request(
+                "POST",
+                f"/v1.41/containers/{quote(target, safe='')}/restart?t=5",
+            )
+        except Exception as exc:
+            logger.error("Failed to restart GStreamer container '%s': %s", target, exc)
+            return False
+
+        if status_code in (204, 304):
+            logger.warning("Restarted GStreamer container '%s' via Docker socket", target)
+            return True
+
+        logger.error("Docker restart for '%s' failed with status %s: %s", target, status_code, body.strip())
+        return False
 
     async def get_streams(self) -> dict[str, Any]:
         """Get all registered streams from GStreamer pipeline manager."""

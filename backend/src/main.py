@@ -1,4 +1,5 @@
 # include fast api
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -22,11 +23,32 @@ from .core.config import settings
 from .core.logging import setup_logging
 from .db.session import SessionLocal
 from .models.stream import Stream
+from .services.camera_connectivity import sync_local_camera_connectivity
 from .services.inference_worker_manager import inference_worker_manager
 
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+async def _gstreamer_self_heal_loop() -> None:
+    while True:
+        await asyncio.sleep(max(settings.GSTREAMER_SELF_HEAL_INTERVAL_SECONDS, 5))
+        db = SessionLocal()
+        try:
+            changed = sync_local_camera_connectivity(db)
+            recovered, failed = await streams._recover_reconnected_local_streams(db)
+            if changed or recovered or failed:
+                logger.info(
+                    "GStreamer self-heal tick: connectivity_changed=%s recovered=%d failed=%d",
+                    changed,
+                    recovered,
+                    failed,
+                )
+        except Exception as exc:
+            logger.exception("GStreamer self-heal loop failed: %s", exc)
+        finally:
+            db.close()
 
 
 @asynccontextmanager
@@ -38,13 +60,25 @@ async def lifespan(app: FastAPI):
 
     # Re-register active stream pipelines, then restore inference workers.
     db = SessionLocal()
+    self_heal_task: asyncio.Task | None = None
     try:
+        # First heal local camera bindings after detach/reattach events.
+        sync_local_camera_connectivity(db)
+
         restored, failed = await streams.restore_active_stream_pipelines(db)
         logger.info("Startup stream pipeline restore: %d restored, %d failed", restored, failed)
 
         active_streams = db.query(Stream).filter(Stream.status == "active").all()
         inference_worker_manager.restore_workers(active_streams)
         logger.info("Restored %d active-stream workers", len(active_streams))
+
+        if settings.GSTREAMER_SELF_HEAL_ENABLED:
+            self_heal_task = asyncio.create_task(_gstreamer_self_heal_loop())
+            logger.info(
+                "Started GStreamer self-heal loop (interval=%ss, auto_recreate=%s)",
+                settings.GSTREAMER_SELF_HEAL_INTERVAL_SECONDS,
+                settings.GSTREAMER_AUTO_RECREATE,
+            )
     finally:
         db.close()
 
@@ -52,6 +86,8 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ─────────────────────────────────────────────────────────
     logger.info("Application shutting down — stopping all inference workers...")
+    if self_heal_task is not None:
+        self_heal_task.cancel()
     inference_worker_manager.stop_all()
 
 

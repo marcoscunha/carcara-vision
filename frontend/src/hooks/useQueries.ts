@@ -20,6 +20,7 @@ import {
   RegionOfInterest,
   DiscoveryProtocol,
   InferenceRuntimeConfig,
+  BenchmarkScenario,
 } from '../types'
 
 // Query Keys - centralized for consistency
@@ -70,6 +71,9 @@ export const queryKeys = {
   inferenceMetrics: {
     realtime: ['inference-metrics', 'realtime'] as const,
     stream: (streamId: number) => ['inference-metrics', 'stream', streamId] as const,
+  },
+  benchmark: {
+    scenarioTemplate: ['benchmark', 'scenario-template'] as const,
   },
 }
 
@@ -491,5 +495,19 @@ export const useUpdateInferenceRuntimeConfig = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.inferenceMetrics.realtime })
       queryClient.invalidateQueries({ queryKey: ['streams'] })
     },
+  })
+}
+
+export const useBenchmarkScenarioTemplate = () => {
+  return useQuery({
+    queryKey: queryKeys.benchmark.scenarioTemplate,
+    queryFn: () => streamApi.getBenchmarkScenarioTemplate().then((res) => res.data),
+    staleTime: 60 * 1000,
+  })
+}
+
+export const useExportBenchmarkMetrics = () => {
+  return useMutation({
+    mutationFn: (scenario: BenchmarkScenario) => streamApi.exportBenchmarkMetrics(scenario),
   })
 }

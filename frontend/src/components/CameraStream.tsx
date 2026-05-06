@@ -137,6 +137,14 @@ interface StreamStats {
   throughput: string
 }
 
+export interface CameraStreamStatsSnapshot {
+  resolution: string
+  fps: number
+  codec: string
+  throughput: string
+  detectionFps: number
+}
+
 interface CameraStreamProps {
   stream: Stream
   protocol?: 'webrtc' | 'mse' | 'hls' | 'mjpeg'
@@ -146,6 +154,7 @@ interface CameraStreamProps {
   showStats?: boolean
   /** When true, connect to the annotated WebRTC stream instead of raw */
   showAnnotatedStream?: boolean
+  onStatsChange?: (stats: CameraStreamStatsSnapshot) => void
   onError?: (error: string) => void
   onConnected?: () => void
 }
@@ -215,6 +224,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   muted = true,
   showStats = true,
   showAnnotatedStream = false,
+  onStatsChange,
   onError,
   onConnected,
 }) => {
@@ -244,10 +254,8 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     resolution: '-',
     fps: 0,
     codec: '-',
-    throughput: '0 KB/s',
+    throughput: '--',
   })
-  const frameCountRef = useRef(0)
-  const lastFrameTimeRef = useRef(Date.now())
   const bytesReceivedRef = useRef(0)
   const lastBytesTimeRef = useRef(Date.now())
 
@@ -375,7 +383,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
 
   // ── WebRTC stats ────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!pcRef.current || currentProtocol !== 'webrtc') return
+    if (currentProtocol !== 'webrtc' || isConnecting) return
     const id = setInterval(async () => {
       if (!pcRef.current) return
       try {
@@ -383,15 +391,6 @@ const CameraStream: React.FC<CameraStreamProps> = ({
         rtcStats.forEach((report) => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
             const now = Date.now()
-            const currentFrames = report.framesDecoded || 0
-            const diff = (now - lastFrameTimeRef.current) / 1000
-            if (diff > 0 && frameCountRef.current > 0) {
-              const fps = Math.round((currentFrames - frameCountRef.current) / diff)
-              setStats((s) => ({ ...s, fps: fps > 0 ? fps : s.fps }))
-            }
-            frameCountRef.current = currentFrames
-            lastFrameTimeRef.current = now
-
             const currentBytes = report.bytesReceived || 0
             const bytesDiff = currentBytes - bytesReceivedRef.current
             const timeDiff = (now - lastBytesTimeRef.current) / 1000
@@ -413,7 +412,93 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       }
     }, 1000)
     return () => clearInterval(id)
+  }, [currentProtocol, isConnecting])
+
+  // ── Video render FPS (works for WebRTC/MSE/HLS/MJPEG) ─────────────────────
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    let cancelled = false
+    let frameCounter = 0
+    let frameCbId = 0
+    let lastSampleTime = performance.now()
+    let fallbackId = 0
+
+    const sample = (now: number) => {
+      if (cancelled) return
+      frameCounter += 1
+
+      const elapsed = now - lastSampleTime
+      if (elapsed >= 1000) {
+        const fps = Math.round((frameCounter * 1000) / elapsed)
+        setStats((prev) => ({ ...prev, fps: fps > 0 ? fps : prev.fps }))
+        frameCounter = 0
+        lastSampleTime = now
+      }
+
+      if ('requestVideoFrameCallback' in video) {
+        frameCbId = (
+          video as HTMLVideoElement & { requestVideoFrameCallback: (cb: (t: number) => void) => number }
+        ).requestVideoFrameCallback(sample)
+      }
+    }
+
+    const startCounting = () => {
+      if (cancelled) return
+      lastSampleTime = performance.now()
+      frameCounter = 0
+      if ('requestVideoFrameCallback' in video) {
+        frameCbId = (
+          video as HTMLVideoElement & { requestVideoFrameCallback: (cb: (t: number) => void) => number }
+        ).requestVideoFrameCallback(sample)
+      } else {
+        // Fallback: poll getVideoPlaybackQuality every second
+        let prevFrames = 0
+        fallbackId = window.setInterval(() => {
+          if (cancelled || (video as HTMLVideoElement).paused || (video as HTMLVideoElement).readyState < 2) return
+          if ('getVideoPlaybackQuality' in video) {
+            const q = (
+              video as HTMLVideoElement & { getVideoPlaybackQuality: () => { totalVideoFrames: number } }
+            ).getVideoPlaybackQuality()
+            const diff = q.totalVideoFrames - prevFrames
+            prevFrames = q.totalVideoFrames
+            if (diff > 0) setStats((prev) => ({ ...prev, fps: diff }))
+          }
+        }, 1000)
+      }
+    }
+
+    // Start only once the video is actively playing
+    if (!video.paused && video.readyState >= 2) {
+      startCounting()
+    } else {
+      video.addEventListener('playing', startCounting, { once: true })
+    }
+
+    return () => {
+      cancelled = true
+      video.removeEventListener('playing', startCounting)
+      if ('cancelVideoFrameCallback' in video && frameCbId) {
+        ;(video as HTMLVideoElement & { cancelVideoFrameCallback: (id: number) => void }).cancelVideoFrameCallback(
+          frameCbId,
+        )
+      }
+      if (fallbackId) clearInterval(fallbackId)
+    }
   }, [currentProtocol])
+
+  // ── Bubble latest transport and AI stats to parent panels ─────────────────
+  useEffect(() => {
+    if (!onStatsChange) return
+    onStatsChange({
+      resolution: stats.resolution,
+      fps: stats.fps,
+      codec: stats.codec,
+      throughput: stats.throughput,
+      detectionFps,
+    })
+  }, [stats.resolution, stats.fps, stats.codec, stats.throughput, detectionFps, onStatsChange])
 
   // ── Resolution update ───────────────────────────────────────────────────────
   useEffect(() => {

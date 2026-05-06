@@ -6,6 +6,7 @@ and MediaMTX, supporting RTSP, WebRTC, HLS, and other streaming protocols.
 """
 
 import logging
+import asyncio
 import time
 from urllib.parse import urlparse
 
@@ -17,6 +18,8 @@ from fastapi import Request
 from fastapi import status
 from sqlalchemy.orm import Session
 
+from ...api.models.benchmark import BenchmarkExportResponse
+from ...api.models.benchmark import BenchmarkScenario
 from ...api.models.stream import StreamCreate
 from ...api.models.stream import StreamResponse
 from ...api.models.stream import StreamUpdate
@@ -26,6 +29,9 @@ from ...core.security import AuthenticatedUser
 from ...db.session import get_db
 from ...models.camera import Camera
 from ...models.stream import Stream
+from ...services.benchmark_reporting import default_benchmark_scenario
+from ...services.benchmark_reporting import export_benchmark_report
+from ...services.camera_connectivity import sync_local_camera_connectivity
 from ...services.camera_service import CameraService
 from ...services.gstreamer import gstreamer_service
 from ...services.inference_runtime import inference_metrics_service
@@ -332,6 +338,149 @@ async def restore_active_stream_pipelines(db: Session) -> tuple[int, int]:
     return restored, failed
 
 
+async def _recover_reconnected_local_streams(db: Session) -> tuple[int, int]:
+    """
+    Re-register offline local streams when their camera becomes active again.
+
+    This auto-heals the common USB detach/reattach flow where ``/dev/videoX``
+    changed and streams were marked offline while the camera was disconnected.
+    """
+    gst_streams = await gstreamer_service.get_streams()
+
+    candidates = (
+        db.query(Stream)
+        .join(Camera, Camera.id == Stream.camera_id)
+        .filter(
+            Camera.camera_type.in_(tuple(LOCAL_CAMERA_TYPES)),
+            Camera.is_active.is_(True),
+        )
+        .all()
+    )
+
+    recovered = 0
+    failed = 0
+    failed_stream_ids: list[int] = []
+
+    for stream in candidates:
+        gst_info = gst_streams.get(stream.stream_name or "", {}) if isinstance(gst_streams, dict) else {}
+        gst_status = gst_info.get("status")
+        needs_recovery = stream.status in ("offline", "error") or gst_status in (None, "error")
+        if not needs_recovery:
+            continue
+
+        camera = db.query(Camera).filter(Camera.id == stream.camera_id).first()
+        if camera is None:
+            continue
+
+        metadata = dict(stream.stream_metadata or {})
+        previous_source_config = metadata.get("source_config") or {}
+
+        try:
+            source_config, resolved_source = _build_source_config_for_camera(
+                camera,
+                width=int(previous_source_config.get("width") or metadata.get("width") or 640),
+                height=int(previous_source_config.get("height") or metadata.get("height") or 360),
+                codec=previous_source_config.get("codec") or metadata.get("codec") or "h264",
+                source_config=previous_source_config,
+            )
+
+            if not stream.stream_name:
+                stream.stream_name = _generate_stream_name(camera, stream.id)
+
+            _apply_resolved_camera_binding(camera, resolved_source)
+            metadata["source_config"] = source_config
+            stream.stream_metadata = metadata
+
+            # Ensure stale source is removed before re-adding updated config.
+            await gstreamer_service.remove_stream(stream.stream_name)
+            success = await gstreamer_service.add_stream(
+                name=stream.stream_name,
+                source_type=source_config["source_type"],
+                source_uri=source_config.get("source_uri"),
+                device_id=source_config.get("device_id"),
+                device_path=source_config.get("device_path"),
+                width=source_config.get("width", 640),
+                height=source_config.get("height", 360),
+                codec=source_config.get("codec", "h264"),
+            )
+
+            if success:
+                stream.status = "active"
+                inference_worker_manager.restart_worker(stream)
+                recovered += 1
+                logger.info("Recovered local stream '%s' after camera reconnect", stream.stream_name)
+            else:
+                stream.status = "error"
+                failed += 1
+                failed_stream_ids.append(stream.id)
+                logger.warning("Failed recovering local stream '%s' after reconnect", stream.stream_name)
+        except Exception as exc:
+            stream.status = "error"
+            failed += 1
+            failed_stream_ids.append(stream.id)
+            logger.exception("Error recovering local stream %s: %s", stream.id, exc)
+
+    if recovered or failed:
+        db.commit()
+
+    if failed and settings.GSTREAMER_AUTO_RECREATE:
+        restarted = await gstreamer_service.restart_service_container()
+        if restarted:
+            await asyncio.sleep(3)
+            retry_ids = set(failed_stream_ids)
+            retry_candidates = db.query(Stream).filter(Stream.id.in_(retry_ids)).all() if retry_ids else []
+            failed = 0
+            for stream in retry_candidates:
+                camera = db.query(Camera).filter(Camera.id == stream.camera_id).first()
+                if camera is None:
+                    continue
+
+                metadata = dict(stream.stream_metadata or {})
+                previous_source_config = metadata.get("source_config") or {}
+                try:
+                    source_config, resolved_source = _build_source_config_for_camera(
+                        camera,
+                        width=int(previous_source_config.get("width") or metadata.get("width") or 640),
+                        height=int(previous_source_config.get("height") or metadata.get("height") or 360),
+                        codec=previous_source_config.get("codec") or metadata.get("codec") or "h264",
+                        source_config=previous_source_config,
+                    )
+                    if not stream.stream_name:
+                        stream.stream_name = _generate_stream_name(camera, stream.id)
+
+                    _apply_resolved_camera_binding(camera, resolved_source)
+                    metadata["source_config"] = source_config
+                    stream.stream_metadata = metadata
+
+                    await gstreamer_service.remove_stream(stream.stream_name)
+                    success = await gstreamer_service.add_stream(
+                        name=stream.stream_name,
+                        source_type=source_config["source_type"],
+                        source_uri=source_config.get("source_uri"),
+                        device_id=source_config.get("device_id"),
+                        device_path=source_config.get("device_path"),
+                        width=source_config.get("width", 640),
+                        height=source_config.get("height", 360),
+                        codec=source_config.get("codec", "h264"),
+                    )
+                    if success:
+                        stream.status = "active"
+                        inference_worker_manager.restart_worker(stream)
+                        recovered += 1
+                        logger.info("Recovered local stream '%s' after GStreamer container restart", stream.stream_name)
+                    else:
+                        stream.status = "error"
+                        failed += 1
+                except Exception as exc:
+                    stream.status = "error"
+                    failed += 1
+                    logger.exception("Retry recovery failed for local stream %s: %s", stream.id, exc)
+
+            db.commit()
+
+    return recovered, failed
+
+
 def _build_stream_response(stream: Stream, host: str | None = None) -> StreamResponse:
     """Build a StreamResponse with URLs from MediaMTX."""
     detection_settings = _get_detection_settings(stream)
@@ -475,6 +624,10 @@ async def list_streams(
     db: Session = Depends(get_db),
 ):
     """List all streams with their RTSP URLs. Requires authentication."""
+    changed = sync_local_camera_connectivity(db)
+    if changed:
+        await _recover_reconnected_local_streams(db)
+
     query = db.query(Stream)
 
     if status_filter:
@@ -498,6 +651,11 @@ async def get_stream(
     if stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
 
+    changed = sync_local_camera_connectivity(db, camera_ids={stream.camera_id})
+    if changed:
+        await _recover_reconnected_local_streams(db)
+    db.refresh(stream)
+
     host = request.headers.get("host", "localhost").split(":")[0]
     return _build_stream_response(stream, host=host)
 
@@ -513,6 +671,11 @@ async def get_stream_urls(
     stream = db.query(Stream).filter(Stream.id == stream_id).first()
     if stream is None:
         raise HTTPException(status_code=404, detail="Stream not found")
+
+    changed = sync_local_camera_connectivity(db, camera_ids={stream.camera_id})
+    if changed:
+        await _recover_reconnected_local_streams(db)
+    db.refresh(stream)
 
     if not stream.stream_name:
         raise HTTPException(status_code=400, detail="Stream not registered with GStreamer")
@@ -793,3 +956,42 @@ async def get_global_realtime_metrics(
         },
         "per_stream": per_stream,
     }
+
+
+@router.get("/metrics/benchmark/scenario-template", response_model=BenchmarkScenario)
+async def get_benchmark_scenario_template(
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Return a default benchmark scenario payload template."""
+    _ = db
+    return default_benchmark_scenario()
+
+
+@router.post("/metrics/benchmark/export", response_model=BenchmarkExportResponse)
+async def export_benchmark_metrics(
+    scenario: BenchmarkScenario,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Export active worker metrics to JSON and CSV benchmark artifacts."""
+    _ = db
+    worker_stats = inference_worker_manager.list_stats()
+    runtime = inference_runtime_service.get()
+    runtime_payload = {
+        "model_name": runtime.model_name,
+        "accelerator": runtime.accelerator.value,
+        "task_type": runtime.task_type,
+        "acceleration_profile": runtime.acceleration_profile,
+        "accel_preprocess_mode": runtime.accel_preprocess_mode,
+        "accel_postprocess_mode": runtime.accel_postprocess_mode,
+        "accel_annotate_mode": runtime.accel_annotate_mode,
+        "accel_encoder_mode": runtime.accel_encoder_mode,
+    }
+
+    report = export_benchmark_report(
+        scenario=scenario,
+        worker_stats=worker_stats,
+        runtime_config=runtime_payload,
+    )
+    return BenchmarkExportResponse(**report)

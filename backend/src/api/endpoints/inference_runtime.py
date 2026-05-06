@@ -15,6 +15,11 @@ def get_inference_runtime_config() -> InferenceRuntimeConfigResponse:
         model_name=config.model_name,
         accelerator=config.accelerator.value,
         task_type=config.task_type,
+        acceleration_profile=config.acceleration_profile,
+        accel_preprocess_mode=config.accel_preprocess_mode,
+        accel_postprocess_mode=config.accel_postprocess_mode,
+        accel_annotate_mode=config.accel_annotate_mode,
+        accel_encoder_mode=config.accel_encoder_mode,
         available_models=inference_runtime_service.list_available_models(),
         available_accelerators=inference_runtime_service.list_available_accelerators(),
     )
@@ -27,6 +32,7 @@ def update_inference_runtime_config(payload: InferenceRuntimeConfigUpdate) -> In
             model_name=payload.model_name,
             accelerator=payload.accelerator,
             task_type=payload.task_type,
+            refresh_capabilities=payload.refresh_capabilities,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid accelerator: {payload.accelerator}") from exc
@@ -35,6 +41,11 @@ def update_inference_runtime_config(payload: InferenceRuntimeConfigUpdate) -> In
         model_name=updated.model_name,
         accelerator=updated.accelerator.value,
         task_type=updated.task_type,
+        acceleration_profile=updated.acceleration_profile,
+        accel_preprocess_mode=updated.accel_preprocess_mode,
+        accel_postprocess_mode=updated.accel_postprocess_mode,
+        accel_annotate_mode=updated.accel_annotate_mode,
+        accel_encoder_mode=updated.accel_encoder_mode,
         available_models=inference_runtime_service.list_available_models(),
         available_accelerators=inference_runtime_service.list_available_accelerators(),
     )

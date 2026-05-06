@@ -14,6 +14,8 @@ import {
   DiscoveryProtocol,
   InferenceRuntimeConfig,
   RealtimeInferenceMetrics,
+  BenchmarkScenario,
+  BenchmarkExportResponse,
 } from '../types'
 import keycloak from '../auth/keycloak'
 import { AUTH_ENABLED } from '../auth/keycloak'
@@ -124,6 +126,9 @@ export const streamApi = {
   restart: (id: number) => api.post<Stream>(`/streams/${id}/restart`),
   getRealtimeMetrics: () => api.get<RealtimeInferenceMetrics>('/streams/metrics/realtime'),
   getStreamMetrics: (id: number) => api.get(`/streams/${id}/metrics`),
+  getBenchmarkScenarioTemplate: () => api.get<BenchmarkScenario>('/streams/metrics/benchmark/scenario-template'),
+  exportBenchmarkMetrics: (scenario: BenchmarkScenario) =>
+    api.post<BenchmarkExportResponse>('/streams/metrics/benchmark/export', scenario),
   checkHealth: () => api.get('/streams/health/gstreamer'),
 }
 
