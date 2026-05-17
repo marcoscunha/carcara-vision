@@ -4,7 +4,6 @@ import {
   Button,
   IconButton,
   Typography,
-  Divider,
   Chip,
   Skeleton,
   Table,
@@ -24,8 +23,6 @@ import {
 } from '@mui/icons-material'
 import { useCameras, useCreateCamera, useUpdateCamera, useDeleteCamera } from '../hooks/useQueries'
 import { Camera } from '../types'
-import { CameraScanner } from '../components/CameraScanner'
-import { IPCameraScanner } from '../components/IPCameraScanner'
 import { ConfirmDeleteDialog, CameraFormDialog, CameraFormData } from '../components/dialogs'
 
 const Cameras: React.FC = () => {
@@ -114,32 +111,6 @@ const Cameras: React.FC = () => {
           </Button>
         </Box>
       </Box>
-
-      {/* Local Cameras Section */}
-      <Box className="section section--compact">
-        <Box className="section-header">
-          <Box className="section-header__accent" />
-          <Typography variant="h5" className="section-header__title">
-            Local Cameras
-          </Typography>
-        </Box>
-        <CameraScanner />
-      </Box>
-
-      <Divider className="section-divider" />
-
-      {/* IP Cameras Section */}
-      <Box className="section section--compact">
-        <Box className="section-header">
-          <Box className="section-header__accent" />
-          <Typography variant="h5" className="section-header__title">
-            Network Cameras (IP)
-          </Typography>
-        </Box>
-        <IPCameraScanner />
-      </Box>
-
-      <Divider className="section-divider" />
 
       {/* Registered Cameras Section */}
       <Box className="section">
