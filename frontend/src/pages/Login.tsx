@@ -92,7 +92,7 @@ const Login: React.FC = () => {
               color: 'text.primary',
             }}
           >
-            Carcara NVC
+            Carcara Vision
           </Typography>
 
           {/* Subtitle */}

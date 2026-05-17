@@ -635,7 +635,7 @@ const Settings: React.FC = () => {
                   System Information
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  CARCARA-NVC application details
+                  Carcara Vision application details
                 </Typography>
               </Box>
             </Box>
@@ -648,7 +648,7 @@ const Settings: React.FC = () => {
                   Product Name
                 </Typography>
                 <Typography variant="body2" className="settings-info__value">
-                  CARCARA-NVC
+                  Carcara Vision
                 </Typography>
               </Box>
               <Box className="settings-info__row">

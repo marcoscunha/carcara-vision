@@ -1,6 +1,6 @@
 # 🏗️ Architecture
 
-This document describes the system layout and how data flows through Carcara NVC.
+This document describes the system layout and how data flows through Carcara Vision.
 
 ## High-level View
 

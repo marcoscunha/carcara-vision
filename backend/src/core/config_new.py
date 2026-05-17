@@ -1,5 +1,5 @@
 """
-Enhanced Configuration for Carcara NVC.
+Enhanced Configuration for Carcara Vision.
 
 Supports:
 - Multiple ML model types
@@ -50,8 +50,8 @@ class Settings(BaseSettings):
     """
 
     # Project Info
-    PROJECT_NAME: str = "Carcara NVC"
-    PROJECT_DESCRIPTION: str = "Network Video Controller with ML-powered Detection"
+    PROJECT_NAME: str = "Carcara Vision"
+    PROJECT_DESCRIPTION: str = "Hardware-Accelerated ML Inference Platform"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api/v1"
 
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     POSTGRES_SERVER: str = Field(default="localhost", env="POSTGRES_SERVER")
     POSTGRES_USER: str = Field(default="postgres", env="POSTGRES_USER")
     POSTGRES_PASSWORD: str = Field(default="postgres", env="POSTGRES_PASSWORD")
-    POSTGRES_DB: str = Field(default="carcara_nvc", env="POSTGRES_DB")
+    POSTGRES_DB: str = Field(default="carcara_vision", env="POSTGRES_DB")
     POSTGRES_PORT: int = Field(default=5432, env="POSTGRES_PORT")
     SQLALCHEMY_DATABASE_URI: str | None = None
 

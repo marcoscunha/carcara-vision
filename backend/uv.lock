@@ -249,7 +249,7 @@ wheels = [
 ]
 
 [[package]]
-name = "carcara-nvc-backend"
+name = "carcara-vision-backend"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [

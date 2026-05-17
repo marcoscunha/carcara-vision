@@ -1,6 +1,6 @@
-# Carcara NVC Backend
+# Carcara Vision Backend
 
-FastAPI backend for Carcara NVC - Network Video Controller with ML-Powered Detection.
+FastAPI backend for Carcara Vision - Hardware-Accelerated ML Inference Platform.
 
 ## Database migration (single baseline)
 

@@ -24,7 +24,7 @@ const queryClient = new QueryClient({
   },
 })
 
-// CARCARA-NVC Color Palette
+// Carcara Vision Color Palette
 const colors = {
   background: {
     light: '#F9FAFB',

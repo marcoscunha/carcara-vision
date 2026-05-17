@@ -67,7 +67,7 @@ services:
       - POSTGRES_SERVER=db
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=carcara_nvc
+      - POSTGRES_DB=carcara_vision
       - USE_GPU=true
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
@@ -99,7 +99,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=carcara_nvc
+      - POSTGRES_DB=carcara_vision
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:

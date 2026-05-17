@@ -1,4 +1,4 @@
-# Carcara NVC - Network Video Controller with ML-Powered Detection
+# Carcara Vision - Hardware-Accelerated ML Inference Platform
 
 <div align="center">
 
@@ -15,7 +15,7 @@
 
 ## 🎯 Overview
 
-Carcara NVC manages IP camera streams with real-time detection and intelligent video analysis. It runs on powerful servers with NVIDIA GPUs down to edge devices like Jetson Nano and Raspberry Pi.
+Carcara Vision is a hardware-accelerated ML inference platform that enables data scientists to maximize GPU/accelerator utilization across multiple video streams. Deploy custom models with a simple SDK and seamless hardware acceleration integration.
 
 ### ✨ Highlights
 
@@ -45,7 +45,7 @@ Carcara NVC manages IP camera streams with real-time detection and intelligent v
 ## 🚀 Quick start
 
 ```bash
-cd carcara-nvc
+cd carcara-vision
 cp .env.example .env
 ./launch_docker_gpu.sh
 ```
@@ -60,11 +60,11 @@ API docs: http://localhost:8000/docs
 
 ## 🤝 Contributing
 
-Everybody is invited and welcome to contribute to Carcara NVC! There's a lot to do — whether you're a developer, a tester with edge hardware, or someone who wants to improve the docs.
+Everybody is invited and welcome to contribute to Carcara Vision! There's a lot to do — whether you're a developer, a tester with edge hardware, or someone who wants to improve the docs.
 
 ### How to contribute
 
-1. **Start a conversation** — Open an [issue](https://github.com/marcoscunha/carcara-nvc/issues) to report a bug or suggest a feature, or start a [discussion](https://github.com/marcoscunha/carcara-nvc/discussions) for broader ideas.
+1. **Start a conversation** — Open an [issue](https://github.com/marcoscunha/carcara-vision/issues) to report a bug or suggest a feature, or start a [discussion](https://github.com/marcoscunha/carcara-vision/discussions) for broader ideas.
 2. **Pick up or create an issue** — Check existing issues or propose your own. Comment on it so others know you're working on it.
 3. **Create a branch** — Branch off `dev` with a descriptive name:
    ```bash

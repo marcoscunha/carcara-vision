@@ -1,6 +1,6 @@
-# CARCARA-NVC Design System
+# Carcara Vision Design System
 
-> **Network Video Controller** - Design Documentation
+> **Hardware-Accelerated ML Inference Platform** - Design Documentation
 > Last Updated: January 2026
 
 ---
@@ -22,7 +22,7 @@
 
 ### Product Name
 
-**CARCARA-NVC** (Network Video Controller)
+**Carcara Vision** (Hardware-Accelerated ML Inference)
 
 ### Brand Concept
 
@@ -39,7 +39,7 @@ The logo features:
 - A stylized **"C"** enclosed in a rounded square with gradient fill
 - Gradient transitions from vibrant orange (`#F5A45A`) to dark rust (`#D26A27`)
 - A subtle highlight overlay for depth
-- "CARCARA" in bold uppercase with "NVC" as an orange accent subtitle
+- "CARCARA" in bold uppercase with "Vision" as an orange accent subtitle
 
 ---
 
@@ -244,7 +244,7 @@ color: #f5a45a;
 ```
 ┌─────────────────────────────┐
 │  [Logo]  CARCARA            │
-│          NVC                │
+│       Vision      │
 ├─────────────────────────────┤
 │  MAIN MENU                  │
 │                             │
@@ -459,4 +459,4 @@ frontend/src/
 
 ---
 
-_Document maintained by the CARCARA-NVC development team_
+_Document maintained by the Carcara Vision development team_

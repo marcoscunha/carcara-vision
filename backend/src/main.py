@@ -156,7 +156,7 @@ app.include_router(ws_detections.router, prefix=f"{settings.API_V1_STR}/ws", tag
 def read_root():
     logger.info("Root endpoint accessed")
     return {
-        "message": "Welcome to Carcara NVC Backend",
+        "message": "Welcome to Carcara Vision Backend",
         "version": settings.VERSION,
         "docs_url": "/docs",
     }

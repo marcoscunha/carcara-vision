@@ -1,10 +1,10 @@
 # Authentication Architecture
 
-This document describes how authentication works in Carcara NVC using Keycloak as the identity provider.
+This document describes how authentication works in Carcara Vision using Keycloak as the identity provider.
 
 ## Overview
 
-Carcara NVC uses **Keycloak** for centralized identity and access management. The system implements the **OAuth2 Authorization Code flow with PKCE** (Proof Key for Code Exchange), which is the recommended approach for Single Page Applications (SPAs).
+Carcara Vision uses **Keycloak** for centralized identity and access management. The system implements the **OAuth2 Authorization Code flow with PKCE** (Proof Key for Code Exchange), which is the recommended approach for Single Page Applications (SPAs).
 
 ## Architecture
 

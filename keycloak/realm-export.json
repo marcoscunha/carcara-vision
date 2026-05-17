@@ -1,8 +1,8 @@
 {
     "realm": "carcara",
     "enabled": true,
-    "displayName": "Carcara NVC",
-    "displayNameHtml": "<div class=\"kc-logo-text\"><span>Carcara NVC</span></div>",
+    "displayName": "Carcara Vision",
+    "displayNameHtml": "<div class=\"kc-logo-text\"><span>Carcara Vision</span></div>",
     "sslRequired": "none",
     "registrationAllowed": false,
     "loginWithEmailAllowed": true,
@@ -78,7 +78,7 @@
         {
             "clientId": "carcara-frontend",
             "name": "Carcara Frontend Application",
-            "description": "React SPA frontend for Carcara NVC",
+            "description": "React SPA frontend for Carcara Vision",
             "enabled": true,
             "publicClient": true,
             "standardFlowEnabled": true,
@@ -119,7 +119,7 @@
         {
             "clientId": "carcara-backend",
             "name": "Carcara Backend API",
-            "description": "FastAPI backend service for Carcara NVC",
+            "description": "FastAPI backend service for Carcara Vision",
             "enabled": true,
             "bearerOnly": true,
             "publicClient": false,

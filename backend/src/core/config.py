@@ -14,7 +14,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Carcara NVC Backend"
+    PROJECT_NAME: str = "Carcara Vision Backend"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
 
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "carcara_nvc")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "carcara_vision")
     SQLALCHEMY_DATABASE_URI: str | None = None
 
     # Security

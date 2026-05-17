@@ -1,5 +1,5 @@
 /**
- * Authentication Provider for Carcara NVC.
+ * Authentication Provider for Carcara Vision.
  *
  * Provides React context for authentication state and operations.
  * Uses Keycloak for OAuth2/OIDC authentication with PKCE flow.

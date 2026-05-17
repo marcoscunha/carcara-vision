@@ -10,8 +10,8 @@
 ## Run with Docker (recommended)
 
 ```bash
-git clone https://github.com/yourusername/carcara-nvc.git
-cd carcara-nvc
+git clone https://github.com/yourusername/carcara-vision.git
+cd carcara-vision
 cp .env.example .env
 docker compose up -d
 ```

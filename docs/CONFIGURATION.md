@@ -8,7 +8,7 @@ This project is configured via environment variables. Use `.env` for local devel
 POSTGRES_SERVER=db
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-POSTGRES_DB=carcara_nvc
+POSTGRES_DB=carcara_vision
 
 DEFAULT_MODEL=yolov8n.pt
 CONFIDENCE_THRESHOLD=0.5

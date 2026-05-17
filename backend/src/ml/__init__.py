@@ -1,4 +1,4 @@
-# Carcara NVC - Machine Learning Module
+# Carcara Vision - Machine Learning Module
 # This module provides a unified interface for ML inference with support for:
 # - Multiple model types (YOLO, VLMs, custom models)
 # - Hardware acceleration (CUDA, TensorRT, Jetson, Raspberry Pi, OpenVINO)
