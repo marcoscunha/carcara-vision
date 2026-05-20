@@ -60,11 +60,49 @@ class AnnotatedStreamWriter:
                       anything else falls back to ``libx264``.
     """
 
-    # Mapping from resolved encoder mode to (ffmpeg_codec, extra_args)
+    # Mapping from resolved encoder mode to (ffmpeg_codec, extra_args).
+    # All profiles forced to Constrained Baseline + no B-frames for maximum
+    # WebRTC/HLS compatibility. SPS/PPS are repeated before every keyframe via
+    # the ``dump_extra`` bitstream filter (added in ``_build_encoder_args``)
+    # so mid-stream WebRTC subscribers can start decoding within one GOP.
     _ENCODER_MAP: dict[str, tuple[str, list[str]]] = {
-        "nvenc": ("h264_nvenc", ["-preset", "p4", "-tune", "ll"]),
-        "jetson": ("h264_omx", ["-b:v", "1500k"]),
-        "v4l2": ("h264_v4l2m2m", ["-b:v", "1500k"]),
+        "nvenc": (
+            "h264_nvenc",
+            [
+                "-preset",
+                "p4",
+                "-tune",
+                "ll",
+                "-profile:v",
+                "baseline",
+                "-bf",
+                "0",
+                "-forced-idr",
+                "1",
+                "-b:v",
+                "1500k",
+            ],
+        ),
+        "jetson": (
+            "h264_omx",
+            [
+                "-profile:v",
+                "baseline",
+                "-bf",
+                "0",
+                "-b:v",
+                "1500k",
+            ],
+        ),
+        "v4l2": (
+            "h264_v4l2m2m",
+            [
+                "-profile:v",
+                "baseline",
+                "-b:v",
+                "1500k",
+            ],
+        ),
     }
 
     def __init__(
@@ -204,11 +242,32 @@ class AnnotatedStreamWriter:
                 return False
 
     def _build_encoder_args(self) -> list[str]:
-        """Return FFmpeg codec/encoder arguments for the configured encoder_mode."""
+        """Return FFmpeg codec/encoder arguments for the configured encoder_mode.
+
+        All paths produce Constrained-Baseline H.264 with a short GOP and an
+        in-band SPS/PPS repetition (``dump_extra=freq=keyframe``) so that any
+        WebRTC/HLS client that joins mid-stream can start decoding within one
+        GOP rather than waiting indefinitely for parameter sets.
+        """
+        # 1 keyframe per second keeps new subscribers' time-to-first-frame low.
+        gop = max(self._fps, 1)
+        common_tail = [
+            "-g",
+            str(gop),
+            "-keyint_min",
+            str(gop),
+            "-pix_fmt",
+            "yuv420p",
+            # Repeat SPS/PPS before every IDR so RTP/WebRTC clients can
+            # initialise their decoder without seeing the very first packet.
+            "-bsf:v",
+            "dump_extra=freq=keyframe",
+        ]
+
         mode = self._encoder_mode
         if mode in self._ENCODER_MAP:
             codec, extra = self._ENCODER_MAP[mode]
-            return ["-c:v", codec, *extra, "-pix_fmt", "yuv420p"]
+            return ["-c:v", codec, *extra, *common_tail]
 
         # Default: software libx264 (auto, x264, or any unrecognised value)
         return [
@@ -218,18 +277,17 @@ class AnnotatedStreamWriter:
             "ultrafast",
             "-tune",
             "zerolatency",
-            "-g",
-            "30",
-            "-keyint_min",
-            "30",
+            "-profile:v",
+            "baseline",
+            "-bf",
+            "0",
             "-b:v",
             "1500k",
             "-maxrate",
             "2000k",
             "-bufsize",
             "3000k",
-            "-pix_fmt",
-            "yuv420p",
+            *common_tail,
         ]
 
     def _spawn_ffmpeg(self) -> subprocess.Popen:
@@ -258,13 +316,47 @@ class AnnotatedStreamWriter:
             "tcp",
             self._output_url,
         ]
-        logger.info("Starting FFmpeg for annotated stream '%s'  →  %s", self._stream_name, self._output_url)
-        return subprocess.Popen(
+        logger.info(
+            "Starting FFmpeg for annotated stream '%s'  →  %s | cmd: %s",
+            self._stream_name,
+            self._output_url,
+            " ".join(cmd),
+        )
+        process = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,  # silence ffmpeg progress output
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
+        # Drain stderr in a background thread so the pipe never blocks and
+        # encoder errors actually surface in the application log.
+        threading.Thread(
+            target=self._drain_ffmpeg_stderr,
+            args=(process,),
+            name=f"annotated-stream-ffmpeg-stderr-{self._stream_name}",
+            daemon=True,
+        ).start()
+        return process
+
+    def _drain_ffmpeg_stderr(self, process: subprocess.Popen) -> None:
+        """Forward FFmpeg stderr line-by-line to the application logger."""
+        stderr = process.stderr
+        if stderr is None:
+            return
+        try:
+            for raw in iter(stderr.readline, b""):
+                if not raw:
+                    break
+                line = raw.decode("utf-8", errors="replace").rstrip()
+                if not line:
+                    continue
+                lowered = line.lower()
+                if "error" in lowered or "fatal" in lowered or "failed" in lowered:
+                    logger.warning("[ffmpeg %s] %s", self._stream_name, line)
+                else:
+                    logger.debug("[ffmpeg %s] %s", self._stream_name, line)
+        except Exception:
+            pass
 
     def _terminate_process(self) -> None:
         """Terminate FFmpeg and close the stdin pipe (called under process lock)."""

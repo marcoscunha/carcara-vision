@@ -29,6 +29,9 @@ class StreamInferenceMetrics(BaseModel):
     min_inference_time_ms: float
     max_inference_time_ms: float
     fps: float
+    inference_throughput_fps: float = 0.0
+    target_inference_fps: float = 0.0
+    output_fps: float = 0.0
     last_inference_time_ms: float
     model_name: str | None = None
     accelerator: str | None = None

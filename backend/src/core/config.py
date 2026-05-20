@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # Model path
     MODEL_PATH: str = os.getenv("MODEL_PATH", "yolov8n.pt")
 
+    # Video/prediction synchronization flow
+    # When enabled, streams default to backend-centered sync flow
+    # (server-annotated video dispatch).
+    VIDEO_PREDICTION_SYNC_ENABLED: bool = _env_bool("VIDEO_PREDICTION_SYNC_ENABLED", False)
+
     # Keycloak / OAuth2 Configuration
     KEYCLOAK_INTERNAL_URL: str = os.getenv("KEYCLOAK_INTERNAL_URL", os.getenv("KEYCLOAK_URL", "http://keycloak:8080"))
     KEYCLOAK_ISSUER_URL: str = os.getenv("KEYCLOAK_ISSUER_URL", "http://localhost:8280")

@@ -168,9 +168,13 @@ function hasProtocolUrl(protocol: StreamProtocol, stream: Stream, showAnnotatedS
   if (protocol === 'webrtc') {
     return Boolean(showAnnotatedStream ? stream.urls.annotated_webrtc : stream.urls.webrtc)
   }
-  if (protocol === 'mse') return Boolean(stream.urls.mse)
-  if (protocol === 'mjpeg') return Boolean(stream.urls.mjpeg)
-  return Boolean(stream.urls.hls)
+  if (protocol === 'mse') {
+    return Boolean(showAnnotatedStream ? stream.urls.annotated_mse : stream.urls.mse)
+  }
+  if (protocol === 'mjpeg') {
+    return Boolean(showAnnotatedStream ? stream.urls.annotated_mjpeg : stream.urls.mjpeg)
+  }
+  return Boolean(showAnnotatedStream ? stream.urls.annotated_hls : stream.urls.hls)
 }
 
 function pickPreferredProtocol(
@@ -527,6 +531,41 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     setIsConnecting(true)
     setError(null)
 
+    let mediaStarted = false
+    let connectionHandled = false
+    let mediaTimeoutId: number | null = null
+    const videoEl = videoRef.current
+
+    const clearMediaTimeout = () => {
+      if (mediaTimeoutId !== null) {
+        window.clearTimeout(mediaTimeoutId)
+        mediaTimeoutId = null
+      }
+    }
+
+    const markMediaStarted = () => {
+      if (mediaStarted) return
+      mediaStarted = true
+      connectionHandled = true
+      clearMediaTimeout()
+      detachVideoReadyListeners()
+      setIsConnecting(false)
+      retryCountRef.current = 0
+      onConnected?.()
+    }
+
+    const maybeMarkVideoReady = () => {
+      if (videoEl && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+        markMediaStarted()
+      }
+    }
+
+    const detachVideoReadyListeners = () => {
+      videoEl?.removeEventListener('loadedmetadata', maybeMarkVideoReady)
+      videoEl?.removeEventListener('playing', maybeMarkVideoReady)
+      videoEl?.removeEventListener('resize', maybeMarkVideoReady)
+    }
+
     try {
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
@@ -535,18 +574,50 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       })
       pcRef.current = pc
 
+      videoEl?.addEventListener('loadedmetadata', maybeMarkVideoReady)
+      videoEl?.addEventListener('playing', maybeMarkVideoReady)
+      videoEl?.addEventListener('resize', maybeMarkVideoReady)
+
+      const failAndFallback = (message: string) => {
+        if (connectionHandled) return
+        connectionHandled = true
+        clearMediaTimeout()
+        detachVideoReadyListeners()
+        setError(message)
+        onError?.(message)
+        setIsConnecting(false)
+        if (pcRef.current) {
+          pcRef.current.close()
+          pcRef.current = null
+        }
+        if (currentProtocol === 'webrtc') {
+          const nextProtocol = nextProtocolAfterFailure('webrtc', stream, showAnnotatedStream)
+          if (nextProtocol) setCurrentProtocol(nextProtocol)
+        }
+      }
+
       pc.ontrack = (event) => {
         if (videoRef.current && event.streams[0]) {
           videoRef.current.srcObject = event.streams[0]
           videoRef.current.play().catch(() => {})
-          retryCountRef.current = 0
-          onConnected?.()
+
+          const track = event.track
+          track.onunmute = () => {
+            maybeMarkVideoReady()
+          }
         }
       }
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          setError('WebRTC connection failed')
-          onError?.('WebRTC connection failed')
+        if (pc.connectionState === 'connected') {
+          setIsConnecting(false)
+          return
+        }
+        if (
+          pc.connectionState === 'failed' ||
+          pc.connectionState === 'disconnected' ||
+          pc.connectionState === 'closed'
+        ) {
+          failAndFallback('WebRTC connection failed')
         }
       }
 
@@ -587,10 +658,17 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       }
       const answerSdp = await response.text()
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
-      setIsConnecting(false)
+
+      mediaTimeoutId = window.setTimeout(() => {
+        if (!mediaStarted) {
+          failAndFallback('Timed out waiting for WebRTC media')
+        }
+      }, 8000)
+
       retryCountRef.current = 0
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
+      detachVideoReadyListeners()
       if (pcRef.current) {
         pcRef.current.close()
         pcRef.current = null
@@ -615,7 +693,22 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     if (!videoRef.current || !stream.urls) return
     setIsConnecting(true)
     setError(null)
-    const url = currentProtocol === 'hls' ? stream.urls.hls : stream.urls.mse
+    const url =
+      currentProtocol === 'hls'
+        ? showAnnotatedStream
+          ? stream.urls.annotated_hls
+          : stream.urls.hls
+        : showAnnotatedStream
+          ? stream.urls.annotated_mse
+          : stream.urls.mse
+    if (!url) {
+      setError('Selected stream URL is not available')
+      onError?.('Selected stream URL is not available')
+      const nextProtocol = nextProtocolAfterFailure(currentProtocol, stream, showAnnotatedStream)
+      if (nextProtocol) setCurrentProtocol(nextProtocol)
+      setIsConnecting(false)
+      return
+    }
     if (currentProtocol === 'hls' && 'Hls' in window) {
       // @ts-ignore
       const hls = new window.Hls()
@@ -666,13 +759,14 @@ const CameraStream: React.FC<CameraStreamProps> = ({
 
   // ── MJPEG fallback ──────────────────────────────────────────────────────────
   if (currentProtocol === 'mjpeg' && stream.urls?.mjpeg) {
+    const mjpegUrl = showAnnotatedStream ? stream.urls.annotated_mjpeg || stream.urls.mjpeg : stream.urls.mjpeg
     return (
       <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
         <div className="camera-stream__frame">
           <div className="camera-stream__protocol-badge">{protocolLabel}</div>
           {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
           {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
-          <img src={stream.urls.mjpeg} alt={`Stream ${stream.stream_name}`} className="camera-stream__image" />
+          <img src={mjpegUrl} alt={`Stream ${stream.stream_name}`} className="camera-stream__image" />
           {showStats && (
             <div className="camera-stream__stats">
               <div>⏱ {stats.time}</div>

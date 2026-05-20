@@ -19,7 +19,12 @@ import {
   Chip,
   FormControlLabel,
   Switch,
+  Tooltip,
+  SvgIcon,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import type { ChipProps } from '@mui/material'
 import {
   Add as AddIcon,
@@ -43,6 +48,19 @@ import {
 } from '../hooks/useQueries'
 import { Stream, Camera, StreamInferenceMetrics } from '../types'
 import CameraStream, { CameraStreamStatsSnapshot } from '../components/CameraStream'
+
+const inferTaskTypeFromModel = (modelName: string): string => {
+  const lower = modelName.toLowerCase()
+  if (lower.includes('pose')) return 'pose'
+  if (lower.includes('seg')) return 'segment'
+  return 'detect'
+}
+
+const TASK_OBJECTIVE_LABELS: Record<string, string> = {
+  detect: 'Object Detection',
+  pose: 'Pose Estimation',
+  segment: 'Segmentation',
+}
 
 const formatMetricNumber = (value: number | null | undefined, digits = 1): string => {
   if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) {
@@ -72,6 +90,7 @@ const Streams: React.FC = () => {
     status: 'stopped',
     current_frame: 0,
     detection_enabled: true,
+    sync_video_predictions: false,
     detection_task_type: 'detect',
     stream_metadata: {},
   })
@@ -80,6 +99,7 @@ const Streams: React.FC = () => {
     accelerator: 'cpu',
     task_type: 'detect',
   })
+  const [taskObjectiveFilter, setTaskObjectiveFilter] = useState<string>('detect')
   const [streamPreviewStats, setStreamPreviewStats] = useState<Record<number, CameraStreamStatsSnapshot>>({})
 
   // TanStack Query hooks for server state management
@@ -114,6 +134,8 @@ const Streams: React.FC = () => {
   }, [runtimeConfig])
 
   const handleOpen = (stream?: Stream) => {
+    const currentTaskType = runtimeConfig?.task_type || 'detect'
+    setTaskObjectiveFilter(currentTaskType)
     if (stream) {
       setSelectedStream(stream)
       setFormData({
@@ -124,6 +146,10 @@ const Streams: React.FC = () => {
           typeof stream.detection_enabled === 'boolean'
             ? stream.detection_enabled
             : Boolean(stream.stream_metadata?.detection_enabled),
+        sync_video_predictions:
+          typeof stream.sync_video_predictions === 'boolean'
+            ? stream.sync_video_predictions
+            : Boolean(stream.stream_metadata?.sync_video_predictions),
         detection_task_type: stream.detection_task_type || stream.stream_metadata?.detection_task_type || 'detect',
         stream_metadata: stream.stream_metadata,
       })
@@ -134,6 +160,7 @@ const Streams: React.FC = () => {
         status: 'stopped',
         current_frame: 0,
         detection_enabled: true,
+        sync_video_predictions: false,
         detection_task_type: 'detect',
         stream_metadata: {},
       })
@@ -144,14 +171,26 @@ const Streams: React.FC = () => {
   const handleClose = () => {
     setOpen(false)
     setSelectedStream(null)
+    setTaskObjectiveFilter('detect')
     setFormData({
       camera_id: 0,
       status: 'stopped',
       current_frame: 0,
       detection_enabled: true,
+      sync_video_predictions: false,
       detection_task_type: 'detect',
       stream_metadata: {},
     })
+  }
+
+  const handleTaskObjectiveChange = (_: React.MouseEvent<HTMLElement>, newObjective: string | null) => {
+    if (!newObjective) return
+    setTaskObjectiveFilter(newObjective)
+    const newFilteredModels = (runtimeConfig?.available_models || []).filter(
+      (model) => inferTaskTypeFromModel(model) === newObjective,
+    )
+    const firstMatch = newFilteredModels[0] || runtimeForm.model_name
+    setRuntimeForm({ ...runtimeForm, task_type: newObjective, model_name: firstMatch })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -311,11 +350,20 @@ const Streams: React.FC = () => {
             {streamList.map((stream: Stream) => {
               const camera = cameraList.find((c: Camera) => c.id === stream.camera_id)
               const performance = realtimeMetrics?.per_stream?.[stream.id]
+              const configuredInferenceFps =
+                performance?.target_inference_fps ??
+                Number(stream.stream_metadata?.max_inference_fps ?? stream.stream_metadata?.detection_max_inference_fps)
+              const configuredOutputFps =
+                performance?.output_fps ?? Number(stream.stream_metadata?.output_fps ?? stream.stream_metadata?.fps)
               const detectionEnabled =
                 typeof stream.detection_enabled === 'boolean'
                   ? stream.detection_enabled
                   : Boolean(stream.stream_metadata?.detection_enabled)
               const showNoWorkerBadge = detectionEnabled && !stream.worker_active
+              const syncVideoPredictions =
+                typeof stream.sync_video_predictions === 'boolean'
+                  ? stream.sync_video_predictions
+                  : Boolean(stream.stream_metadata?.sync_video_predictions)
               return (
                 <Card key={stream.id}>
                   <CardContent className="card-content">
@@ -341,6 +389,7 @@ const Streams: React.FC = () => {
                     <Box className="stream-preview-wrapper">
                       <CameraStream
                         stream={stream}
+                        showAnnotatedStream={syncVideoPredictions}
                         showStats={false}
                         onStatsChange={(stats) => handleStreamStatsChange(stream.id, stats)}
                       />
@@ -385,23 +434,72 @@ const Streams: React.FC = () => {
                         }}
                       >
                         <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Throughput
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              AI inference FPS (actual)
+                            </Typography>
+                            <Tooltip title="Actual number of frames per second processed by the AI inference engine (after all throttling and resource limits).">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
                           <Typography variant="body2">{formatMetricNumber(performance?.fps)} fps</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Avg latency
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              AI inference FPS (configured max)
+                            </Typography>
+                            <Tooltip title="Configured maximum FPS for AI inference (system will not process more than this per second, even if hardware allows).">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
+                          <Typography variant="body2">{formatMetricNumber(configuredInferenceFps)} fps</Typography>
+                        </Box>
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              AI engine throughput (raw)
+                            </Typography>
+                            <Tooltip title="Raw throughput: how many frames per second the AI engine could process if not limited by the configured cap.">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
+                          <Typography variant="body2">
+                            {formatMetricNumber(performance?.inference_throughput_fps)} fps
                           </Typography>
+                        </Box>
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Avg inference latency
+                            </Typography>
+                            <Tooltip title="Average time (ms) to process a single frame with the current model and hardware.">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
                           <Typography variant="body2">
                             {formatMetricNumber(performance?.avg_inference_time_ms)} ms
                           </Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Last inference
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Last inference latency
+                            </Typography>
+                            <Tooltip title="Time (ms) taken for the most recent inference operation.">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
                           <Typography variant="body2">
                             {formatMetricNumber(performance?.last_inference_time_ms)} ms
                           </Typography>
@@ -425,16 +523,51 @@ const Streams: React.FC = () => {
                         }}
                       >
                         <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Stream FPS
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Source stream FPS (actual)
+                            </Typography>
+                            <Tooltip title="Actual frame rate of the incoming camera/video stream as rendered in the browser.">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
                           <Typography variant="body2">
                             {formatMetricNumber(streamPreviewStats[stream.id]?.fps)} fps
                           </Typography>
                         </Box>
                         <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              AI stream FPS (actual)
+                            </Typography>
+                            <Tooltip title="Actual frame rate of the annotated (AI overlay) stream as received by the browser.">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
+                          <Typography variant="body2">
+                            {formatMetricNumber(streamPreviewStats[stream.id]?.detectionFps)} fps
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              AI stream FPS (configured output)
+                            </Typography>
+                            <Tooltip title="Configured output FPS for the annotated (AI overlay) stream. This is the maximum rate at which annotated frames are published to clients.">
+                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                <HelpOutlineIcon />
+                              </SvgIcon>
+                            </Tooltip>
+                          </Box>
+                          <Typography variant="body2">{formatMetricNumber(configuredOutputFps)} fps</Typography>
+                        </Box>
+                        <Box>
                           <Typography variant="caption" color="text.secondary">
-                            Transmit speed
+                            Stream transmit speed
                           </Typography>
                           <Typography variant="body2">{streamPreviewStats[stream.id]?.throughput || '--'}</Typography>
                         </Box>
@@ -444,18 +577,10 @@ const Streams: React.FC = () => {
                           </Typography>
                           <Typography variant="body2">{streamPreviewStats[stream.id]?.resolution || '--'}</Typography>
                         </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            AI stream FPS
-                          </Typography>
-                          <Typography variant="body2">
-                            {formatMetricNumber(streamPreviewStats[stream.id]?.detectionFps)} fps
-                          </Typography>
-                        </Box>
                       </Box>
 
                       <Typography variant="body2" color="text.secondary">
-                        Model: {performance?.model_name || runtimeConfig?.model_name || 'n/a'}
+                        Model: {performance?.model_name || stream.detection_model || runtimeConfig?.model_name || 'n/a'}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Accelerator: {performance?.accelerator || runtimeConfig?.accelerator || 'n/a'}
@@ -509,21 +634,57 @@ const Streams: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, detection_enabled: e.target.checked })}
                 />
               }
-              label="Detection Enabled"
+              label="AI Enable"
             />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.sync_video_predictions}
+                  onChange={(e) => setFormData({ ...formData, sync_video_predictions: e.target.checked })}
+                />
+              }
+              label="Sync video and predictions (backend dispatch)"
+            />
+
+            <Box sx={{ mt: 1, mb: 0.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                Task Objective
+              </Typography>
+              <ToggleButtonGroup
+                value={taskObjectiveFilter}
+                exclusive
+                onChange={handleTaskObjectiveChange}
+                size="small"
+                fullWidth
+              >
+                {(runtimeConfig?.available_task_types || ['detect', 'pose', 'segment']).map((taskType) => (
+                  <ToggleButton key={taskType} value={taskType}>
+                    {TASK_OBJECTIVE_LABELS[taskType] ?? taskType}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
 
             <FormControl fullWidth margin="dense">
               <InputLabel>System Model</InputLabel>
               <Select
                 value={runtimeForm.model_name}
                 label="System Model"
-                onChange={(e) => setRuntimeForm({ ...runtimeForm, model_name: e.target.value })}
+                onChange={(e) => {
+                  const model = e.target.value as string
+                  const inferredTaskType = inferTaskTypeFromModel(model)
+                  setRuntimeForm({ ...runtimeForm, model_name: model, task_type: inferredTaskType })
+                  setTaskObjectiveFilter(inferredTaskType)
+                }}
               >
-                {(runtimeConfig?.available_models || []).map((model) => (
-                  <MenuItem key={model} value={model}>
-                    {model}
-                  </MenuItem>
-                ))}
+                {(runtimeConfig?.available_models || [])
+                  .filter((model) => inferTaskTypeFromModel(model) === taskObjectiveFilter)
+                  .map((model) => (
+                    <MenuItem key={model} value={model}>
+                      {model}
+                    </MenuItem>
+                  ))}
               </Select>
             </FormControl>
 
@@ -537,21 +698,6 @@ const Streams: React.FC = () => {
                 {(runtimeConfig?.available_accelerators || ['cpu']).map((accelerator) => (
                   <MenuItem key={accelerator} value={accelerator}>
                     {accelerator}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth margin="dense">
-              <InputLabel>System Task Type</InputLabel>
-              <Select
-                value={runtimeForm.task_type}
-                label="System Task Type"
-                onChange={(e) => setRuntimeForm({ ...runtimeForm, task_type: e.target.value })}
-              >
-                {(runtimeConfig?.available_task_types || ['detect', 'pose', 'segment']).map((taskType) => (
-                  <MenuItem key={taskType} value={taskType}>
-                    {taskType}
                   </MenuItem>
                 ))}
               </Select>

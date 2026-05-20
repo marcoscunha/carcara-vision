@@ -242,6 +242,8 @@ class GStreamerService:
             "annotated_rtsp": f"rtsp://{url_host}:{self.rtsp_port}/{annotated}",
             "annotated_webrtc": f"http://{url_host}:{self.webrtc_port}/{annotated}/whep",
             "annotated_hls": f"http://{url_host}:{self.hls_port}/{annotated}/index.m3u8",
+            "annotated_mse": f"http://{url_host}:{self.webrtc_port}/{annotated}",
+            "annotated_mjpeg": f"http://{url_host}:{self.hls_port}/{annotated}/index.m3u8",
         }
 
     def build_source_config(

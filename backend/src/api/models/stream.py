@@ -20,6 +20,7 @@ class StreamCreate(StreamBase):
     detection_task_type: str | None = "detect"
     detection_confidence: float | None = 0.5
     detection_classes: list[int] | None = None
+    sync_video_predictions: bool | None = None
 
 
 class StreamUpdate(BaseModel):
@@ -30,6 +31,7 @@ class StreamUpdate(BaseModel):
     detection_task_type: str | None = None
     detection_confidence: float | None = None
     detection_classes: list[int] | None = None
+    sync_video_predictions: bool | None = None
 
 
 class StreamURLs(BaseModel):
@@ -45,6 +47,8 @@ class StreamURLs(BaseModel):
     annotated_rtsp: str = ""
     annotated_webrtc: str = ""
     annotated_hls: str = ""
+    annotated_mse: str = ""
+    annotated_mjpeg: str = ""
 
 
 class StreamResponse(StreamBase):
@@ -60,6 +64,7 @@ class StreamResponse(StreamBase):
     detection_task_type: str
     detection_confidence: float
     detection_classes: list[int] | None = None
+    sync_video_predictions: bool
     created_at: datetime
     updated_at: datetime
 

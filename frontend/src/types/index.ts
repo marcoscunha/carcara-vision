@@ -24,6 +24,8 @@ export interface StreamURLs {
   annotated_rtsp?: string
   annotated_webrtc?: string
   annotated_hls?: string
+  annotated_mse?: string
+  annotated_mjpeg?: string
 }
 
 export interface Stream {
@@ -40,6 +42,7 @@ export interface Stream {
   detection_task_type?: string
   detection_confidence?: number
   detection_classes?: number[] | null
+  sync_video_predictions?: boolean
   created_at: string
   updated_at: string
 }
@@ -54,6 +57,7 @@ export interface StreamCreate {
   detection_task_type?: string
   detection_confidence?: number
   detection_classes?: number[] | null
+  sync_video_predictions?: boolean
   stream_metadata?: Record<string, any>
 }
 
@@ -73,6 +77,9 @@ export interface StreamInferenceMetrics {
   min_inference_time_ms: number
   max_inference_time_ms: number
   fps: number
+  inference_throughput_fps: number
+  target_inference_fps: number
+  output_fps: number
   last_inference_time_ms: number
   model_name: string | null
   accelerator: string | null
