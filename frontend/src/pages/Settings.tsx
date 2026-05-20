@@ -190,7 +190,7 @@ const Settings: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Box>
+      <Box className="settings-page">
         <Skeleton variant="text" width={120} height={40} className="loading-skeleton" />
         <Skeleton variant="rounded" height={300} />
       </Box>
@@ -198,7 +198,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <Box className="fade-in">
+    <Box className="fade-in settings-page">
       {/* Page Header */}
       <Box className="page-header">
         <Box>

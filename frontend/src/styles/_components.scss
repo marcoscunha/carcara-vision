@@ -700,6 +700,13 @@
 }
 
 /* Settings */
+.settings-page {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
 .settings-grid {
   display: grid;
   gap: 24px;
