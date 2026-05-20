@@ -48,6 +48,8 @@ services:
     ports:
       - "8554:8554"   # RTSP
       - "8889:8889"   # WebRTC
+      - "8189:8189/udp"  # WebRTC ICE/UDP media
+      - "8189:8189/tcp"  # WebRTC ICE/TCP media
       - "8888:8888"   # HLS
       - "1935:1935"   # RTMP
       - "9997:9997"   # API

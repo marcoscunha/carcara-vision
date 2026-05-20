@@ -168,3 +168,36 @@ This document reviews the current implementation in this repository and maps the
 - RTSP ingest path in pipeline manager is H.264-specific; non-H.264 camera streams may require pipeline branch extension.
 - `mjpeg` URL currently maps to HLS path in `backend/src/services/gstreamer.py` (naming may be misleading to clients).
 - End-to-end latency can vary with protocol fallback (WebRTC < MSE/HLS in most deployments).
+
+## 6) Two-flow strategy and sync recommendation
+
+Current product behavior intentionally supports two visualization flows:
+
+1. Client overlay flow (raw video + WebSocket detections + canvas draw in frontend)
+2. Backend-centered sync flow (server-annotated video path `annotated_<stream_name>`)
+
+### Recommendation for video/prediction synchronization
+
+To minimize visual drift between boxes and frames, prefer the backend-centered sync flow for operator views:
+
+- Detection and annotation happen in the same backend worker loop.
+- Annotated frames are dispatched as a single media stream.
+- Frontend consumes that stream directly, so timing is governed by one pipeline.
+
+This reduces mismatches caused by independent browser scheduling of video decode and WebSocket events.
+
+### Feature flag and runtime control
+
+Sync flow can be controlled at two levels:
+
+- Global default via backend environment variable:
+  - `VIDEO_PREDICTION_SYNC_ENABLED=true|false`
+- Per-stream override via stream metadata/API field:
+  - `sync_video_predictions`
+
+Behavior:
+
+- When `sync_video_predictions=true`, frontend uses the annotated stream path (`showAnnotatedStream=true`) and does not apply client-side WS overlay.
+- When `sync_video_predictions=false`, frontend uses raw stream + client-side overlay (legacy flow).
+
+This keeps rollout safe: you can enable sync only for selected streams, then promote it to default globally.

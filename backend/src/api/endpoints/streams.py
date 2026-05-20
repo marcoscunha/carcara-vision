@@ -5,8 +5,8 @@ This module provides REST API endpoints for managing camera streams via GStreame
 and MediaMTX, supporting RTSP, WebRTC, HLS, and other streaming protocols.
 """
 
-import logging
 import asyncio
+import logging
 import time
 from urllib.parse import urlparse
 
@@ -484,6 +484,8 @@ async def _recover_reconnected_local_streams(db: Session) -> tuple[int, int]:
 def _build_stream_response(stream: Stream, host: str | None = None) -> StreamResponse:
     """Build a StreamResponse with URLs from MediaMTX."""
     detection_settings = _get_detection_settings(stream)
+    metadata = stream.stream_metadata or {}
+    sync_video_predictions = bool(metadata.get("sync_video_predictions", settings.VIDEO_PREDICTION_SYNC_ENABLED))
     worker = inference_worker_manager.get_worker(stream.id)
     worker_active = bool(worker and worker.is_running())
     urls = None
@@ -505,6 +507,7 @@ def _build_stream_response(stream: Stream, host: str | None = None) -> StreamRes
         detection_task_type=detection_settings["task_type"],
         detection_confidence=detection_settings["confidence"],
         detection_classes=detection_settings["classes"],
+        sync_video_predictions=sync_video_predictions,
         created_at=stream.created_at,
         updated_at=stream.updated_at,
     )
@@ -562,6 +565,11 @@ async def create_stream(
         "detection_task_type": stream.detection_task_type or "detect",
         "detection_confidence": stream.detection_confidence or 0.5,
         "detection_classes": stream.detection_classes,
+        "sync_video_predictions": (
+            settings.VIDEO_PREDICTION_SYNC_ENABLED
+            if stream.sync_video_predictions is None
+            else bool(stream.sync_video_predictions)
+        ),
         **(stream.stream_metadata or {}),
     }
 
@@ -709,6 +717,7 @@ async def update_stream(
         "detection_task_type",
         "detection_confidence",
         "detection_classes",
+        "sync_video_predictions",
     ]
     detection_changed = any(k in update_data for k in detection_keys)
     for key in detection_keys:
@@ -928,6 +937,9 @@ async def get_global_realtime_metrics(
             "min_inference_time_ms": round(min_ms, 2),
             "max_inference_time_ms": round(max_ms, 2),
             "fps": round(float(stats.get("fps", 0.0) or 0.0), 2),
+            "inference_throughput_fps": round(float(stats.get("inference_throughput_fps", 0.0) or 0.0), 2),
+            "target_inference_fps": round(float(stats.get("target_inference_fps", 0.0) or 0.0), 2),
+            "output_fps": round(float(stats.get("output_fps", 0.0) or 0.0), 2),
             "last_inference_time_ms": round(float(stage_inference.get("last", avg_ms) or 0.0), 2),
             "model_name": stats.get("model"),
             "accelerator": stats.get("accelerator"),
