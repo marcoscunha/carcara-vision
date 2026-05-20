@@ -407,7 +407,7 @@ class CameraService:
             return False
 
         if not shutil.which("v4l2-ctl"):
-            # Fallback without v4l2-ctl: use sysfs capabilities bitmask when available.
+            # Fallback without v4l2-ctl: try sysfs capabilities bitmask.
             try:
                 video_name = os.path.basename(os.path.realpath(dev))
                 caps_file = os.path.join("/sys/class/video4linux", video_name, "device", "capabilities")
@@ -420,8 +420,11 @@ class CameraService:
             except Exception as exc:
                 logger.debug("Could not read sysfs capabilities for %s: %s", dev, exc)
 
-            # Conservative fallback to reduce noisy probes on metadata/non-capture nodes.
-            return False
+            # Without v4l2-ctl and without readable sysfs caps, assume capture is
+            # possible and let OpenCV / downstream fail if the node is invalid.
+            # This restores the original permissive behaviour; deduplication in
+            # scan_local_cameras handles multi-node cameras.
+            return True
 
         try:
             result = subprocess.run(
@@ -638,14 +641,31 @@ class CameraService:
                 cap = cv2.VideoCapture(device_id)
                 if cap.isOpened():
                     device_identity = CameraService.describe_local_device(device_id=device_id)
-                    unique_device_key = (
-                        device_identity.get("usb_vendor_id"),
-                        device_identity.get("usb_product_id"),
-                        device_identity.get("usb_serial_number")
-                        or device_identity.get("physical_address")
-                        or device_identity.get("device_path")
-                        or f"device_{device_id}",
-                    )
+
+                    # Build a deduplication key that is stable across all video nodes
+                    # belonging to the same physical USB device.
+                    #
+                    # Priority:
+                    #  1. vendor+product+serial  → uniquely identifies an individual unit
+                    #  2. vendor+product+sysfs_parent_path  → same parent dir for all nodes
+                    #     of the same physical device (index0, index1, …)
+                    #  3. sysfs_parent_path alone  → no USB identity info available
+                    #  4. device_id string  → absolute last resort
+                    #
+                    # Crucially we do NOT use device_path (the persistent by-id symlink) as a
+                    # fallback: those paths include a "-video-index0" / "-video-index1" suffix
+                    # which differs per node, breaking deduplication for multi-node cameras.
+                    sysfs_parent = CameraService._get_device_path_fallback(device_id)
+                    usb_serial = device_identity.get("usb_serial_number")
+                    usb_vendor = device_identity.get("usb_vendor_id")
+                    usb_product = device_identity.get("usb_product_id")
+
+                    if usb_serial:
+                        unique_device_key = (usb_vendor, usb_product, usb_serial)
+                    elif usb_vendor or usb_product:
+                        unique_device_key = (usb_vendor, usb_product, sysfs_parent or f"device_{device_id}")
+                    else:
+                        unique_device_key = sysfs_parent or f"device_{device_id}"
 
                     if unique_device_key in seen_devices:
                         cap.release()

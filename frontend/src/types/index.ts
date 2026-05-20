@@ -1,7 +1,7 @@
 export interface Camera {
   id: number
   name: string
-  rtsp_url: string
+  rtsp_url: string | null
   is_active: boolean
   device_id: number
   device_path: string | null

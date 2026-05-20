@@ -29,9 +29,11 @@ import { cameraApi } from '../../services/api'
 
 export interface CameraFormData {
   name: string
-  rtsp_url: string
+  rtsp_url: string | null
   is_active: boolean
   device_id: number
+  device_path?: string | null
+  camera_type?: string
   resolution: [number, number]
   fps: number
   is_available: boolean
@@ -42,6 +44,8 @@ const initialFormData: CameraFormData = {
   rtsp_url: '',
   is_active: true,
   device_id: 0,
+  device_path: null,
+  camera_type: 'ip',
   resolution: [0, 0],
   fps: 0,
   is_available: false,
@@ -102,6 +106,8 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
           rtsp_url: camera.rtsp_url,
           is_active: camera.is_active,
           device_id: camera.device_id,
+          device_path: camera.device_path,
+          camera_type: camera.camera_type,
           resolution: camera.resolution,
           fps: camera.fps,
           is_available: camera.is_available,
@@ -185,34 +191,54 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
   }
 
   const handleAddLocalCamera = (camera: CameraInfo) => {
-    setFormData({
+    const data: CameraFormData = {
       name: camera.name || `Camera ${camera.device_id}`,
-      rtsp_url: '',
+      rtsp_url: null,
       is_active: true,
       device_id: camera.device_id,
+      device_path: camera.device_path,
+      camera_type: 'local',
       resolution: camera.resolution,
       fps: camera.fps,
       is_available: camera.is_available,
+    }
+    setScanError(null)
+    createCameraMutation.mutate(data, {
+      onSuccess: () => {
+        setLocalCameras((prev) => prev.filter((c) => c.device_path !== camera.device_path))
+      },
+      onError: () => {
+        setScanError('Failed to add camera')
+      },
     })
-    setLocalCameras((prev) => prev.filter((c) => c.device_path !== camera.device_path))
   }
 
   const handleAddIPCamera = (camera: DiscoveredCamera) => {
     const rtspUrl = rtspUrlOverrides[camera.ip] || camera.rtsp_url || `rtsp://${camera.ip}:554/stream1`
-    setFormData({
+    const data: CameraFormData = {
       name: camera.name || `IP Camera (${camera.ip})`,
       rtsp_url: rtspUrl,
       is_active: true,
       device_id: 0,
+      device_path: null,
+      camera_type: 'ip',
       resolution: [0, 0],
       fps: 0,
       is_available: true,
-    })
-    setIpCameras((prev) => prev.filter((c) => c.ip !== camera.ip))
-    setRtspUrlOverrides((prev) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { [camera.ip]: _, ...rest } = prev
-      return rest
+    }
+    setScanError(null)
+    createCameraMutation.mutate(data, {
+      onSuccess: () => {
+        setIpCameras((prev) => prev.filter((c) => c.ip !== camera.ip))
+        setRtspUrlOverrides((prev) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [camera.ip]: _, ...rest } = prev
+          return rest
+        })
+      },
+      onError: () => {
+        setScanError('Failed to add camera')
+      },
     })
   }
 
@@ -317,9 +343,9 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
                           variant="outlined"
                           size="small"
                           onClick={() => handleAddLocalCamera(camera)}
-                          disabled={createCameraMutation.isPending}
+                          disabled={isLoading || createCameraMutation.isPending}
                         >
-                          Select
+                          Add
                         </Button>
                       }
                     >
@@ -384,9 +410,9 @@ export const CameraFormDialog: React.FC<CameraFormDialogProps> = ({
                           variant="outlined"
                           size="small"
                           onClick={() => handleAddIPCamera(camera)}
-                          disabled={createCameraMutation.isPending}
+                          disabled={isLoading || createCameraMutation.isPending}
                         >
-                          Select
+                          Add
                         </Button>
                       }
                     >
