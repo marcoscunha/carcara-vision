@@ -1,4 +1,4 @@
-# Carcara Vision — Hardware-Accelerated ML Inference Platform
+# Carcara Vision - Hardware-Accelerated ML Inference Platform
 
 <div align="center">
 
@@ -18,11 +18,11 @@ It is designed to run on powerful servers with NVIDIA GPUs down to edge devices 
 
 ### Key capabilities
 
-- **Multi-model ML** — YOLO v5/v8/v11 detection + Vision Language Models for scene understanding
-- **Hardware acceleration** — CUDA, TensorRT, Jetson, Coral TPU, Hailo & more
-- **Modular architecture** — Pluggable inference engines and accelerator backends
-- **Flexible streaming** — GStreamer pipelines with MediaMTX (RTSP/WebRTC/HLS)
-- **Smart camera discovery** — Persistent V4L2 device paths that survive reboots
+- **Multi-model ML** - YOLO v5/v8/v11 detection + Vision Language Models for scene understanding
+- **Hardware acceleration** - CUDA, TensorRT, Jetson, Coral TPU, Hailo & more
+- **Modular architecture** - Pluggable inference engines and accelerator backends
+- **Flexible streaming** - GStreamer pipelines with MediaMTX (RTSP/WebRTC/HLS)
+- **Smart camera discovery** - Persistent V4L2 device paths that survive reboots
 
 ---
 
