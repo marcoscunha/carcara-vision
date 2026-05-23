@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import {
   Box,
   Button,
@@ -21,8 +21,6 @@ import {
   Switch,
   Tooltip,
   SvgIcon,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import type { ChipProps } from '@mui/material'
@@ -33,18 +31,19 @@ import {
   Refresh as RefreshIcon,
   PlayCircle as PlayCircleIcon,
   Circle as CircleIcon,
+  DragIndicator as DragIndicatorIcon,
+  SwapVert as SwapVertIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material'
 import {
   useStreams,
   useCreateStream,
   useUpdateStream,
   useDeleteStream,
+  useReorderStreams,
   useCameras,
   useInferenceRuntimeConfig,
-  useUpdateInferenceRuntimeConfig,
   useRealtimeInferenceMetrics,
-  useBenchmarkScenarioTemplate,
-  useExportBenchmarkMetrics,
 } from '../hooks/useQueries'
 import { Stream, Camera, StreamInferenceMetrics } from '../types'
 import CameraStream, { CameraStreamStatsSnapshot } from '../components/CameraStream'
@@ -54,12 +53,6 @@ const inferTaskTypeFromModel = (modelName: string): string => {
   if (lower.includes('pose')) return 'pose'
   if (lower.includes('seg')) return 'segment'
   return 'detect'
-}
-
-const TASK_OBJECTIVE_LABELS: Record<string, string> = {
-  detect: 'Object Detection',
-  pose: 'Pose Estimation',
-  segment: 'Segmentation',
 }
 
 const formatMetricNumber = (value: number | null | undefined, digits = 1): string => {
@@ -94,12 +87,6 @@ const Streams: React.FC = () => {
     detection_task_type: 'detect',
     stream_metadata: {},
   })
-  const [runtimeForm, setRuntimeForm] = useState({
-    model_name: '',
-    accelerator: 'cpu',
-    task_type: 'detect',
-  })
-  const [taskObjectiveFilter, setTaskObjectiveFilter] = useState<string>('detect')
   const [streamPreviewStats, setStreamPreviewStats] = useState<Record<number, CameraStreamStatsSnapshot>>({})
 
   // TanStack Query hooks for server state management
@@ -116,26 +103,17 @@ const Streams: React.FC = () => {
   const createMutation = useCreateStream()
   const updateMutation = useUpdateStream()
   const deleteMutation = useDeleteStream()
-  const updateRuntimeMutation = useUpdateInferenceRuntimeConfig()
-  const exportBenchmarkMutation = useExportBenchmarkMetrics()
+  const reorderMutation = useReorderStreams()
+
+  const [reorderMode, setReorderMode] = useState(false)
+  const [localOrder, setLocalOrder] = useState<number[] | null>(null)
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
 
   const { data: runtimeConfig } = useInferenceRuntimeConfig()
   const { data: realtimeMetrics } = useRealtimeInferenceMetrics()
-  const { data: benchmarkTemplate } = useBenchmarkScenarioTemplate()
-
-  useEffect(() => {
-    if (runtimeConfig) {
-      setRuntimeForm({
-        model_name: runtimeConfig.model_name,
-        accelerator: runtimeConfig.accelerator,
-        task_type: runtimeConfig.task_type,
-      })
-    }
-  }, [runtimeConfig])
 
   const handleOpen = (stream?: Stream) => {
-    const currentTaskType = runtimeConfig?.task_type || 'detect'
-    setTaskObjectiveFilter(currentTaskType)
     if (stream) {
       setSelectedStream(stream)
       setFormData({
@@ -171,7 +149,6 @@ const Streams: React.FC = () => {
   const handleClose = () => {
     setOpen(false)
     setSelectedStream(null)
-    setTaskObjectiveFilter('detect')
     setFormData({
       camera_id: 0,
       status: 'stopped',
@@ -183,28 +160,16 @@ const Streams: React.FC = () => {
     })
   }
 
-  const handleTaskObjectiveChange = (_: React.MouseEvent<HTMLElement>, newObjective: string | null) => {
-    if (!newObjective) return
-    setTaskObjectiveFilter(newObjective)
-    const newFilteredModels = (runtimeConfig?.available_models || []).filter(
-      (model) => inferTaskTypeFromModel(model) === newObjective,
-    )
-    const firstMatch = newFilteredModels[0] || runtimeForm.model_name
-    setRuntimeForm({ ...runtimeForm, task_type: newObjective, model_name: firstMatch })
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await updateRuntimeMutation.mutateAsync({
-      model_name: runtimeForm.model_name,
-      accelerator: runtimeForm.accelerator,
-      task_type: runtimeForm.task_type,
-    })
+
+    const globalModel = runtimeConfig?.model_name
+    const globalTaskType = runtimeConfig?.task_type ?? inferTaskTypeFromModel(globalModel ?? '')
 
     const streamPayload = {
       ...formData,
-      detection_model: runtimeForm.model_name,
-      detection_task_type: runtimeForm.task_type,
+      ...(globalModel ? { detection_model: globalModel } : {}),
+      detection_task_type: globalTaskType,
     }
 
     if (selectedStream) {
@@ -230,35 +195,87 @@ const Streams: React.FC = () => {
     )
   }
 
-  const streamList = Array.isArray(streams) ? streams : []
+  const streamList = (Array.isArray(streams) ? [...streams] : []).sort((a: Stream, b: Stream) => {
+    const ao = a.display_order ?? a.id
+    const bo = b.display_order ?? b.id
+    if (ao !== bo) return ao - bo
+    return a.id - b.id
+  })
+
+  const orderedStreamList: Stream[] = (() => {
+    if (!localOrder) return streamList
+    const byId = new Map(streamList.map((s) => [s.id, s]))
+    const ordered = localOrder.map((id) => byId.get(id)).filter((s): s is Stream => Boolean(s))
+    // Append any streams that arrived after reordering started.
+    streamList.forEach((s) => {
+      if (!localOrder.includes(s.id)) ordered.push(s)
+    })
+    return ordered
+  })()
+
+  const handleToggleReorder = () => {
+    if (reorderMode) {
+      setLocalOrder(null)
+    } else {
+      setLocalOrder(streamList.map((s) => s.id))
+    }
+    setReorderMode(!reorderMode)
+    setDragId(null)
+    setDragOverId(null)
+  }
+
+  const handleSaveOrder = async () => {
+    if (!localOrder) {
+      setReorderMode(false)
+      return
+    }
+    try {
+      await reorderMutation.mutateAsync(localOrder)
+      setLocalOrder(null)
+      setReorderMode(false)
+    } catch (err) {
+      console.error('Failed to save stream order', err)
+    }
+  }
+
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    setDragId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(id))
+  }
+
+  const handleDragOver = (e: React.DragEvent, overId: number) => {
+    if (!reorderMode || dragId === null || dragId === overId) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverId(overId)
+  }
+
+  const handleDrop = (e: React.DragEvent, overId: number) => {
+    e.preventDefault()
+    if (!reorderMode || dragId === null || dragId === overId) return
+    setLocalOrder((current) => {
+      const base = current ?? streamList.map((s) => s.id)
+      const from = base.indexOf(dragId)
+      const to = base.indexOf(overId)
+      if (from === -1 || to === -1 || from === to) return base
+      const next = [...base]
+      next.splice(from, 1)
+      next.splice(to, 0, dragId)
+      return next
+    })
+    setDragId(null)
+    setDragOverId(null)
+  }
+
+  const handleDragEnd = () => {
+    setDragId(null)
+    setDragOverId(null)
+  }
   const cameraList = Array.isArray(cameras) ? cameras : []
 
   const handleStreamStatsChange = (streamId: number, stats: CameraStreamStatsSnapshot) => {
     setStreamPreviewStats((prev) => ({ ...prev, [streamId]: stats }))
-  }
-
-  const handleExportBenchmark = async () => {
-    const template =
-      benchmarkTemplate ||
-      ({
-        scenario_name: 'baseline_default',
-        duration_seconds: 300,
-        stream_count: 1,
-        resolution: '640x360',
-        model_name: 'yolov8n.pt',
-        annotation_enabled: true,
-        notes: null,
-      } as const)
-
-    const activeStreams = streamList.filter((stream) => stream.status === 'active').length
-
-    await exportBenchmarkMutation.mutateAsync({
-      ...template,
-      scenario_name: `frontend_snapshot_${new Date().toISOString().replace(/[:.]/g, '-')}`,
-      stream_count: Math.max(activeStreams, 1),
-      model_name: runtimeConfig?.model_name || template.model_name,
-      notes: 'Export triggered from Streams frontend page',
-    })
   }
 
   const getStatusColor = (status: string): ChipProps['color'] => {
@@ -287,43 +304,56 @@ const Streams: React.FC = () => {
         <Box className="page-header__actions">
           <Button
             variant="outlined"
-            onClick={handleExportBenchmark}
-            disabled={exportBenchmarkMutation.isPending}
-            className="page-header__action page-header__action--outline"
-          >
-            {exportBenchmarkMutation.isPending ? 'Exporting...' : 'Export Benchmark'}
-          </Button>
-          <Button
-            variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={() => refetchStreams()}
             className="page-header__action page-header__action--outline"
+            disabled={reorderMode}
           >
             Refresh
           </Button>
+          {streamList.length > 1 &&
+            (reorderMode ? (
+              <>
+                <Button
+                  variant="outlined"
+                  onClick={handleToggleReorder}
+                  className="page-header__action page-header__action--outline"
+                  disabled={reorderMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<CheckIcon />}
+                  onClick={handleSaveOrder}
+                  className="page-header__action"
+                  disabled={reorderMutation.isPending}
+                >
+                  {reorderMutation.isPending ? 'Saving…' : 'Save order'}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outlined"
+                startIcon={<SwapVertIcon />}
+                onClick={handleToggleReorder}
+                className="page-header__action page-header__action--outline"
+              >
+                Edit positions
+              </Button>
+            ))}
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => handleOpen()}
             className="page-header__action"
+            disabled={reorderMode}
           >
             Add Stream
           </Button>
         </Box>
       </Box>
-
-      {exportBenchmarkMutation.isSuccess && exportBenchmarkMutation.data?.data && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          Benchmark exported: {exportBenchmarkMutation.data.data.run_id} (
-          {exportBenchmarkMutation.data.data.streams_count} streams)
-        </Alert>
-      )}
-
-      {exportBenchmarkMutation.isError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to export benchmark snapshot.
-        </Alert>
-      )}
 
       {/* Streams Section */}
       <Box className="section section--compact">
@@ -347,14 +377,9 @@ const Streams: React.FC = () => {
           </Box>
         ) : (
           <Box className="card-grid--streams">
-            {streamList.map((stream: Stream) => {
+            {orderedStreamList.map((stream: Stream) => {
               const camera = cameraList.find((c: Camera) => c.id === stream.camera_id)
               const performance = realtimeMetrics?.per_stream?.[stream.id]
-              const configuredInferenceFps =
-                performance?.target_inference_fps ??
-                Number(stream.stream_metadata?.max_inference_fps ?? stream.stream_metadata?.detection_max_inference_fps)
-              const configuredOutputFps =
-                performance?.output_fps ?? Number(stream.stream_metadata?.output_fps ?? stream.stream_metadata?.fps)
               const detectionEnabled =
                 typeof stream.detection_enabled === 'boolean'
                   ? stream.detection_enabled
@@ -365,10 +390,31 @@ const Streams: React.FC = () => {
                   ? stream.sync_video_predictions
                   : Boolean(stream.stream_metadata?.sync_video_predictions)
               return (
-                <Card key={stream.id}>
+                <Card
+                  key={stream.id}
+                  draggable={reorderMode}
+                  onDragStart={reorderMode ? (e) => handleDragStart(e, stream.id) : undefined}
+                  onDragOver={reorderMode ? (e) => handleDragOver(e, stream.id) : undefined}
+                  onDrop={reorderMode ? (e) => handleDrop(e, stream.id) : undefined}
+                  onDragEnd={reorderMode ? handleDragEnd : undefined}
+                  sx={
+                    reorderMode
+                      ? {
+                          cursor: 'grab',
+                          outline: '2px dashed',
+                          outlineColor: dragOverId === stream.id ? 'primary.main' : 'transparent',
+                          opacity: dragId === stream.id ? 0.5 : 1,
+                          transition: 'outline-color 100ms ease, opacity 100ms ease',
+                        }
+                      : undefined
+                  }
+                >
                   <CardContent className="card-content">
                     {/* Header */}
                     <Box className="card-header">
+                      {reorderMode && (
+                        <DragIndicatorIcon fontSize="small" sx={{ color: 'text.secondary', mr: 0.5, cursor: 'grab' }} />
+                      )}
                       <Typography variant="h6" className="card-title">
                         {camera?.name || 'Unknown Camera'}
                       </Typography>
@@ -436,43 +482,15 @@ const Streams: React.FC = () => {
                         <Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Typography variant="caption" color="text.secondary">
-                              AI inference FPS (actual)
+                              AI inference FPS
                             </Typography>
-                            <Tooltip title="Actual number of frames per second processed by the AI inference engine (after all throttling and resource limits).">
+                            <Tooltip title="Frames per second processed by the AI inference engine for this stream.">
                               <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
                                 <HelpOutlineIcon />
                               </SvgIcon>
                             </Tooltip>
                           </Box>
                           <Typography variant="body2">{formatMetricNumber(performance?.fps)} fps</Typography>
-                        </Box>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              AI inference FPS (configured max)
-                            </Typography>
-                            <Tooltip title="Configured maximum FPS for AI inference (system will not process more than this per second, even if hardware allows).">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">{formatMetricNumber(configuredInferenceFps)} fps</Typography>
-                        </Box>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              AI engine throughput (raw)
-                            </Typography>
-                            <Tooltip title="Raw throughput: how many frames per second the AI engine could process if not limited by the configured cap.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">
-                            {formatMetricNumber(performance?.inference_throughput_fps)} fps
-                          </Typography>
                         </Box>
                         <Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -506,28 +524,19 @@ const Streams: React.FC = () => {
                         </Box>
                         <Box>
                           <Typography variant="caption" color="text.secondary">
-                            Range
+                            Latency range
                           </Typography>
                           <Typography variant="body2">
                             {formatMetricNumber(performance?.min_inference_time_ms)}-
                             {formatMetricNumber(performance?.max_inference_time_ms)} ms
                           </Typography>
                         </Box>
-                      </Box>
-
-                      <Box
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                          gap: 1,
-                        }}
-                      >
                         <Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Typography variant="caption" color="text.secondary">
-                              Source stream FPS (actual)
+                              Source stream FPS
                             </Typography>
-                            <Tooltip title="Actual frame rate of the incoming camera/video stream as rendered in the browser.">
+                            <Tooltip title="Frame rate of the incoming camera/video stream as rendered in the browser.">
                               <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
                                 <HelpOutlineIcon />
                               </SvgIcon>
@@ -538,42 +547,8 @@ const Streams: React.FC = () => {
                           </Typography>
                         </Box>
                         <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              AI stream FPS (actual)
-                            </Typography>
-                            <Tooltip title="Actual frame rate of the annotated (AI overlay) stream as received by the browser.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">
-                            {formatMetricNumber(streamPreviewStats[stream.id]?.detectionFps)} fps
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              AI stream FPS (configured output)
-                            </Typography>
-                            <Tooltip title="Configured output FPS for the annotated (AI overlay) stream. This is the maximum rate at which annotated frames are published to clients.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">{formatMetricNumber(configuredOutputFps)} fps</Typography>
-                        </Box>
-                        <Box>
                           <Typography variant="caption" color="text.secondary">
-                            Stream transmit speed
-                          </Typography>
-                          <Typography variant="body2">{streamPreviewStats[stream.id]?.throughput || '--'}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Stream resolution
+                            Resolution
                           </Typography>
                           <Typography variant="body2">{streamPreviewStats[stream.id]?.resolution || '--'}</Typography>
                         </Box>
@@ -589,13 +564,19 @@ const Streams: React.FC = () => {
 
                     {/* Actions */}
                     <Box className="card-actions">
-                      <IconButton size="small" onClick={() => handleOpen(stream)} className="icon-button--primary">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpen(stream)}
+                        className="icon-button--primary"
+                        disabled={reorderMode}
+                      >
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => deleteMutation.mutate(stream.id)}
                         className="icon-button--error"
+                        disabled={reorderMode}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -647,64 +628,8 @@ const Streams: React.FC = () => {
               label="Sync video and predictions (backend dispatch)"
             />
 
-            <Box sx={{ mt: 1, mb: 0.5 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-                Task Objective
-              </Typography>
-              <ToggleButtonGroup
-                value={taskObjectiveFilter}
-                exclusive
-                onChange={handleTaskObjectiveChange}
-                size="small"
-                fullWidth
-              >
-                {(runtimeConfig?.available_task_types || ['detect', 'pose', 'segment']).map((taskType) => (
-                  <ToggleButton key={taskType} value={taskType}>
-                    {TASK_OBJECTIVE_LABELS[taskType] ?? taskType}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Box>
-
-            <FormControl fullWidth margin="dense">
-              <InputLabel>System Model</InputLabel>
-              <Select
-                value={runtimeForm.model_name}
-                label="System Model"
-                onChange={(e) => {
-                  const model = e.target.value as string
-                  const inferredTaskType = inferTaskTypeFromModel(model)
-                  setRuntimeForm({ ...runtimeForm, model_name: model, task_type: inferredTaskType })
-                  setTaskObjectiveFilter(inferredTaskType)
-                }}
-              >
-                {(runtimeConfig?.available_models || [])
-                  .filter((model) => inferTaskTypeFromModel(model) === taskObjectiveFilter)
-                  .map((model) => (
-                    <MenuItem key={model} value={model}>
-                      {model}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth margin="dense">
-              <InputLabel>System Accelerator</InputLabel>
-              <Select
-                value={runtimeForm.accelerator}
-                label="System Accelerator"
-                onChange={(e) => setRuntimeForm({ ...runtimeForm, accelerator: e.target.value })}
-              >
-                {(runtimeConfig?.available_accelerators || ['cpu']).map((accelerator) => (
-                  <MenuItem key={accelerator} value={accelerator}>
-                    {accelerator}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <Typography variant="caption" color="text.secondary">
-              Model, accelerator, and task type are applied globally to all streams.
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              The active AI model and accelerator are configured globally in Settings and applied to all streams.
             </Typography>
           </DialogContent>
           <DialogActions>

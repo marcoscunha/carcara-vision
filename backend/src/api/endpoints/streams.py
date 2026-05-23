@@ -16,11 +16,13 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import status
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from ...api.models.benchmark import BenchmarkExportResponse
 from ...api.models.benchmark import BenchmarkScenario
 from ...api.models.stream import StreamCreate
+from ...api.models.stream import StreamReorderRequest
 from ...api.models.stream import StreamResponse
 from ...api.models.stream import StreamUpdate
 from ...api.models.stream import StreamURLs
@@ -508,6 +510,7 @@ def _build_stream_response(stream: Stream, host: str | None = None) -> StreamRes
         detection_confidence=detection_settings["confidence"],
         detection_classes=detection_settings["classes"],
         sync_video_predictions=sync_video_predictions,
+        display_order=stream.display_order or 0,
         created_at=stream.created_at,
         updated_at=stream.updated_at,
     )
@@ -574,11 +577,13 @@ async def create_stream(
     }
 
     # Create database record
+    next_order = (db.query(sa_func.coalesce(sa_func.max(Stream.display_order), 0)).scalar() or 0) + 1
     db_stream = Stream(
         camera_id=stream.camera_id,
         stream_name=stream_name,
         status="starting",
         stream_metadata=stream_metadata,
+        display_order=next_order,
     )
     db.add(db_stream)
     db.commit()
@@ -641,9 +646,40 @@ async def list_streams(
     if status_filter:
         query = query.filter(Stream.status == status_filter)
 
-    streams = query.offset(skip).limit(limit).all()
+    streams = query.order_by(Stream.display_order.asc(), Stream.id.asc()).offset(skip).limit(limit).all()
 
     host = request.headers.get("host", "localhost").split(":")[0]
+    return [_build_stream_response(s, host=host) for s in streams]
+
+
+@router.post("/reorder", response_model=list[StreamResponse])
+async def reorder_streams(
+    payload: StreamReorderRequest,
+    request: Request,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Persist a new display order for streams.
+
+    The provided `ordered_ids` define positions 1..N (in order). Any stream not
+    listed keeps its current `display_order`. Unknown IDs are ignored.
+    """
+    if not payload.ordered_ids:
+        raise HTTPException(status_code=400, detail="ordered_ids must not be empty")
+
+    if len(set(payload.ordered_ids)) != len(payload.ordered_ids):
+        raise HTTPException(status_code=400, detail="ordered_ids must be unique")
+
+    existing = {s.id: s for s in db.query(Stream).filter(Stream.id.in_(payload.ordered_ids)).all()}
+    for position, stream_id in enumerate(payload.ordered_ids, start=1):
+        stream = existing.get(stream_id)
+        if stream is not None:
+            stream.display_order = position
+
+    db.commit()
+
+    host = request.headers.get("host", "localhost").split(":")[0]
+    streams = db.query(Stream).order_by(Stream.display_order.asc(), Stream.id.asc()).all()
     return [_build_stream_response(s, host=host) for s in streams]
 
 

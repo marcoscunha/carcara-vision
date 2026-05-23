@@ -226,6 +226,17 @@ export const useRestartStream = () => {
   })
 }
 
+export const useReorderStreams = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (orderedIds: number[]) => streamApi.reorder(orderedIds).then((res) => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['streams'] })
+    },
+  })
+}
+
 export const useRealtimeInferenceMetrics = () => {
   return useQuery({
     queryKey: queryKeys.inferenceMetrics.realtime,

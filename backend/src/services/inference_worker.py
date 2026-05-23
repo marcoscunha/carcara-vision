@@ -91,6 +91,10 @@ class DetectionEvent:
     detections: list[dict[str, Any]]
     inference_time_ms: float
     fps: float
+    frame_width: int = 0
+    frame_height: int = 0
+    publish_width: int = 0
+    publish_height: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -102,6 +106,10 @@ class DetectionEvent:
             "detections": self.detections,
             "inference_time_ms": round(self.inference_time_ms, 2),
             "fps": round(self.fps, 2),
+            "frame_width": int(self.frame_width),
+            "frame_height": int(self.frame_height),
+            "publish_width": int(self.publish_width),
+            "publish_height": int(self.publish_height),
         }
 
 
@@ -279,6 +287,15 @@ class InferenceWorker:
         try:
             self._pipeline = self._build_pipeline()
             self._engine = getattr(self._pipeline, "_engine", None)
+            # Publish the annotated stream at a FIXED resolution
+            # (config.width x config.height). Backend draws bbox/label strokes
+            # at the FrameAnnotator defaults (2 px line, ~13 px font) on this
+            # known reference frame, so the on-screen stroke produced by the
+            # browser when it scales the annotated video to the display size
+            # depends only on (displayWidth / publishWidth) — a value the
+            # frontend can replicate exactly for its own overlay in unsync
+            # mode, giving pixel-perfect visual parity between the two modes
+            # regardless of the source camera resolution.
             self._annotated_writer = AnnotatedStreamWriter(
                 stream_name=self._config.stream_name,
                 mediamtx_rtsp_url=self._config.mediamtx_rtsp_base,
@@ -384,29 +401,39 @@ class InferenceWorker:
                 postprocess_ms = 0.0
 
             # Annotate every frame with the last known detections (keeps stream fluent).
-            # When there are no active detections skip frame.copy() — nothing to draw.
+            # Resize the source frame to the FIXED published resolution BEFORE drawing
+            # so the backend's bbox stroke is always 2 px on the known reference frame.
+            # Bbox coordinates (which are in source-pixel space) are scaled accordingly.
             annotated = None
             annotate_ms = 0.0
             resize_ms = 0.0
             if self._annotated_writer:
-                needs_resize = frame.shape[1] != self._config.width or frame.shape[0] != self._config.height
-                if self._last_detections:
-                    annotate_started = time.perf_counter()
-                    annotated = frame.copy()
-                    self._annotate(annotated, self._last_detections)
-                    annotate_ms = (time.perf_counter() - annotate_started) * 1000.0
-                else:
-                    # No detections — use the raw frame (no copy, no draw)
-                    annotated = frame
+                src_h, src_w = frame.shape[:2]
+                tgt_w = self._config.width
+                tgt_h = self._config.height
+                needs_resize = src_w != tgt_w or src_h != tgt_h
 
                 if needs_resize:
                     resize_started = time.perf_counter()
-                    annotated = cv2.resize(
-                        annotated,
-                        (self._config.width, self._config.height),
-                        interpolation=cv2.INTER_LINEAR,
-                    )
+                    annotated = cv2.resize(frame, (tgt_w, tgt_h), interpolation=cv2.INTER_LINEAR)
                     resize_ms = (time.perf_counter() - resize_started) * 1000.0
+                    scale_x = tgt_w / src_w
+                    scale_y = tgt_h / src_h
+                else:
+                    annotated = frame.copy() if self._last_detections else frame
+                    scale_x = 1.0
+                    scale_y = 1.0
+
+                if self._last_detections:
+                    annotate_started = time.perf_counter()
+                    if scale_x == 1.0 and scale_y == 1.0:
+                        scaled_detections = self._last_detections
+                    else:
+                        scaled_detections = [
+                            self._scale_detection(det, scale_x, scale_y) for det in self._last_detections
+                        ]
+                    self._annotate(annotated, scaled_detections)
+                    annotate_ms = (time.perf_counter() - annotate_started) * 1000.0
 
             self._record_stage_timing("annotate", annotate_ms)
             self._record_stage_timing("resize", resize_ms)
@@ -448,6 +475,10 @@ class InferenceWorker:
                     detections=self._last_detections,
                     inference_time_ms=inference_ms,
                     fps=event_fps,
+                    frame_width=int(frame.shape[1]),
+                    frame_height=int(frame.shape[0]),
+                    publish_width=int(self._config.width),
+                    publish_height=int(self._config.height),
                 )
 
                 event_tick = time.monotonic()
@@ -574,6 +605,27 @@ class InferenceWorker:
             FrameAnnotator.draw_segmentation(frame, detections)
         else:
             FrameAnnotator.draw_detections(frame, detections)
+
+    @staticmethod
+    def _scale_detection(det: dict[str, Any], sx: float, sy: float) -> dict[str, Any]:
+        """Return a shallow copy of ``det`` with coordinate fields scaled by (sx, sy).
+
+        Used when the published frame resolution differs from the inference source
+        resolution: drawing strokes/font on the resized frame keeps the visual size
+        independent of the camera resolution.
+        """
+        scaled: dict[str, Any] = dict(det)
+        bbox = det.get("bbox")
+        if bbox is not None and len(bbox) == 4:
+            x1, y1, x2, y2 = bbox
+            scaled["bbox"] = [x1 * sx, y1 * sy, x2 * sx, y2 * sy]
+        kpts = det.get("keypoints")
+        if kpts:
+            scaled["keypoints"] = [[kx * sx, ky * sy, kc] for kx, ky, kc in kpts]
+        poly = det.get("mask_polygon")
+        if poly:
+            scaled["mask_polygon"] = [[px * sx, py * sy] for px, py in poly]
+        return scaled
 
     # ------------------------------------------------------------------ #
     # Observer broadcast

@@ -30,48 +30,78 @@ function classColour(classId: number): string {
 
 // ─── Canvas draw helpers ──────────────────────────────────────────────────────
 
-function drawDetections(ctx: CanvasRenderingContext2D, detections: DetectionBox[], scaleX: number, scaleY: number) {
+// Base sizes used by the backend annotator on the PUBLISHED frame (FrameAnnotator
+// defaults: line_thickness=2 px, font_scale=0.55 ≈ 13 px text). The frontend
+// overlay multiplies these by `displayWidth/publishedWidth` so the on-screen
+// thickness matches what the browser produces when it upscales the
+// server-annotated stream. This keeps sync (server-burned boxes) and unsync
+// (client overlay) visually identical regardless of stream resolution.
+const BACKEND_LINE_PX = 2
+const BACKEND_FONT_PX = 13
+const BACKEND_POSE_JOINT_PX = 4
+const BACKEND_SEG_LINE_PX = 1.5
+
+function drawDetections(
+  ctx: CanvasRenderingContext2D,
+  detections: DetectionBox[],
+  scaleX: number,
+  scaleY: number,
+  offsetX = 0,
+  offsetY = 0,
+  displayScale = 1,
+) {
+  const lineWidth = Math.max(1, BACKEND_LINE_PX * displayScale)
   for (const det of detections) {
     const [x1, y1, x2, y2] = det.bbox
-    const sx1 = x1 * scaleX,
-      sy1 = y1 * scaleY
+    const sx1 = x1 * scaleX + offsetX,
+      sy1 = y1 * scaleY + offsetY
     const sw = (x2 - x1) * scaleX,
       sh = (y2 - y1) * scaleY
     const colour = classColour(det.class_id)
 
     ctx.strokeStyle = colour
-    ctx.lineWidth = 2
+    ctx.lineWidth = lineWidth
     ctx.strokeRect(sx1, sy1, sw, sh)
 
     const label =
       det.track_id != null
         ? `#${det.track_id} ${det.class_name} ${(det.confidence * 100).toFixed(0)}%`
         : `${det.class_name} ${(det.confidence * 100).toFixed(0)}%`
-    drawLabel(ctx, label, sx1, sy1, colour)
+    drawLabel(ctx, label, sx1, sy1, colour, displayScale)
   }
 }
 
-function drawPose(ctx: CanvasRenderingContext2D, detections: DetectionBox[], scaleX: number, scaleY: number) {
+function drawPose(
+  ctx: CanvasRenderingContext2D,
+  detections: DetectionBox[],
+  scaleX: number,
+  scaleY: number,
+  offsetX = 0,
+  offsetY = 0,
+  displayScale = 1,
+) {
+  const lineWidth = Math.max(1, BACKEND_LINE_PX * displayScale)
+  const jointRadius = Math.max(2, BACKEND_POSE_JOINT_PX * displayScale)
   for (const det of detections) {
     const [x1, y1, x2, y2] = det.bbox
     ctx.strokeStyle = classColour(det.class_id)
-    ctx.lineWidth = 2
-    ctx.strokeRect(x1 * scaleX, y1 * scaleY, (x2 - x1) * scaleX, (y2 - y1) * scaleY)
+    ctx.lineWidth = lineWidth
+    ctx.strokeRect(x1 * scaleX + offsetX, y1 * scaleY + offsetY, (x2 - x1) * scaleX, (y2 - y1) * scaleY)
 
     const kpts = det.keypoints
     if (!kpts || kpts.length === 0) continue
 
     // Draw bones
     ctx.strokeStyle = 'rgba(0,210,255,0.85)'
-    ctx.lineWidth = 2
+    ctx.lineWidth = lineWidth
     for (const [a, b] of COCO_SKELETON) {
       if (a >= kpts.length || b >= kpts.length) continue
       const [ax, ay, ac] = kpts[a]
       const [bx, by, bc] = kpts[b]
       if (ac < 0.3 || bc < 0.3) continue
       ctx.beginPath()
-      ctx.moveTo(ax * scaleX, ay * scaleY)
-      ctx.lineTo(bx * scaleX, by * scaleY)
+      ctx.moveTo(ax * scaleX + offsetX, ay * scaleY + offsetY)
+      ctx.lineTo(bx * scaleX + offsetX, by * scaleY + offsetY)
       ctx.stroke()
     }
 
@@ -79,45 +109,132 @@ function drawPose(ctx: CanvasRenderingContext2D, detections: DetectionBox[], sca
     for (const [kx, ky, kc] of kpts) {
       if (kc < 0.3) continue
       ctx.beginPath()
-      ctx.arc(kx * scaleX, ky * scaleY, 4, 0, Math.PI * 2)
+      ctx.arc(kx * scaleX + offsetX, ky * scaleY + offsetY, jointRadius, 0, Math.PI * 2)
       ctx.fillStyle = 'rgba(0,255,100,0.9)'
       ctx.fill()
     }
   }
 }
 
-function drawSegmentation(ctx: CanvasRenderingContext2D, detections: DetectionBox[], scaleX: number, scaleY: number) {
+function drawSegmentation(
+  ctx: CanvasRenderingContext2D,
+  detections: DetectionBox[],
+  scaleX: number,
+  scaleY: number,
+  offsetX = 0,
+  offsetY = 0,
+  displayScale = 1,
+) {
+  const lineWidth = Math.max(1, BACKEND_SEG_LINE_PX * displayScale)
   // Draw masks first (semi-transparent fill)
   for (const det of detections) {
     const poly = det.mask_polygon
     if (!poly || poly.length < 3) continue
     const colour = classColour(det.class_id)
     ctx.beginPath()
-    ctx.moveTo(poly[0][0] * scaleX, poly[0][1] * scaleY)
+    ctx.moveTo(poly[0][0] * scaleX + offsetX, poly[0][1] * scaleY + offsetY)
     for (let i = 1; i < poly.length; i++) {
-      ctx.lineTo(poly[i][0] * scaleX, poly[i][1] * scaleY)
+      ctx.lineTo(poly[i][0] * scaleX + offsetX, poly[i][1] * scaleY + offsetY)
     }
     ctx.closePath()
     ctx.fillStyle = colour.replace('hsl', 'hsla').replace(')', ', 0.35)')
     ctx.fill()
     ctx.strokeStyle = colour
-    ctx.lineWidth = 1.5
+    ctx.lineWidth = lineWidth
     ctx.stroke()
   }
   // Draw bounding boxes + labels on top
-  drawDetections(ctx, detections, scaleX, scaleY)
+  drawDetections(ctx, detections, scaleX, scaleY, offsetX, offsetY, displayScale)
 }
 
-function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, colour: string) {
-  ctx.font = '12px monospace'
+function getVideoToCanvasTransform(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  sourceWidth: number,
+  sourceHeight: number,
+) {
+  const displayWidth = canvas.clientWidth || canvas.width
+  const displayHeight = canvas.clientHeight || canvas.height
+
+  // Resolution at which the video is *rendered* in the page (used by the browser
+  // to apply object-fit). This is independent from the inference source size.
+  const renderedSrcW = video.videoWidth || sourceWidth
+  const renderedSrcH = video.videoHeight || sourceHeight
+
+  // Resolution at which the bounding boxes were produced (inference frame).
+  // Falls back to videoWidth/Height when the backend did not send the size.
+  const bboxSrcW = sourceWidth > 0 ? sourceWidth : renderedSrcW
+  const bboxSrcH = sourceHeight > 0 ? sourceHeight : renderedSrcH
+
+  if (!renderedSrcW || !renderedSrcH || !bboxSrcW || !bboxSrcH) {
+    return { scaleX: 0, scaleY: 0, offsetX: 0, offsetY: 0, displayWidth, displayHeight }
+  }
+
+  const objectFit = getComputedStyle(video).objectFit || 'fill'
+
+  // 1) Map rendered video pixels -> display (CSS) pixels accounting for object-fit.
+  let renderScale = 1
+  let renderedW = displayWidth
+  let renderedH = displayHeight
+  let offsetX = 0
+  let offsetY = 0
+
+  if (objectFit === 'fill') {
+    // Non-uniform stretch. Scale axes independently below.
+  } else {
+    renderScale =
+      objectFit === 'contain'
+        ? Math.min(displayWidth / renderedSrcW, displayHeight / renderedSrcH)
+        : Math.max(displayWidth / renderedSrcW, displayHeight / renderedSrcH)
+    renderedW = renderedSrcW * renderScale
+    renderedH = renderedSrcH * renderScale
+    offsetX = (displayWidth - renderedW) / 2
+    offsetY = (displayHeight - renderedH) / 2
+  }
+
+  // 2) Map bbox-source pixels -> rendered-video pixels (assume both views show
+  // the same field-of-view, just resampled to a different resolution).
+  const bboxToRenderedX = renderedW / bboxSrcW
+  const bboxToRenderedY = renderedH / bboxSrcH
+
+  return objectFit === 'fill'
+    ? {
+        scaleX: displayWidth / bboxSrcW,
+        scaleY: displayHeight / bboxSrcH,
+        offsetX: 0,
+        offsetY: 0,
+        displayWidth,
+        displayHeight,
+      }
+    : {
+        scaleX: bboxToRenderedX,
+        scaleY: bboxToRenderedY,
+        offsetX,
+        offsetY,
+        displayWidth,
+        displayHeight,
+      }
+}
+
+function drawLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  colour: string,
+  displayScale = 1,
+) {
+  const fontPx = Math.max(10, Math.round(BACKEND_FONT_PX * displayScale))
+  const padX = Math.max(3, Math.round(4 * displayScale))
+  const padY = Math.max(2, Math.round(3 * displayScale))
+  ctx.font = `${fontPx}px monospace`
   const metrics = ctx.measureText(text)
-  const padX = 4,
-    padY = 3
-  const bh = 16 + padY
+  const bh = fontPx + padY * 2
   const by = Math.max(y - bh, 0)
   ctx.fillStyle = colour
   ctx.fillRect(x, by, metrics.width + padX * 2, bh)
   ctx.fillStyle = '#fff'
+  ctx.textBaseline = 'alphabetic'
   ctx.fillText(text, x + padX, by + bh - padY)
 }
 
@@ -239,6 +356,18 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   const lastDetectionsRef = useRef<DetectionBox[]>([])
   const animFrameRef = useRef<number>(0)
   const taskTypeRef = useRef<string>('detect')
+  // Source frame dimensions (px) reported by the backend inference worker.
+  // bbox coordinates are in this pixel space — NOT necessarily the same as
+  // video.videoWidth/Height when MediaMTX transcodes the displayed stream.
+  const sourceFrameRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 })
+  // Reference dimensions (px) of the backend's PUBLISHED annotated stream.
+  // The backend resizes every frame to this size before drawing strokes/labels
+  // at fixed pixel sizes (BACKEND_LINE_PX / BACKEND_FONT_PX). Multiplying those
+  // base sizes by (displayWidth / publishWidth) reproduces, in the unsync
+  // canvas overlay, the same on-screen thickness the browser produces when it
+  // scales the annotated video to the display — independent of the source
+  // camera resolution.
+  const publishFrameRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 })
 
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -277,22 +406,38 @@ const CameraStream: React.FC<CameraStreamProps> = ({
 
   // ── Canvas resize observer ──────────────────────────────────────────────────
   useEffect(() => {
+    if (showAnnotatedStream) return
+
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
 
     const sync = () => {
       const rect = video.getBoundingClientRect()
-      canvas.width = rect.width
-      canvas.height = rect.height
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = Math.max(1, Math.round(rect.width * dpr))
+      canvas.height = Math.max(1, Math.round(rect.height * dpr))
       canvas.style.width = `${rect.width}px`
       canvas.style.height = `${rect.height}px`
+
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      }
     }
+
     const ro = new ResizeObserver(sync)
     ro.observe(video)
+    video.addEventListener('loadedmetadata', sync)
+    video.addEventListener('resize', sync)
     sync()
-    return () => ro.disconnect()
-  }, [])
+
+    return () => {
+      ro.disconnect()
+      video.removeEventListener('loadedmetadata', sync)
+      video.removeEventListener('resize', sync)
+    }
+  }, [showAnnotatedStream, currentProtocol, stream.id])
 
   // ── Canvas draw loop ────────────────────────────────────────────────────────
   const drawLoop = useCallback(() => {
@@ -309,21 +454,36 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       return
     }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const src = sourceFrameRef.current
+    const { scaleX, scaleY, offsetX, offsetY, displayWidth, displayHeight } = getVideoToCanvasTransform(
+      video,
+      canvas,
+      src.width,
+      src.height,
+    )
+    ctx.clearRect(0, 0, displayWidth, displayHeight)
 
     const detections = lastDetectionsRef.current
-    if (detections.length > 0 && video.videoWidth > 0) {
-      // Scale from model input coords to canvas display coords
-      const scaleX = canvas.width / video.videoWidth
-      const scaleY = canvas.height / video.videoHeight
-
+    if (detections.length > 0 && scaleX > 0 && scaleY > 0) {
+      // Match the on-screen size produced by the browser when it scales the
+      // server-annotated stream to the display. The backend always burns
+      // strokes onto a frame of (publish_width × publish_height), so the
+      // resulting display thickness is (displayWidth / publish_width) ×
+      // BACKEND_LINE_PX. Use the same factor here so sync (server-burned) and
+      // unsync (client overlay) look pixel-identical.
+      const pub = publishFrameRef.current
+      const pubW = pub.width > 0 ? pub.width : 640
+      const pubH = pub.height > 0 ? pub.height : 360
+      const widthScale = displayWidth / pubW
+      const heightScale = displayHeight / pubH
+      const displayScale = (widthScale + heightScale) / 2
       const task = taskTypeRef.current
       if (task === 'pose') {
-        drawPose(ctx, detections, scaleX, scaleY)
+        drawPose(ctx, detections, scaleX, scaleY, offsetX, offsetY, displayScale)
       } else if (task === 'segment') {
-        drawSegmentation(ctx, detections, scaleX, scaleY)
+        drawSegmentation(ctx, detections, scaleX, scaleY, offsetX, offsetY, displayScale)
       } else {
-        drawDetections(ctx, detections, scaleX, scaleY)
+        drawDetections(ctx, detections, scaleX, scaleY, offsetX, offsetY, displayScale)
       }
     }
 
@@ -360,6 +520,12 @@ const CameraStream: React.FC<CameraStreamProps> = ({
           if (event.heartbeat) return
           lastDetectionsRef.current = event.detections ?? []
           taskTypeRef.current = event.task_type ?? 'detect'
+          if (event.frame_width && event.frame_height) {
+            sourceFrameRef.current = { width: event.frame_width, height: event.frame_height }
+          }
+          if (event.publish_width && event.publish_height) {
+            publishFrameRef.current = { width: event.publish_width, height: event.publish_height }
+          }
           setDetectionFps(event.fps)
         } catch {
           /* ignore parse errors */
@@ -382,6 +548,8 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       if (wsRef.current) wsRef.current.close()
       wsRef.current = null
       lastDetectionsRef.current = []
+      sourceFrameRef.current = { width: 0, height: 0 }
+      publishFrameRef.current = { width: 0, height: 0 }
     }
   }, [stream.id, stream.worker_active, showAnnotatedStream, detectionEnabled])
 
@@ -505,21 +673,42 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   }, [stats.resolution, stats.fps, stats.codec, stats.throughput, detectionFps, onStatsChange])
 
   // ── Resolution update ───────────────────────────────────────────────────────
+  // Prefer the SOURCE frame dimensions reported by the backend inference worker
+  // (the true camera resolution) over the <video> element's videoWidth/Height,
+  // because in sync mode the displayed video is the downscaled annotated stream
+  // (e.g. 640x360) which would otherwise be reported as the camera resolution.
+  // We poll sourceFrameRef cheaply in a short interval; it is updated by the
+  // detection WS feed. If no detection events are flowing (worker disabled,
+  // detections off) we fall back to video.videoWidth/Height so the field is
+  // not left blank.
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
+
     const update = () => {
-      if (video.videoWidth && video.videoHeight)
-        setStats((s) => ({ ...s, resolution: `${video.videoWidth}x${video.videoHeight}` }))
+      const src = sourceFrameRef.current
+      if (src.width > 0 && src.height > 0) {
+        const next = `${src.width}x${src.height}`
+        setStats((s) => (s.resolution === next ? s : { ...s, resolution: next }))
+        return
+      }
+      if (video.videoWidth && video.videoHeight) {
+        const next = `${video.videoWidth}x${video.videoHeight}`
+        setStats((s) => (s.resolution === next ? s : { ...s, resolution: next }))
+      }
     }
+
     video.addEventListener('loadedmetadata', update)
     video.addEventListener('resize', update)
-    if (video.videoWidth) update()
+    update()
+    const interval = window.setInterval(update, 1000)
+
     return () => {
       video.removeEventListener('loadedmetadata', update)
       video.removeEventListener('resize', update)
+      window.clearInterval(interval)
     }
-  }, [])
+  }, [showAnnotatedStream, currentProtocol, stream.id])
 
   // ── WebRTC connection ───────────────────────────────────────────────────────
   const retryCountRef = useRef(0)

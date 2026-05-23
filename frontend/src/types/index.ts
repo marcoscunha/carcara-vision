@@ -43,6 +43,7 @@ export interface Stream {
   detection_confidence?: number
   detection_classes?: number[] | null
   sync_video_predictions?: boolean
+  display_order?: number
   created_at: string
   updated_at: string
 }
@@ -280,6 +281,14 @@ export interface DetectionEvent {
   inference_time_ms: number
   fps: number
   detections: DetectionBox[]
+  /** Source frame width (px) used by the inference worker — bbox coords are in this space */
+  frame_width?: number
+  /** Source frame height (px) used by the inference worker — bbox coords are in this space */
+  frame_height?: number
+  /** Width (px) of the published annotated stream — reference for matching stroke/font on the client overlay */
+  publish_width?: number
+  /** Height (px) of the published annotated stream — reference for matching stroke/font on the client overlay */
+  publish_height?: number
   /** Present only for heartbeat messages */
   heartbeat?: boolean
 }

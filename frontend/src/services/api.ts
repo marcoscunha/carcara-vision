@@ -124,6 +124,7 @@ export const streamApi = {
   update: (id: number, data: Partial<Stream>) => api.put<Stream>(`/streams/${id}`, data),
   delete: (id: number) => api.delete(`/streams/${id}`),
   restart: (id: number) => api.post<Stream>(`/streams/${id}/restart`),
+  reorder: (ordered_ids: number[]) => api.post<Stream[]>('/streams/reorder', { ordered_ids }),
   getRealtimeMetrics: () => api.get<RealtimeInferenceMetrics>('/streams/metrics/realtime'),
   getStreamMetrics: (id: number) => api.get(`/streams/${id}/metrics`),
   getBenchmarkScenarioTemplate: () => api.get<BenchmarkScenario>('/streams/metrics/benchmark/scenario-template'),

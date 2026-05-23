@@ -4,7 +4,6 @@ import {
   Card,
   CardContent,
   Typography,
-  Slider,
   Button,
   Skeleton,
   Divider,
@@ -18,7 +17,6 @@ import {
   Tabs,
 } from '@mui/material'
 import {
-  Save as SaveIcon,
   Settings as SettingsIcon,
   Memory as MemoryIcon,
   Hardware as HardwareIcon,
@@ -44,6 +42,7 @@ import {
   useUpdateInferenceRuntimeConfig,
 } from '../hooks/useQueries'
 import { useAuth } from '../auth'
+import { AUTH_ENABLED } from '../auth/keycloak'
 import type { Model, AcceleratorStatus, AcceleratorType } from '../types'
 
 // Helper functions for hardware display
@@ -141,7 +140,6 @@ const TASK_LABELS: Record<string, string> = {
 }
 
 const Settings: React.FC = () => {
-  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5)
   const [taskTab, setTaskTab] = useState<string>('detect')
 
   // Auth hook for user info
@@ -168,13 +166,6 @@ const Settings: React.FC = () => {
   // Global runtime model selection (default to runtimeConfig or first model)
   const selectedModel = runtimeConfig?.model_name ?? ''
   const selectedTaskType = runtimeConfig?.task_type ?? 'detect'
-
-  const handleSaveRuntime = () => {
-    updateRuntimeMutation.mutate({
-      task_type: taskTab,
-      confidence_threshold: confidenceThreshold,
-    } as any)
-  }
 
   const handleSelectModel = (modelName: string) => {
     updateRuntimeMutation.mutate({ model_name: modelName, task_type: taskTab })
@@ -332,40 +323,6 @@ const Settings: React.FC = () => {
                 ))
               )}
             </Box>
-
-            {/* Confidence threshold for global runtime */}
-            <Box className="settings-card__metric" sx={{ mt: 3 }}>
-              <Box className="settings-card__metric-header">
-                <Typography className="settings-card__metric-label">Confidence Threshold</Typography>
-                <Typography className="settings-card__metric-value">
-                  {(confidenceThreshold * 100).toFixed(0)}%
-                </Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" className="settings-card__metric-note">
-                Minimum confidence level required for detections
-              </Typography>
-              <Slider
-                value={confidenceThreshold}
-                onChange={(_, value) => setConfidenceThreshold(value as number)}
-                min={0}
-                max={1}
-                step={0.05}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `${(value * 100).toFixed(0)}%`}
-                className="settings-card__slider"
-              />
-            </Box>
-
-            <Button
-              variant="contained"
-              onClick={handleSaveRuntime}
-              disabled={updateRuntimeMutation.isPending}
-              startIcon={<SaveIcon />}
-              className="settings-card__save"
-              sx={{ mt: 2 }}
-            >
-              {updateRuntimeMutation.isPending ? 'Saving...' : 'Save Threshold'}
-            </Button>
           </CardContent>
         </Card>
 
@@ -671,90 +628,90 @@ const Settings: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* User Profile Card */}
-        <Card>
-          <CardContent className="settings-card__content">
-            <Box className="settings-card__header">
-              <Box className="settings-card__icon settings-card__icon--primary">
-                <PersonIcon color="primary" />
-              </Box>
-              <Box>
-                <Typography variant="h6" className="settings-card__title">
-                  User Profile
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Your account information
-                </Typography>
-              </Box>
-            </Box>
-
-            <Divider className="settings-card__divider" />
-
-            {user ? (
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                  <Avatar
-                    sx={{
-                      width: 56,
-                      height: 56,
-                      mr: 2,
-                      bgcolor: 'primary.main',
-                      color: 'primary.contrastText',
-                    }}
-                  >
-                    {user.username.charAt(0).toUpperCase()}
-                  </Avatar>
-                  <Box>
-                    <Typography variant="h6">
-                      {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.username}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {user.email || 'No email'}
-                    </Typography>
-                  </Box>
+        {/* User Profile Card (only when Keycloak auth is enabled) */}
+        {AUTH_ENABLED && user && (
+          <Card>
+            <CardContent className="settings-card__content">
+              <Box className="settings-card__header">
+                <Box className="settings-card__icon settings-card__icon--primary">
+                  <PersonIcon color="primary" />
                 </Box>
+                <Box>
+                  <Typography variant="h6" className="settings-card__title">
+                    User Profile
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Your account information
+                  </Typography>
+                </Box>
+              </Box>
 
-                <Box className="settings-info">
-                  <Box className="settings-info__row">
-                    <Typography variant="body2" color="text.secondary">
-                      Username
-                    </Typography>
-                    <Typography variant="body2" className="settings-info__value">
-                      {user.username}
-                    </Typography>
-                  </Box>
-                  <Box className="settings-info__row">
-                    <Typography variant="body2" color="text.secondary">
-                      Roles
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      {user.roles.map((role) => (
-                        <Chip
-                          key={role}
-                          label={role}
-                          size="small"
-                          color={role === 'admin' ? 'primary' : 'default'}
-                          variant="outlined"
-                        />
-                      ))}
+              <Divider className="settings-card__divider" />
+
+              {user && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <Avatar
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        mr: 2,
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                      }}
+                    >
+                      {user.username.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="h6">
+                        {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.username}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {user.email || 'No email'}
+                      </Typography>
                     </Box>
                   </Box>
-                </Box>
 
-                <Box sx={{ mt: 3 }}>
-                  <Button variant="outlined" color="error" startIcon={<LogoutIcon />} onClick={logout} fullWidth>
-                    Sign Out
-                  </Button>
-                </Box>
-              </Box>
-            ) : (
-              <Typography color="text.secondary">Not logged in</Typography>
-            )}
-          </CardContent>
-        </Card>
+                  <Box className="settings-info">
+                    <Box className="settings-info__row">
+                      <Typography variant="body2" color="text.secondary">
+                        Username
+                      </Typography>
+                      <Typography variant="body2" className="settings-info__value">
+                        {user.username}
+                      </Typography>
+                    </Box>
+                    <Box className="settings-info__row">
+                      <Typography variant="body2" color="text.secondary">
+                        Roles
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {user.roles.map((role) => (
+                          <Chip
+                            key={role}
+                            label={role}
+                            size="small"
+                            color={role === 'admin' ? 'primary' : 'default'}
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  </Box>
 
-        {/* User Management Card (Admin Only) */}
-        {isAdmin && (
+                  <Box sx={{ mt: 3 }}>
+                    <Button variant="outlined" color="error" startIcon={<LogoutIcon />} onClick={logout} fullWidth>
+                      Sign Out
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* User Management Card (Admin Only, when Keycloak auth is enabled) */}
+        {AUTH_ENABLED && isAdmin && (
           <Card>
             <CardContent className="settings-card__content">
               <Box className="settings-card__header">
@@ -787,10 +744,6 @@ const Settings: React.FC = () => {
               >
                 Open Keycloak Admin Console
               </Button>
-
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-                Default credentials: admin / admin
-              </Typography>
             </CardContent>
           </Card>
         )}

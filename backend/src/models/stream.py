@@ -19,6 +19,7 @@ class Stream(Base):
     stream_name = Column(String, unique=True, index=True)  # Unique name for go2rtc
     status = Column(String)  # active, paused, stopped
     current_frame = Column(Integer, default=0)
+    display_order = Column(Integer, default=0, nullable=False, index=True)
     stream_metadata = Column(JSON)  # Store additional stream information
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

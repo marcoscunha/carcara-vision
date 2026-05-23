@@ -65,8 +65,19 @@ class StreamResponse(StreamBase):
     detection_confidence: float
     detection_classes: list[int] | None = None
     sync_video_predictions: bool
+    display_order: int = 0
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class StreamReorderRequest(BaseModel):
+    """Payload for reordering streams.
+
+    `ordered_ids` is the list of stream IDs in the desired display order.
+    Streams not included keep their current `display_order` value.
+    """
+
+    ordered_ids: list[int]
