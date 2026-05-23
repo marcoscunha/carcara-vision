@@ -146,12 +146,17 @@ class InferenceWorker:
         # Last known detections — reused for every frame between inference cycles
         self._last_detections: list[dict[str, Any]] = []
 
+        # Last decoded frame — cached for snapshot requests so that the
+        # snapshot endpoint doesn't need to open a second RTSP connection.
+        self._last_frame: np.ndarray | None = None
+        self._last_frame_lock = threading.Lock()
+
         # Observer: set of asyncio.Queue for WebSocket subscribers
         self._subscribers: set[asyncio.Queue] = set()
         self._subscribers_lock = threading.Lock()
 
-        # Alarm callback (called with DetectionEvent)
-        self._alarm_callback: Callable[[DetectionEvent], None] | None = None
+        # Alarm callback (called with DetectionEvent + raw frame)
+        self._alarm_callback: Callable[[DetectionEvent, Any], None] | None = None
 
         # Rolling inference stats
         self._frame_count: int = 0
@@ -228,8 +233,15 @@ class InferenceWorker:
         with self._subscribers_lock:
             self._subscribers.discard(queue)
 
-    def set_alarm_callback(self, callback: Callable[[DetectionEvent], None] | None) -> None:
+    def set_alarm_callback(self, callback: Callable[[DetectionEvent, Any], None] | None) -> None:
         self._alarm_callback = callback
+
+    def get_snapshot_frame(self) -> np.ndarray | None:
+        """Return a copy of the most recently decoded frame, or None."""
+        with self._last_frame_lock:
+            if self._last_frame is None:
+                return None
+            return self._last_frame.copy()
 
     # ------------------------------------------------------------------ #
     # Stats
@@ -368,6 +380,10 @@ class InferenceWorker:
             consecutive_read_failures = 0
             self._record_stage_timing("read", read_ms)
 
+            # Cache the latest decoded frame for snapshot requests.
+            with self._last_frame_lock:
+                self._last_frame = frame
+
             now = time.monotonic()
             run_inference = now >= next_inference_at
 
@@ -494,7 +510,7 @@ class InferenceWorker:
                 if self._alarm_callback:
                     try:
                         alarm_started = time.perf_counter()
-                        self._alarm_callback(event)
+                        self._alarm_callback(event, frame)
                         alarm_ms = (time.perf_counter() - alarm_started) * 1000.0
                     except Exception as exc:
                         logger.error("Alarm callback error for stream %d: %s", self._config.stream_id, exc)

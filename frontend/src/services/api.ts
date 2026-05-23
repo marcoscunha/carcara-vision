@@ -5,6 +5,10 @@ import {
   StreamCreate,
   Detection,
   Alarm,
+  AlarmCreate,
+  AlarmZone,
+  AlarmZoneCreate,
+  AlarmEvent,
   Model,
   RegionOfInterest,
   StreamURLs,
@@ -146,14 +150,42 @@ export const detectionApi = {
 
 // Alarm endpoints
 export const alarmApi = {
-  getAll: async () => {
-    const response = await api.get<ApiResponse<Alarm[]>>('/alarms')
+  getAll: async (stream_id?: number) => {
+    const params = stream_id ? { stream_id } : {}
+    const response = await api.get<ApiResponse<Alarm[]>>('/alarms', { params })
     return response.data
   },
   getById: (id: number) => api.get<Alarm>(`/alarms/${id}`),
-  create: (data: Omit<Alarm, 'id' | 'created_at' | 'updated_at'>) => api.post<Alarm>('/alarms', data),
-  update: (id: number, data: Partial<Alarm>) => api.put<Alarm>(`/alarms/${id}`, data),
+  create: (data: AlarmCreate) => api.post<Alarm>('/alarms', data),
+  update: (id: number, data: Partial<AlarmCreate>) => api.put<Alarm>(`/alarms/${id}`, data),
   delete: (id: number) => api.delete(`/alarms/${id}`),
+}
+
+// Alarm zone endpoints
+export const alarmZoneApi = {
+  getAll: async (stream_id: number) => {
+    const response = await api.get<ApiResponse<AlarmZone[]>>('/alarms/zones', { params: { stream_id } })
+    return response.data
+  },
+  create: (data: AlarmZoneCreate) => api.post<AlarmZone>('/alarms/zones', data),
+  delete: (id: number) => api.delete(`/alarms/zones/${id}`),
+}
+
+// Alarm event endpoints
+export const alarmEventApi = {
+  getAll: async (params?: {
+    alarm_id?: number
+    stream_id?: number
+    state?: string
+    limit?: number
+    offset?: number
+  }) => {
+    const response = await api.get<ApiResponse<AlarmEvent[]>>('/alarms/events', { params })
+    return response.data
+  },
+  getById: (id: number) => api.get<AlarmEvent>(`/alarms/events/${id}`),
+  ack: (id: number, notes?: string) => api.post<AlarmEvent>(`/alarms/events/${id}/ack`, { notes }),
+  delete: (id: number) => api.delete(`/alarms/events/${id}`),
 }
 
 // Model endpoints

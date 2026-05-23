@@ -738,14 +738,23 @@ class CameraService:
                 return None
         else:
             cap = cv2.VideoCapture(stream_url)
+            # Prefer TCP for RTSP (more reliable on local networks); also set a
+            # short open timeout so the endpoint doesn't hang indefinitely.
+            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
 
         if not cap.isOpened():
             return None
 
-        ret, frame = cap.read()
+        # RTSP streams buffer several frames before the first valid frame is
+        # ready.  Drain up to 10 reads to get past the initial empty/black
+        # frames; stop as soon as a valid frame is received.
+        frame = None
+        for _ in range(10):
+            ret, f = cap.read()
+            if ret and f is not None:
+                frame = f
+                break
+
         cap.release()
-
-        if not ret:
-            return None
-
         return frame

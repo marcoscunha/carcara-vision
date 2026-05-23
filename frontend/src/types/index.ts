@@ -128,16 +128,155 @@ export interface Detection {
   metadata: Record<string, any>
 }
 
-export interface Alarm {
+// ============================================================================
+// Alarm V2 Types
+// ============================================================================
+
+export type TriggerType = 'class_present' | 'class_count' | 'class_absent_for' | 'zone_enter' | 'dwell'
+export type CountOp = '>=' | '>' | '==' | '<=' | '<'
+export type NotifyChannel = 'ws' | 'webhook'
+
+export interface ScheduleWindow {
+  weekdays: number[]
+  start_hour: number
+  end_hour: number
+}
+
+export interface TriggerClassPresent {
+  type: 'class_present'
+  class_names: string[]
+  min_confidence: number
+}
+
+export interface TriggerClassCount {
+  type: 'class_count'
+  class_names: string[]
+  min_confidence: number
+  count_op: CountOp
+  count_threshold: number
+}
+
+export interface TriggerClassAbsentFor {
+  type: 'class_absent_for'
+  class_names: string[]
+  min_confidence: number
+  absent_seconds: number
+}
+
+export interface TriggerZoneEnter {
+  type: 'zone_enter'
+  class_names: string[]
+  min_confidence: number
+}
+
+export interface TriggerDwell {
+  type: 'dwell'
+  class_names: string[]
+  min_confidence: number
+  dwell_seconds: number
+}
+
+export type TriggerConfig =
+  | TriggerClassPresent
+  | TriggerClassCount
+  | TriggerClassAbsentFor
+  | TriggerZoneEnter
+  | TriggerDwell
+
+export type AlarmSeverity = 'info' | 'warning' | 'critical'
+
+export interface AlarmZone {
   id: number
+  stream_id: number
   name: string
-  camera_id: number
-  class_name: string
-  confidence_threshold: number
-  region_of_interest: number[]
+  polygon: [number, number][]
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface AlarmZoneCreate {
+  stream_id: number
+  name: string
+  polygon: [number, number][]
+}
+
+export interface Alarm {
+  id: number
+  stream_id: number
+  name: string
+  description?: string | null
+  severity: AlarmSeverity
+  trigger_type: TriggerType
+  trigger_config: TriggerConfig
+  zone_id: number | null
+  is_active: boolean
+  store_events: boolean
+  store_snapshot: boolean
+  store_clip_seconds: number
+  min_on_seconds: number
+  min_off_seconds: number
+  cooldown_seconds: number
+  notify_channels: NotifyChannel[]
+  webhook_url?: string | null
+  schedule?: ScheduleWindow[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AlarmCreate {
+  stream_id: number
+  name: string
+  description?: string | null
+  severity?: AlarmSeverity
+  trigger_config: TriggerConfig
+  zone_id?: number | null
+  is_active?: boolean
+  store_events?: boolean
+  store_snapshot?: boolean
+  store_clip_seconds?: number
+  min_on_seconds?: number
+  min_off_seconds?: number
+  cooldown_seconds?: number
+  notify_channels?: NotifyChannel[]
+  webhook_url?: string | null
+  schedule?: ScheduleWindow[] | null
+}
+
+export type AlarmEventState = 'open' | 'closed' | 'acknowledged' | 'resolved'
+
+export interface AlarmEvent {
+  id: number
+  alarm_id: number
+  stream_id: number
+  zone_id: number | null
+  state: AlarmEventState
+  started_at: string
+  ended_at: string | null
+  acknowledged_at: string | null
+  matched_classes: Record<string, number> | null
+  matched_track_ids: number[] | null
+  peak_confidence: number | null
+  peak_count: number | null
+  snapshot_path: string | null
+  has_snapshot: boolean
+  clip_path: string | null
+  rule_snapshot: Record<string, unknown>
+}
+
+export interface AlarmWsPayload {
+  type: 'alarm.opened' | 'alarm.closed' | 'heartbeat'
+  alarm_id?: number
+  stream_id?: number
+  zone_id?: number | null
+  event_id?: number | null
+  timestamp?: number
+  severity?: AlarmSeverity
+  alarm_name?: string
+  matched_classes?: Record<string, number>
+  peak_confidence?: number
+  peak_count?: number
+  heartbeat?: boolean
 }
 
 export interface Model {

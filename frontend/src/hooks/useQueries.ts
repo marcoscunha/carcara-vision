@@ -4,6 +4,8 @@ import {
   streamApi,
   detectionApi,
   alarmApi,
+  alarmZoneApi,
+  alarmEventApi,
   modelApi,
   roiApi,
   hardwareApi,
@@ -15,7 +17,8 @@ import {
   Stream,
   StreamCreate,
   Detection,
-  Alarm,
+  AlarmCreate,
+  AlarmZoneCreate,
   Model,
   RegionOfInterest,
   DiscoveryProtocol,
@@ -44,7 +47,16 @@ export const queryKeys = {
   },
   alarms: {
     all: ['alarms'] as const,
+    byStream: (streamId?: number) => ['alarms', { streamId }] as const,
     detail: (id: number) => ['alarms', id] as const,
+  },
+  alarmZones: {
+    byStream: (streamId: number) => ['alarm-zones', streamId] as const,
+  },
+  alarmEvents: {
+    all: ['alarm-events'] as const,
+    filtered: (params?: { alarm_id?: number; stream_id?: number; state?: string }) => ['alarm-events', params] as const,
+    detail: (id: number) => ['alarm-events', id] as const,
   },
   models: {
     all: ['models'] as const,
@@ -295,10 +307,10 @@ export const useDeleteDetection = () => {
 
 // ============ ALARM HOOKS ============
 
-export const useAlarms = () => {
+export const useAlarms = (streamId?: number) => {
   return useQuery({
-    queryKey: queryKeys.alarms.all,
-    queryFn: alarmApi.getAll,
+    queryKey: queryKeys.alarms.byStream(streamId),
+    queryFn: () => alarmApi.getAll(streamId),
   })
 }
 
@@ -314,7 +326,7 @@ export const useCreateAlarm = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: Omit<Alarm, 'id' | 'created_at' | 'updated_at'>) => alarmApi.create(data),
+    mutationFn: (data: AlarmCreate) => alarmApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all })
     },
@@ -325,7 +337,7 @@ export const useUpdateAlarm = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Alarm> }) => alarmApi.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<AlarmCreate> }) => alarmApi.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.alarms.detail(variables.id) })
@@ -340,6 +352,70 @@ export const useDeleteAlarm = () => {
     mutationFn: (id: number) => alarmApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all })
+    },
+  })
+}
+
+// ============ ALARM ZONE HOOKS ============
+
+export const useAlarmZones = (streamId: number) => {
+  return useQuery({
+    queryKey: queryKeys.alarmZones.byStream(streamId),
+    queryFn: () => alarmZoneApi.getAll(streamId),
+    enabled: !!streamId,
+  })
+}
+
+export const useCreateAlarmZone = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: AlarmZoneCreate) => alarmZoneApi.create(data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.alarmZones.byStream(variables.stream_id) })
+    },
+  })
+}
+
+export const useDeleteAlarmZone = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id }: { id: number; streamId: number }) => alarmZoneApi.delete(id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.alarmZones.byStream(variables.streamId) })
+    },
+  })
+}
+
+// ============ ALARM EVENT HOOKS ============
+
+export const useAlarmEvents = (params?: { alarm_id?: number; stream_id?: number; state?: string; limit?: number }) => {
+  return useQuery({
+    queryKey: queryKeys.alarmEvents.filtered(params),
+    queryFn: () => alarmEventApi.getAll(params),
+    refetchInterval: 10000,
+  })
+}
+
+export const useAckAlarmEvent = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: number; notes?: string }) => alarmEventApi.ack(id, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.alarmEvents.all })
+    },
+  })
+}
+
+export const useDeleteAlarmEvent = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: number) => alarmEventApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.alarmEvents.all })
     },
   })
 }

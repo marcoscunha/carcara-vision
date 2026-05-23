@@ -27,3 +27,5 @@ class Stream(Base):
     # Relationships
     camera = relationship("Camera", back_populates="streams")
     detections = relationship("Detection", back_populates="stream", cascade="all, delete-orphan")
+    alarms = relationship("Alarm", back_populates="stream", cascade="all, delete-orphan")
+    alarm_zones = relationship("AlarmZone", back_populates="stream", cascade="all, delete-orphan")

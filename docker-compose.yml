@@ -80,6 +80,8 @@ services:
       - KEYCLOAK_ISSUER_URL=${KEYCLOAK_ISSUER_URL:-http://localhost:8280}
       - KEYCLOAK_REALM=carcara
       - KEYCLOAK_CLIENT_ID=carcara-backend
+      # Alarm snapshot storage (persisted volume)
+      - ALARM_SNAPSHOT_DIR=/app/alarm_snapshots
     depends_on:
       - db
       - mediamtx
@@ -94,6 +96,7 @@ services:
     volumes:
       - ./backend/src:/app/src
       - /var/run/docker.sock:/var/run/docker.sock
+      - alarm_snapshots:/app/alarm_snapshots
     privileged: true
 
   db:
@@ -135,3 +138,4 @@ services:
 volumes:
   postgres_data:
   keycloak_data:
+  alarm_snapshots:

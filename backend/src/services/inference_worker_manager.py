@@ -38,6 +38,7 @@ from urllib.parse import urlparse
 from ..core.config import settings
 from ..ml.registry import TASK_TYPE_DETECT
 from ..ml.registry import model_registry
+from .alarm_engine import AlarmEngine
 from .inference_worker import InferenceWorker
 from .inference_worker import WorkerConfig
 
@@ -131,6 +132,7 @@ class InferenceWorkerManager:
 
     def __init__(self) -> None:
         self._workers: dict[int, InferenceWorker] = {}
+        self._engines: dict[int, AlarmEngine] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
@@ -154,14 +156,18 @@ class InferenceWorkerManager:
         with self._lock:
             self._stop_and_remove(stream.id)
             worker = InferenceWorker(config)
+            engine = self._build_engine(stream.id)
+            worker.set_alarm_callback(engine.evaluate)
             worker.start()
             self._workers[stream.id] = worker
+            self._engines[stream.id] = engine
             logger.info("Worker started for stream %d (%s)", stream.id, stream.stream_name)
 
     def stop_worker(self, stream_id: int) -> None:
         """Stop and remove the worker for the given stream ID."""
         with self._lock:
             self._stop_and_remove(stream_id)
+            self._engines.pop(stream_id, None)
 
     def restart_worker(self, stream: Stream, runtime: Any | None = None) -> None:
         """Stop then start the worker (useful after config changes)."""
@@ -173,15 +179,54 @@ class InferenceWorkerManager:
         with self._lock:
             for stream_id in list(self._workers):
                 self._stop_and_remove(stream_id)
+            self._engines.clear()
         logger.info("All inference workers stopped")
 
     def get_worker(self, stream_id: int) -> InferenceWorker | None:
         with self._lock:
             return self._workers.get(stream_id)
 
+    def get_all_engines(self) -> list[AlarmEngine]:
+        """Return a snapshot of all active engines (for dispatcher polling)."""
+        with self._lock:
+            return list(self._engines.values())
+
+    def reload_alarms_for_stream(self, stream_id: int) -> None:
+        """Reload alarm rules from DB into the live engine for ``stream_id``.
+
+        Called by alarm API endpoints after CRUD operations so that rule
+        changes take effect immediately without restarting the worker.
+        """
+        with self._lock:
+            engine = self._engines.get(stream_id)
+        if engine is None:
+            return
+        try:
+            from ..db.session import SessionLocal
+            from ..models.alarm import Alarm, AlarmZone
+
+            db = SessionLocal()
+            try:
+                alarms = db.query(Alarm).filter(Alarm.stream_id == stream_id, Alarm.is_active.is_(True)).all()
+                zones = db.query(AlarmZone).filter(AlarmZone.stream_id == stream_id).all()
+                zones_by_id = {z.id: z.polygon for z in zones if z.polygon}
+                engine.load_rules(alarms, zones_by_id)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Failed to reload alarms for stream %d", stream_id)
+
     def list_stats(self) -> list[dict[str, Any]]:
         with self._lock:
             return [w.get_stats() for w in self._workers.values()]
+
+    def get_snapshot_frame(self, stream_id: int) -> Any | None:
+        """Return the last decoded frame from the running worker, or None."""
+        with self._lock:
+            worker = self._workers.get(stream_id)
+        if worker is None:
+            return None
+        return worker.get_snapshot_frame()
 
     # ------------------------------------------------------------------ #
     # WebSocket subscription routing
@@ -224,6 +269,25 @@ class InferenceWorkerManager:
     # ------------------------------------------------------------------ #
     # Private helpers
     # ------------------------------------------------------------------ #
+
+    def _build_engine(self, stream_id: int) -> AlarmEngine:
+        """Create and populate an AlarmEngine for ``stream_id`` from DB."""
+        engine = AlarmEngine(stream_id)
+        try:
+            from ..db.session import SessionLocal
+            from ..models.alarm import Alarm, AlarmZone
+
+            db = SessionLocal()
+            try:
+                alarms = db.query(Alarm).filter(Alarm.stream_id == stream_id, Alarm.is_active.is_(True)).all()
+                zones = db.query(AlarmZone).filter(AlarmZone.stream_id == stream_id).all()
+                zones_by_id = {z.id: z.polygon for z in zones if z.polygon}
+                engine.load_rules(alarms, zones_by_id)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Failed to load alarms for stream %d engine", stream_id)
+        return engine
 
     def _stop_and_remove(self, stream_id: int) -> None:
         """Stop and remove worker; caller must hold ``_lock``."""

@@ -30,13 +30,4 @@ class Camera(Base):
     # Relationships - cascade delete all related records when camera is deleted
     streams = relationship("Stream", back_populates="camera", cascade="all, delete-orphan")
     detections = relationship("Detection", back_populates="camera", cascade="all, delete-orphan")
-    alarms = relationship("Alarm", back_populates="camera", cascade="all, delete-orphan")
-    rois = relationship("RegionOfInterest", back_populates="camera", cascade="all, delete-orphan")
-    streams = relationship("Stream", back_populates="camera", cascade="all, delete-orphan")
-    detections = relationship("Detection", back_populates="camera", cascade="all, delete-orphan")
-    alarms = relationship("Alarm", back_populates="camera", cascade="all, delete-orphan")
-    rois = relationship("RegionOfInterest", back_populates="camera", cascade="all, delete-orphan")
-    streams = relationship("Stream", back_populates="camera", cascade="all, delete-orphan")
-    detections = relationship("Detection", back_populates="camera", cascade="all, delete-orphan")
-    alarms = relationship("Alarm", back_populates="camera", cascade="all, delete-orphan")
     rois = relationship("RegionOfInterest", back_populates="camera", cascade="all, delete-orphan")

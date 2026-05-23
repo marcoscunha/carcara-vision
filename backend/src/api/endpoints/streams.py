@@ -909,6 +909,49 @@ async def detect_objects_for_stream(
     return _detect_stream_frame(stream, camera)
 
 
+@router.get("/{stream_id}/snapshot")
+async def get_stream_snapshot(
+    stream_id: int,
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+):
+    """Capture a single JPEG frame from the stream source."""
+    import cv2
+    from fastapi.responses import Response
+
+    stream = db.query(Stream).filter(Stream.id == stream_id).first()
+    if stream is None:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    camera = db.query(Camera).filter(Camera.id == stream.camera_id).first()
+    if camera is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    # Fast path: reuse the frame already captured by the running inference
+    # worker — avoids opening a second RTSP connection.
+    from ...services.inference_worker_manager import inference_worker_manager
+
+    frame = inference_worker_manager.get_snapshot_frame(stream_id)
+
+    # Slow path: open the stream on-demand (stream may not be running).
+    if frame is None:
+        capture_source = _get_capture_source(stream, camera)
+        frame = camera_service.process_stream(
+            capture_source["stream_url"],
+            camera_type=capture_source["camera_type"],
+            device_id=capture_source["device_id"],
+            device_path=capture_source["device_path"],
+        )
+
+    if frame is None:
+        raise HTTPException(status_code=503, detail="Could not capture frame from stream source")
+
+    ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode frame")
+
+    return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
 @router.get("/{stream_id}/ml-info")
 async def get_stream_ml_info(
     stream_id: int,

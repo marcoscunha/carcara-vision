@@ -18,11 +18,13 @@ from .api.endpoints import inference_runtime
 from .api.endpoints import models
 from .api.endpoints import roi as roi_endpoints
 from .api.endpoints import streams
+from .api.endpoints import ws_alarms
 from .api.endpoints import ws_detections
 from .core.config import settings
 from .core.logging import setup_logging
 from .db.session import SessionLocal
 from .models.stream import Stream
+from .services.alarm_dispatcher import alarm_dispatcher
 from .services.camera_connectivity import sync_local_camera_connectivity
 from .services.inference_worker_manager import inference_worker_manager
 
@@ -60,6 +62,7 @@ async def lifespan(app: FastAPI):
 
     # Re-register active stream pipelines, then restore inference workers.
     db = SessionLocal()
+    dispatcher_task: asyncio.Task | None = None
     self_heal_task: asyncio.Task | None = None
     try:
         # First heal local camera bindings after detach/reattach events.
@@ -79,6 +82,9 @@ async def lifespan(app: FastAPI):
                 settings.GSTREAMER_SELF_HEAL_INTERVAL_SECONDS,
                 settings.GSTREAMER_AUTO_RECREATE,
             )
+
+        dispatcher_task = asyncio.create_task(alarm_dispatcher.run(), name="alarm-dispatcher")
+        logger.info("AlarmDispatcher task started")
     finally:
         db.close()
 
@@ -88,6 +94,8 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutting down — stopping all inference workers...")
     if self_heal_task is not None:
         self_heal_task.cancel()
+    if dispatcher_task is not None:
+        dispatcher_task.cancel()
     inference_worker_manager.stop_all()
 
 
@@ -150,6 +158,7 @@ app.include_router(
 
 # WebSocket routers (no auth middleware — token can be passed as query param if needed)
 app.include_router(ws_detections.router, prefix=f"{settings.API_V1_STR}/ws", tags=["websocket"])
+app.include_router(ws_alarms.router, prefix=f"{settings.API_V1_STR}/ws", tags=["websocket"])
 
 
 @app.get("/")

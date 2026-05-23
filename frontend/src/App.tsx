@@ -6,6 +6,7 @@ import { ThemeProvider, createTheme, alpha } from '@mui/material'
 import CssBaseline from '@mui/material/CssBaseline'
 
 import { AuthProvider, ProtectedRoute } from './auth'
+import AlarmToastProvider from './components/AlarmToastProvider'
 import Layout from './components/Layout'
 import Cameras from './pages/Cameras'
 import Alarms from './pages/Alarms'
@@ -333,30 +334,32 @@ const App: React.FC = () => {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <Router>
-            <Routes>
-              {/* Public route: Login page */}
-              <Route path="/login" element={<Login />} />
+          <AlarmToastProvider>
+            <Router>
+              <Routes>
+                {/* Public route: Login page */}
+                <Route path="/login" element={<Login />} />
 
-              {/* Protected routes: require authentication */}
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Routes>
-                        <Route path="/" element={<Navigate to="/cameras" replace />} />
-                        <Route path="/cameras" element={<Cameras />} />
-                        <Route path="/streams" element={<Streams />} />
-                        <Route path="/alarms" element={<Alarms />} />
-                        <Route path="/settings" element={<Settings />} />
-                      </Routes>
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </Router>
+                {/* Protected routes: require authentication */}
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <Routes>
+                          <Route path="/" element={<Navigate to="/cameras" replace />} />
+                          <Route path="/cameras" element={<Cameras />} />
+                          <Route path="/streams" element={<Streams />} />
+                          <Route path="/alarms" element={<Alarms />} />
+                          <Route path="/settings" element={<Settings />} />
+                        </Routes>
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </Router>
+          </AlarmToastProvider>
         </ThemeProvider>
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
