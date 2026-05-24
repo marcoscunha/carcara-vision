@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Button,
   Card,
@@ -28,6 +31,7 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  ExpandMore as ExpandMoreIcon,
   Refresh as RefreshIcon,
   PlayCircle as PlayCircleIcon,
   Circle as CircleIcon,
@@ -441,126 +445,139 @@ const Streams: React.FC = () => {
                       />
                     </Box>
 
-                    {/* Frame Counter */}
-                    <Typography variant="body2" color="text.secondary" className="stream-frame-count">
-                      Frame: {stream.current_frame.toLocaleString()}
-                    </Typography>
-                    <Box
+                    <Accordion
+                      disableGutters
+                      elevation={0}
                       sx={{
                         mt: 1,
                         mb: 2,
-                        p: 1.5,
-                        borderRadius: 2,
                         border: '1px solid',
                         borderColor: 'divider',
+                        borderRadius: 2,
                         backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                        display: 'grid',
-                        gap: 1,
+                        '&:before': { display: 'none' },
                       }}
                     >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle2">Performance</Typography>
-                        <Chip
-                          size="small"
-                          label={
-                            performance?.samples
-                              ? `${performance.samples} sample${performance.samples === 1 ? '' : 's'}`
-                              : 'Waiting for samples'
-                          }
-                          color={getPerformanceTone(performance)}
-                          variant={performance?.samples ? 'filled' : 'outlined'}
-                        />
-                      </Box>
-
-                      <Box
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                          gap: 1,
-                        }}
+                      <AccordionSummary
+                        expandIcon={<ExpandMoreIcon />}
+                        sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}
                       >
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              AI inference FPS
-                            </Typography>
-                            <Tooltip title="Frames per second processed by the AI inference engine for this stream.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
+                        <Typography variant="subtitle2">Performance</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ pt: 0 }}>
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gap: 1,
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1 }}>
+                            <Chip
+                              size="small"
+                              label={
+                                performance?.samples
+                                  ? `${performance.samples} sample${performance.samples === 1 ? '' : 's'}`
+                                  : 'Waiting for samples'
+                              }
+                              color={getPerformanceTone(performance)}
+                              variant={performance?.samples ? 'filled' : 'outlined'}
+                            />
                           </Box>
-                          <Typography variant="body2">{formatMetricNumber(performance?.fps)} fps</Typography>
-                        </Box>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              Avg inference latency
-                            </Typography>
-                            <Tooltip title="Average time (ms) to process a single frame with the current model and hardware.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">
-                            {formatMetricNumber(performance?.avg_inference_time_ms)} ms
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              Last inference latency
-                            </Typography>
-                            <Tooltip title="Time (ms) taken for the most recent inference operation.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">
-                            {formatMetricNumber(performance?.last_inference_time_ms)} ms
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Latency range
-                          </Typography>
-                          <Typography variant="body2">
-                            {formatMetricNumber(performance?.min_inference_time_ms)}-
-                            {formatMetricNumber(performance?.max_inference_time_ms)} ms
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              Source stream FPS
-                            </Typography>
-                            <Tooltip title="Frame rate of the incoming camera/video stream as rendered in the browser.">
-                              <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
-                                <HelpOutlineIcon />
-                              </SvgIcon>
-                            </Tooltip>
-                          </Box>
-                          <Typography variant="body2">
-                            {formatMetricNumber(streamPreviewStats[stream.id]?.fps)} fps
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Resolution
-                          </Typography>
-                          <Typography variant="body2">{streamPreviewStats[stream.id]?.resolution || '--'}</Typography>
-                        </Box>
-                      </Box>
 
-                      <Typography variant="body2" color="text.secondary">
-                        Model: {performance?.model_name || stream.detection_model || runtimeConfig?.model_name || 'n/a'}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Accelerator: {performance?.accelerator || runtimeConfig?.accelerator || 'n/a'}
-                      </Typography>
-                    </Box>
+                          <Box
+                            sx={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                              gap: 1,
+                            }}
+                          >
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  AI inference FPS
+                                </Typography>
+                                <Tooltip title="Frames per second processed by the AI inference engine for this stream.">
+                                  <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                    <HelpOutlineIcon />
+                                  </SvgIcon>
+                                </Tooltip>
+                              </Box>
+                              <Typography variant="body2">{formatMetricNumber(performance?.fps)} fps</Typography>
+                            </Box>
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Avg inference latency
+                                </Typography>
+                                <Tooltip title="Average time (ms) to process a single frame with the current model and hardware.">
+                                  <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                    <HelpOutlineIcon />
+                                  </SvgIcon>
+                                </Tooltip>
+                              </Box>
+                              <Typography variant="body2">
+                                {formatMetricNumber(performance?.avg_inference_time_ms)} ms
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Last inference latency
+                                </Typography>
+                                <Tooltip title="Time (ms) taken for the most recent inference operation.">
+                                  <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                    <HelpOutlineIcon />
+                                  </SvgIcon>
+                                </Tooltip>
+                              </Box>
+                              <Typography variant="body2">
+                                {formatMetricNumber(performance?.last_inference_time_ms)} ms
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">
+                                Latency range
+                              </Typography>
+                              <Typography variant="body2">
+                                {formatMetricNumber(performance?.min_inference_time_ms)}-
+                                {formatMetricNumber(performance?.max_inference_time_ms)} ms
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Source stream FPS
+                                </Typography>
+                                <Tooltip title="Frame rate of the incoming camera/video stream as rendered in the browser.">
+                                  <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
+                                    <HelpOutlineIcon />
+                                  </SvgIcon>
+                                </Tooltip>
+                              </Box>
+                              <Typography variant="body2">
+                                {formatMetricNumber(streamPreviewStats[stream.id]?.fps)} fps
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">
+                                Resolution
+                              </Typography>
+                              <Typography variant="body2">
+                                {streamPreviewStats[stream.id]?.resolution || '--'}
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          <Typography variant="body2" color="text.secondary">
+                            Model:{' '}
+                            {performance?.model_name || stream.detection_model || runtimeConfig?.model_name || 'n/a'}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Accelerator: {performance?.accelerator || runtimeConfig?.accelerator || 'n/a'}
+                          </Typography>
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
 
                     {/* Actions */}
                     <Box className="card-actions">

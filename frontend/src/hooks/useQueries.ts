@@ -24,6 +24,7 @@ import {
   DiscoveryProtocol,
   InferenceRuntimeConfig,
   BenchmarkScenario,
+  ModelRegistrationPayload,
 } from '../types'
 
 // Query Keys - centralized for consistency
@@ -86,6 +87,7 @@ export const queryKeys = {
   },
   benchmark: {
     scenarioTemplate: ['benchmark', 'scenario-template'] as const,
+    history: ['benchmark', 'history'] as const,
   },
 }
 
@@ -448,6 +450,17 @@ export const useModel = (name: string) => {
   })
 }
 
+export const useRegisterModel = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: ModelRegistrationPayload) => modelApi.register(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.models.all })
+    },
+  })
+}
+
 export const useUpdateModel = () => {
   const queryClient = useQueryClient()
 
@@ -590,6 +603,14 @@ export const useBenchmarkScenarioTemplate = () => {
     queryKey: queryKeys.benchmark.scenarioTemplate,
     queryFn: () => streamApi.getBenchmarkScenarioTemplate().then((res) => res.data),
     staleTime: 60 * 1000,
+  })
+}
+
+export const useBenchmarkHistory = (limit: number = 20) => {
+  return useQuery({
+    queryKey: [...queryKeys.benchmark.history, limit],
+    queryFn: () => streamApi.getBenchmarkHistory(limit).then((res) => res.data),
+    staleTime: 30 * 1000,
   })
 }
 

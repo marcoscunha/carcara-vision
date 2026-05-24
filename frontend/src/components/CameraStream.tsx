@@ -36,8 +36,8 @@ function classColour(classId: number): string {
 // thickness matches what the browser produces when it upscales the
 // server-annotated stream. This keeps sync (server-burned boxes) and unsync
 // (client overlay) visually identical regardless of stream resolution.
-const BACKEND_LINE_PX = 2
-const BACKEND_FONT_PX = 13
+const BACKEND_LINE_PX = 1
+const BACKEND_FONT_PX = 9
 const BACKEND_POSE_JOINT_PX = 4
 const BACKEND_SEG_LINE_PX = 1.5
 
@@ -224,7 +224,7 @@ function drawLabel(
   colour: string,
   displayScale = 1,
 ) {
-  const fontPx = Math.max(10, Math.round(BACKEND_FONT_PX * displayScale))
+  const fontPx = Math.max(8, Math.round(BACKEND_FONT_PX * displayScale))
   const padX = Math.max(3, Math.round(4 * displayScale))
   const padY = Math.max(2, Math.round(3 * displayScale))
   ctx.font = `${fontPx}px monospace`

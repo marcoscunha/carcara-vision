@@ -15,6 +15,8 @@ import {
   Avatar,
   Tab,
   Tabs,
+  TextField,
+  MenuItem,
 } from '@mui/material'
 import {
   Settings as SettingsIcon,
@@ -32,10 +34,13 @@ import {
   AdminPanelSettings as AdminIcon,
   OpenInNew as OpenInNewIcon,
   CloudDownload as CloudDownloadIcon,
+  AddCircleOutline as AddCircleOutlineIcon,
 } from '@mui/icons-material'
 import {
   useModels,
   useEnsureModel,
+  useRegisterModel,
+  useBenchmarkHistory,
   useHardwareDetection,
   useDetectHardware,
   useInferenceRuntimeConfig,
@@ -141,6 +146,9 @@ const TASK_LABELS: Record<string, string> = {
 
 const Settings: React.FC = () => {
   const [taskTab, setTaskTab] = useState<string>('detect')
+  const [newModelName, setNewModelName] = useState<string>('')
+  const [newModelDescription, setNewModelDescription] = useState<string>('')
+  const [newModelTaskType, setNewModelTaskType] = useState<string>('detect')
 
   // Auth hook for user info
   const { user, logout, isAdmin } = useAuth()
@@ -152,9 +160,11 @@ const Settings: React.FC = () => {
 
   // TanStack Query hooks
   const { data: allModels, isLoading } = useModels()
+  const { data: benchmarkHistory, isLoading: isBenchmarkHistoryLoading } = useBenchmarkHistory(10)
   const { data: runtimeConfig } = useInferenceRuntimeConfig()
   const updateRuntimeMutation = useUpdateInferenceRuntimeConfig()
   const ensureModelMutation = useEnsureModel()
+  const registerModelMutation = useRegisterModel()
 
   // Hardware detection hooks
   const { data: hardwareData, isLoading: isHardwareLoading } = useHardwareDetection(true)
@@ -162,6 +172,10 @@ const Settings: React.FC = () => {
 
   // Models filtered by current tab (task type)
   const modelList: Model[] = (allModels?.data ?? []).filter((m: Model) => m.task_type === taskTab)
+  const downloadedModelsCount = (allModels?.data ?? []).filter((m: Model) => m.is_downloaded).length
+  const storageRoots = Array.from(
+    new Set((allModels?.data ?? []).map((m: Model) => m.storage_root).filter((v): v is string => Boolean(v))),
+  )
 
   // Global runtime model selection (default to runtimeConfig or first model)
   const selectedModel = runtimeConfig?.model_name ?? ''
@@ -177,6 +191,27 @@ const Settings: React.FC = () => {
 
   const handleDetectHardware = () => {
     detectHardwareMutation.mutate(true)
+  }
+
+  const handleRegisterModel = () => {
+    const name = newModelName.trim()
+    if (!name) {
+      return
+    }
+
+    registerModelMutation.mutate(
+      {
+        name,
+        task_type: newModelTaskType,
+        description: newModelDescription.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setNewModelName('')
+          setNewModelDescription('')
+        },
+      },
+    )
   }
 
   if (isLoading) {
@@ -238,6 +273,23 @@ const Settings: React.FC = () => {
               </Alert>
             )}
 
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Downloaded models: <strong>{downloadedModelsCount}</strong> / {(allModels?.data ?? []).length}
+            </Alert>
+
+            {storageRoots.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Model storage location
+                </Typography>
+                <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  {storageRoots.map((root) => (
+                    <Chip key={root} label={root} size="small" variant="outlined" sx={{ maxWidth: '100%' }} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
             {/* Model list for active tab */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {modelList.length === 0 ? (
@@ -268,6 +320,15 @@ const Settings: React.FC = () => {
                       <Typography variant="caption" color="text.secondary">
                         {model.description || model.task_type}
                       </Typography>
+                      {model.storage_path && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: 'block', mt: 0.25, wordBreak: 'break-all' }}
+                        >
+                          Stored at: {model.storage_path}
+                        </Typography>
+                      )}
                     </Box>
 
                     {/* Status chip */}
@@ -323,6 +384,106 @@ const Settings: React.FC = () => {
                 ))
               )}
             </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Add New Model
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mb: 1 }}>
+              <TextField
+                size="small"
+                label="Model Name"
+                placeholder="my-yolo-model"
+                value={newModelName}
+                onChange={(event) => setNewModelName(event.target.value)}
+                fullWidth
+              />
+              <TextField
+                size="small"
+                label="Task Type"
+                select
+                value={newModelTaskType}
+                onChange={(event) => setNewModelTaskType(event.target.value)}
+                fullWidth
+              >
+                {Object.entries(TASK_LABELS).map(([key, label]) => (
+                  <MenuItem key={key} value={key}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                size="small"
+                label="Description"
+                placeholder="Optional"
+                value={newModelDescription}
+                onChange={(event) => setNewModelDescription(event.target.value)}
+                fullWidth
+                sx={{ gridColumn: { xs: '1', sm: '1 / span 2' } }}
+              />
+            </Box>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={handleRegisterModel}
+              disabled={registerModelMutation.isPending || !newModelName.trim()}
+            >
+              {registerModelMutation.isPending ? 'Adding model...' : 'Add model to catalog'}
+            </Button>
+            {registerModelMutation.isError && (
+              <Alert severity="error" sx={{ mt: 1 }}>
+                Failed to add model. Please check the model name and try again.
+              </Alert>
+            )}
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Previous Benchmark Reports
+            </Typography>
+            {isBenchmarkHistoryLoading ? (
+              <Typography variant="body2" color="text.secondary">
+                Loading benchmark history...
+              </Typography>
+            ) : benchmarkHistory && benchmarkHistory.items.length > 0 ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                {benchmarkHistory.items.slice(0, 5).map((item) => (
+                  <Box
+                    key={item.run_id}
+                    sx={{
+                      p: 1,
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Typography variant="body2" fontWeight={600}>
+                      {item.scenario_name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      Run: {item.run_id}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      Model: {item.model_name || 'n/a'} • Streams: {item.streams_count}
+                    </Typography>
+                    {item.created_at && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        Created: {new Date(item.created_at).toLocaleString()}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+                <Typography variant="caption" color="text.secondary">
+                  Reports folder: {benchmarkHistory.reports_dir}
+                </Typography>
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No benchmark reports found yet.
+              </Typography>
+            )}
           </CardContent>
         </Card>
 

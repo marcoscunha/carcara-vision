@@ -18,11 +18,18 @@ import {
   IconButton,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Skeleton,
   Slider,
   Switch,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Tabs,
   TextField,
   Tooltip,
@@ -809,10 +816,24 @@ const Alarms: React.FC = () => {
   const { data: streamsData, isLoading: streamsLoading } = useStreams()
   const streams = Array.isArray(streamsData) ? (streamsData as Stream[]) : []
 
-  const { data: alarmsData, isLoading: alarmsLoading } = useAlarms(filterStreamId || undefined)
+  const {
+    data: alarmsData,
+    isLoading: alarmsLoading,
+    isPending: alarmsPending,
+    isFetched: alarmsFetched,
+    isError: alarmsIsError,
+    error: alarmsError,
+  } = useAlarms(filterStreamId || undefined)
   const alarmList = Array.isArray(alarmsData) ? (alarmsData as Alarm[]) : []
 
-  const { data: eventsData, isLoading: eventsLoading } = useAlarmEvents({
+  const {
+    data: eventsData,
+    isLoading: eventsLoading,
+    isPending: eventsPending,
+    isFetched: eventsFetched,
+    isError: eventsIsError,
+    error: eventsError,
+  } = useAlarmEvents({
     stream_id: filterStreamId || undefined,
     state: filterState || undefined,
     limit: 100,
@@ -894,18 +915,24 @@ const Alarms: React.FC = () => {
 
       {/* Tabs */}
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`Rules (${alarmList.length})`} />
-        <Tab label={`Events (${eventList.length})`} />
+        <Tab label={`Rules (${alarmsFetched ? alarmList.length : '...'})`} />
+        <Tab label={`Events (${eventsFetched ? eventList.length : '...'})`} />
       </Tabs>
 
       {/* ── Tab 0: Rules ─── */}
       {tab === 0 && (
         <>
-          {alarmsLoading ? (
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 2 }}>
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} variant="rounded" height={180} />
-              ))}
+          {!alarmsFetched || alarmsLoading || alarmsPending ? (
+            <Skeleton variant="rounded" height={220} />
+          ) : alarmsIsError ? (
+            <Box className="empty-panel">
+              <NotificationsIcon className="empty-panel__icon" />
+              <Typography color="text.secondary" variant="h6">
+                Failed to load alarm rules
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                {alarmsError instanceof Error ? alarmsError.message : 'Could not fetch alarms from backend'}
+              </Typography>
             </Box>
           ) : alarmList.length === 0 ? (
             <Box className="empty-panel">
@@ -918,75 +945,83 @@ const Alarms: React.FC = () => {
               </Typography>
             </Box>
           ) : (
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 2 }}>
-              {alarmList.map((alarm: Alarm) => {
-                const stream = streams.find((s) => s.id === alarm.stream_id)
-                return (
-                  <Card key={alarm.id}>
-                    <CardContent className="card-content">
-                      <Box className="card-header">
-                        <Typography variant="h6" className="card-title" noWrap>
-                          {alarm.name}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <TableContainer component={Paper} className="table-card">
+              <Table>
+                <TableHead>
+                  <TableRow className="table-head-row">
+                    <TableCell className="table-head-cell">Name</TableCell>
+                    <TableCell className="table-head-cell">Stream</TableCell>
+                    <TableCell className="table-head-cell">Trigger</TableCell>
+                    <TableCell className="table-head-cell">Class</TableCell>
+                    <TableCell className="table-head-cell">Hysteresis</TableCell>
+                    <TableCell className="table-head-cell">Status</TableCell>
+                    <TableCell className="table-head-cell">Severity</TableCell>
+                    <TableCell className="table-head-cell" align="right">
+                      Actions
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {alarmList.map((alarm: Alarm) => {
+                    const stream = streams.find((s) => s.id === alarm.stream_id)
+                    return (
+                      <TableRow key={alarm.id} className="table-row-hover">
+                        <TableCell>
+                          <Typography variant="body2" className="table-name__text">
+                            {alarm.name}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {stream?.stream_name ?? `#${alarm.stream_id}`}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={TRIGGER_LABELS[alarm.trigger_type]} size="small" />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {alarm.trigger_config.class_names?.join(', ') || '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            ON {alarm.min_on_seconds}s / OFF {alarm.min_off_seconds}s / CD {alarm.cooldown_seconds}s
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
                           <Chip
                             icon={<CircleIcon sx={{ fontSize: '10px !important' }} />}
                             label={alarm.is_active ? 'Active' : 'Off'}
                             size="small"
                             color={alarm.is_active ? 'success' : 'default'}
                           />
+                        </TableCell>
+                        <TableCell>
                           <Chip label={alarm.severity} size="small" color={SEVERITY_COLORS[alarm.severity]} />
-                        </Box>
-                      </Box>
-                      <Box className="card-info">
-                        <Box className="card-info__row">
-                          <Typography variant="body2" color="text.secondary">
-                            Stream
-                          </Typography>
-                          <Typography variant="body2">{stream?.stream_name ?? `#${alarm.stream_id}`}</Typography>
-                        </Box>
-                        <Box className="card-info__row">
-                          <Typography variant="body2" color="text.secondary">
-                            Trigger
-                          </Typography>
-                          <Chip label={TRIGGER_LABELS[alarm.trigger_type]} size="small" />
-                        </Box>
-                        <Box className="card-info__row">
-                          <Typography variant="body2" color="text.secondary">
-                            Class
-                          </Typography>
-                          <Typography variant="body2">{alarm.trigger_config.class_names?.join(', ')}</Typography>
-                        </Box>
-                        <Box className="card-info__row">
-                          <Typography variant="body2" color="text.secondary">
-                            Hysteresis
-                          </Typography>
-                          <Typography variant="body2" fontSize="0.75rem">
-                            ON {alarm.min_on_seconds}s / OFF {alarm.min_off_seconds}s / CD {alarm.cooldown_seconds}s
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Box className="card-actions">
-                        <IconButton
-                          size="small"
-                          onClick={() => openAlarmDialog(alarm)}
-                          className="icon-button--primary"
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => deleteMutation.mutate(alarm.id)}
-                          className="icon-button--error"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </Box>
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton
+                            size="small"
+                            onClick={() => openAlarmDialog(alarm)}
+                            className="icon-button--primary"
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => deleteMutation.mutate(alarm.id)}
+                            className="icon-button--error"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </>
       )}
@@ -994,7 +1029,7 @@ const Alarms: React.FC = () => {
       {/* ── Tab 1: Events ─── */}
       {tab === 1 && (
         <>
-          {eventsLoading ? (
+          {!eventsFetched || eventsLoading || eventsPending ? (
             <Grid container spacing={2}>
               {[1, 2, 3].map((i) => (
                 <Grid item xs={12} sm={6} md={4} key={i}>
@@ -1002,6 +1037,16 @@ const Alarms: React.FC = () => {
                 </Grid>
               ))}
             </Grid>
+          ) : eventsIsError ? (
+            <Box className="empty-panel">
+              <OpenIcon className="empty-panel__icon" />
+              <Typography color="text.secondary" variant="h6">
+                Failed to load alarm events
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                {eventsError instanceof Error ? eventsError.message : 'Could not fetch alarm events from backend'}
+              </Typography>
+            </Box>
           ) : eventList.length === 0 ? (
             <Box className="empty-panel">
               <OpenIcon className="empty-panel__icon" />

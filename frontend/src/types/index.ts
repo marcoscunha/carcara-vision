@@ -115,6 +115,22 @@ export interface BenchmarkExportResponse {
   streams_count: number
 }
 
+export interface BenchmarkHistoryItem {
+  run_id: string
+  created_at: string | null
+  scenario_name: string
+  model_name: string | null
+  streams_count: number
+  json_report_path: string
+  csv_report_path: string
+}
+
+export interface BenchmarkHistoryResponse {
+  reports_dir: string
+  count: number
+  items: BenchmarkHistoryItem[]
+}
+
 export interface Detection {
   id: number
   camera_id: number
@@ -286,6 +302,15 @@ export interface Model {
   is_downloaded: boolean
   task_type: string
   confidence_threshold: number
+  storage_path?: string
+  storage_root?: string
+}
+
+export interface ModelRegistrationPayload {
+  name: string
+  task_type: string
+  description?: string
+  version?: string
 }
 
 export interface RegionOfInterest {

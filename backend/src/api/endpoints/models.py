@@ -13,12 +13,22 @@ from fastapi import APIRouter
 from fastapi import BackgroundTasks
 from fastapi import HTTPException
 from fastapi import Query
+from pydantic import BaseModel
+from pydantic import Field
 
 from ...services.models import ensure_model_available
 from ...services.models import get_available_models
 from ...services.models import get_model_by_name
+from ...services.models import register_yolo_model
 
 router = APIRouter()
+
+
+class RegisterModelRequest(BaseModel):
+    name: str = Field(min_length=1, description="Model logical name, e.g. yolov8-custom")
+    task_type: str = Field(default="detect", description="Task type: detect, pose, segment")
+    description: str = Field(default="", description="Optional model description")
+    version: str = Field(default="custom", description="Optional model version label")
 
 
 @router.get("/", response_model=list[dict[str, Any]])
@@ -52,3 +62,17 @@ def trigger_model_download(name: str, background_tasks: BackgroundTasks):
 
     background_tasks.add_task(ensure_model_available, name)
     return {"message": f"Download initiated for '{name}'", "model": name}
+
+
+@router.post("/catalog/register", response_model=dict[str, Any], status_code=201)
+def register_model(payload: RegisterModelRequest):
+    """Register a custom model entry so it appears in the Settings model catalog."""
+    try:
+        return register_yolo_model(
+            payload.name,
+            task_type=payload.task_type,
+            description=payload.description,
+            version=payload.version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

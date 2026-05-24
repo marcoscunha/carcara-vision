@@ -6,8 +6,10 @@ and MediaMTX, supporting RTSP, WebRTC, HLS, and other streaming protocols.
 """
 
 import asyncio
+import json
 import logging
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter
@@ -20,6 +22,8 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from ...api.models.benchmark import BenchmarkExportResponse
+from ...api.models.benchmark import BenchmarkHistoryItem
+from ...api.models.benchmark import BenchmarkHistoryResponse
 from ...api.models.benchmark import BenchmarkScenario
 from ...api.models.stream import StreamCreate
 from ...api.models.stream import StreamReorderRequest
@@ -80,6 +84,46 @@ def _resolve_local_capture_source(camera: Camera, source_config: dict | None = N
         "stream_url": camera.rtsp_url,
         **{field: effective.get(field) for field in LOCAL_CAMERA_IDENTITY_FIELDS},
     }
+
+
+def _list_benchmark_history(output_dir: str = "./benchmark_reports", limit: int = 20) -> BenchmarkHistoryResponse:
+    reports_dir = Path(output_dir).resolve()
+    if not reports_dir.exists():
+        return BenchmarkHistoryResponse(reports_dir=str(reports_dir), count=0, items=[])
+
+    items: list[BenchmarkHistoryItem] = []
+    json_reports = sorted(reports_dir.glob("benchmark_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for json_path in json_reports[:limit]:
+        run_id = json_path.stem
+        csv_path = reports_dir / f"{run_id}.csv"
+        created_at: str | None = None
+        scenario_name = run_id
+        model_name: str | None = None
+        streams_count = 0
+
+        try:
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            created_at = payload.get("created_at")
+            scenario_name = (payload.get("scenario") or {}).get("scenario_name") or run_id
+            model_name = (payload.get("scenario") or {}).get("model_name")
+            per_stream = payload.get("per_stream") or []
+            streams_count = len(per_stream)
+        except Exception:
+            logger.warning("Failed to parse benchmark report metadata: %s", json_path)
+
+        items.append(
+            BenchmarkHistoryItem(
+                run_id=run_id,
+                created_at=created_at,
+                scenario_name=scenario_name,
+                model_name=model_name,
+                streams_count=streams_count,
+                json_report_path=str(json_path.resolve()),
+                csv_report_path=str(csv_path.resolve()) if csv_path.exists() else "",
+            )
+        )
+
+    return BenchmarkHistoryResponse(reports_dir=str(reports_dir), count=len(items), items=items)
 
 
 def _build_source_config_for_camera(
@@ -1086,3 +1130,15 @@ async def export_benchmark_metrics(
         runtime_config=runtime_payload,
     )
     return BenchmarkExportResponse(**report)
+
+
+@router.get("/metrics/benchmark/history", response_model=BenchmarkHistoryResponse)
+async def get_benchmark_history(
+    current_user: AuthenticatedUser,
+    db: Session = Depends(get_db),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Return latest benchmark reports previously exported by the system."""
+    _ = current_user
+    _ = db
+    return _list_benchmark_history(limit=limit)

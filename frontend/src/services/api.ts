@@ -20,6 +20,8 @@ import {
   RealtimeInferenceMetrics,
   BenchmarkScenario,
   BenchmarkExportResponse,
+  BenchmarkHistoryResponse,
+  ModelRegistrationPayload,
 } from '../types'
 import keycloak from '../auth/keycloak'
 import { AUTH_ENABLED } from '../auth/keycloak'
@@ -134,6 +136,8 @@ export const streamApi = {
   getBenchmarkScenarioTemplate: () => api.get<BenchmarkScenario>('/streams/metrics/benchmark/scenario-template'),
   exportBenchmarkMetrics: (scenario: BenchmarkScenario) =>
     api.post<BenchmarkExportResponse>('/streams/metrics/benchmark/export', scenario),
+  getBenchmarkHistory: (limit: number = 20) =>
+    api.get<BenchmarkHistoryResponse>('/streams/metrics/benchmark/history', { params: { limit } }),
   checkHealth: () => api.get('/streams/health/gstreamer'),
 }
 
@@ -198,6 +202,7 @@ export const modelApi = {
   getById: (name: string) => api.get<Model>(`/models/${name}`),
   update: (name: string, data: Partial<Model>) => api.put<Model>(`/models/${name}`, data),
   ensure: (name: string) => api.post<{ status: string; name: string }>(`/models/${name}/ensure`),
+  register: (data: ModelRegistrationPayload) => api.post<Model>('/models/catalog/register', data),
 }
 
 // Region of Interest endpoints

@@ -18,3 +18,19 @@ class BenchmarkExportResponse(BaseModel):
     csv_report_path: str
     scenario_name: str
     streams_count: int
+
+
+class BenchmarkHistoryItem(BaseModel):
+    run_id: str
+    created_at: str | None = None
+    scenario_name: str
+    model_name: str | None = None
+    streams_count: int
+    json_report_path: str
+    csv_report_path: str
+
+
+class BenchmarkHistoryResponse(BaseModel):
+    reports_dir: str
+    count: int
+    items: list[BenchmarkHistoryItem]
