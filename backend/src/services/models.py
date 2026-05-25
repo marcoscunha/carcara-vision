@@ -19,6 +19,8 @@ def get_available_models(task_type: str | None = None) -> list[dict[str, Any]]:
 
     Each entry is a plain dict so it can be serialised directly to JSON.
     """
+    # Pick up manually copied artifacts from the mounted models directory.
+    model_registry.discover_models()
     model_registry.reconcile_registry_state()
     models: list[ModelInfo] = model_registry.list_models(task_type=task_type)
     return [_model_to_dict(m) for m in sorted(models, key=lambda m: m.name)]
@@ -208,6 +210,7 @@ def _artifact_candidates(info: ModelInfo) -> list[Path]:
     candidates: list[Path] = []
     if explicit_path.is_absolute():
         candidates.append(explicit_path)
+        candidates.append((Path(model_registry.models_dir) / model_filename).resolve())
     else:
         candidates.extend(
             [

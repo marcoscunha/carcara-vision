@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
@@ -223,6 +224,7 @@ class ModelRegistry:
         candidates: list[Path] = []
         if explicit_path.is_absolute():
             candidates.append(explicit_path)
+            candidates.append((self.models_dir / model_filename).resolve())
         else:
             candidates.extend(
                 [
@@ -435,6 +437,21 @@ class ModelRegistry:
                 logger.info("Triggering ultralytics auto-download for '%s'", name)
                 # YOLO(name) downloads weights once; raises on failure
                 YOLO(name)
+
+                # Normalize artifacts into models_dir so bind-mounted persistence
+                # works consistently across container rebuilds/recreate.
+                artifact = self._resolve_existing_artifact(model_info)
+                if artifact is not None:
+                    models_root = self.models_dir.resolve()
+                    if artifact.parent.resolve() != models_root:
+                        models_root.mkdir(parents=True, exist_ok=True)
+                        target = (models_root / artifact.name).resolve()
+                        if artifact.resolve() != target and not target.exists():
+                            shutil.copy2(artifact, target)
+                        model_info.path = str(target)
+                    else:
+                        model_info.path = str(artifact.resolve())
+
                 model_info.is_downloaded = True
                 model_info.is_enabled = True
                 self._save_registry()
@@ -514,11 +531,20 @@ class ModelRegistry:
                 name = file_path.stem
 
                 if name not in self._registry:
+                    task_type = TASK_TYPE_DETECT
+                    lowered = name.lower()
+                    if lowered.endswith("-pose"):
+                        task_type = TASK_TYPE_POSE
+                    elif lowered.endswith("-seg") or lowered.endswith("-segment"):
+                        task_type = TASK_TYPE_SEGMENT
+
                     info = ModelInfo(
                         name=name,
                         model_type=model_type,
                         path=str(file_path),
+                        task_type=task_type,
                         is_downloaded=True,
+                        is_enabled=True,
                     )
                     discovered.append(info)
                     self.register_model(info)

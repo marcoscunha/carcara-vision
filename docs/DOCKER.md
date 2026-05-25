@@ -70,3 +70,26 @@ docker compose restart
 docker compose restart backend
 docker compose restart frontend
 ```
+
+## 💾 Persistent Models Across Rebuilds
+
+The backend now uses project bind mounts for models and model registry cache:
+
+- `./models` -> `/app/models`
+- `./.model_cache` -> `/app/.model_cache`
+
+Optional override in `.env`:
+
+- `MODELS_VOLUME_DIR=./models`
+- `MODEL_CACHE_VOLUME_DIR=./.model_cache`
+
+This keeps downloaded models available after `docker compose down`, rebuilds, and container recreation.
+
+Manual local copy example:
+
+```bash
+cp /path/to/my-model.pt ./models/
+docker compose restart backend
+```
+
+After restart, the model file remains in the project folder and is reused by the backend.

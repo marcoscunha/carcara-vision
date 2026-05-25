@@ -34,10 +34,12 @@ import {
   AdminPanelSettings as AdminIcon,
   OpenInNew as OpenInNewIcon,
   CloudDownload as CloudDownloadIcon,
+  CloudDone as CloudDoneIcon,
   AddCircleOutline as AddCircleOutlineIcon,
   DeleteOutline as DeleteOutlineIcon,
   History as HistoryIcon,
   PlayCircleFilled as PlayCircleFilledIcon,
+  ToggleOn as ToggleOnIcon,
 } from '@mui/icons-material'
 import {
   useModels,
@@ -183,7 +185,7 @@ const Settings: React.FC = () => {
   // Hardware detection hooks
   const { data: hardwareData, isLoading: isHardwareLoading } = useHardwareDetection(true)
   const detectHardwareMutation = useDetectHardware()
-  const allModelsList: Model[] = allModels || []
+  const allModelsList: Model[] = useMemo(() => allModels || [], [allModels])
   const [persistedExecutedModelNames, setPersistedExecutedModelNames] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') {
       return new Set<string>()
@@ -506,6 +508,35 @@ const Settings: React.FC = () => {
                               <Typography variant="body2" fontWeight={600} noWrap>
                                 {model.name}
                               </Typography>
+                              {model.name === selectedModel && (
+                                <Tooltip title="Current global default model.">
+                                  <CheckCircleIcon fontSize="small" color="primary" />
+                                </Tooltip>
+                              )}
+                              {(isDownloading || model.is_downloaded) && (
+                                <Tooltip
+                                  title={
+                                    isDownloading
+                                      ? 'Model download is in progress.'
+                                      : 'Model weights are downloaded on this device.'
+                                  }
+                                >
+                                  <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    {isDownloading ? (
+                                      <CircularProgress size={16} />
+                                    ) : (
+                                      <CloudDoneIcon fontSize="small" color="success" />
+                                    )}
+                                  </Box>
+                                </Tooltip>
+                              )}
+                              {model.is_downloaded && model.is_enabled && (
+                                <Tooltip title="Model is active and selectable in stream model fields.">
+                                  <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    <ToggleOnIcon fontSize="small" color="success" />
+                                  </Box>
+                                </Tooltip>
+                              )}
                               {hasExecutedOnHardware && (
                                 <Tooltip title="This model has run on this hardware before.">
                                   <HistoryIcon fontSize="small" color="action" />
@@ -539,42 +570,6 @@ const Settings: React.FC = () => {
                             )}
                           </Box>
 
-                          {/* Status chip */}
-                          <Tooltip
-                            title={
-                              isDownloading
-                                ? 'Weights are downloading now.'
-                                : model.is_downloaded
-                                  ? model.is_enabled
-                                    ? 'Downloaded and selectable in stream model fields.'
-                                    : 'Downloaded but hidden from stream model fields.'
-                                  : 'Not downloaded on this device.'
-                            }
-                          >
-                            <Chip
-                              label={
-                                isDownloading
-                                  ? 'Downloading'
-                                  : model.is_downloaded
-                                    ? model.is_enabled
-                                      ? 'Downloaded • Active'
-                                      : 'Downloaded • Inactive'
-                                    : 'Not downloaded'
-                              }
-                              size="small"
-                              color={
-                                isDownloading
-                                  ? 'warning'
-                                  : model.is_downloaded
-                                    ? model.is_enabled
-                                      ? 'success'
-                                      : 'default'
-                                    : 'default'
-                              }
-                              variant="outlined"
-                            />
-                          </Tooltip>
-
                           {/* Actions */}
                           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                             {/* Download / ensure button */}
@@ -607,12 +602,6 @@ const Settings: React.FC = () => {
                                     Set as default
                                   </Button>
                                 </span>
-                              </Tooltip>
-                            )}
-
-                            {model.name === selectedModel && (
-                              <Tooltip title="Current global default model.">
-                                <Chip label="Default" size="small" color="primary" icon={<CheckCircleIcon />} />
                               </Tooltip>
                             )}
 

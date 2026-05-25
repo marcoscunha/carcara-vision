@@ -95,6 +95,8 @@ services:
       - "/dev/v4l:/dev/v4l"
     volumes:
       - ./backend/src:/app/src
+      - ${MODELS_VOLUME_DIR:-./models}:/app/models
+      - ${MODEL_CACHE_VOLUME_DIR:-./.model_cache}:/app/.model_cache
       - /var/run/docker.sock:/var/run/docker.sock
       - alarm_snapshots:/app/alarm_snapshots
     privileged: true
