@@ -196,12 +196,15 @@ export const alarmEventApi = {
 export const modelApi = {
   getAll: async (task_type?: string) => {
     const params = task_type ? { task_type } : {}
-    const response = await api.get<ApiResponse<Model[]>>('/models/', { params })
-    return response.data
+    const response = await api.get<Model[] | ApiResponse<Model[]>>('/models/', { params })
+    const payload = response.data as Model[] | ApiResponse<Model[]>
+    return Array.isArray(payload) ? payload : payload.data
   },
   getById: (name: string) => api.get<Model>(`/models/${name}`),
   update: (name: string, data: Partial<Model>) => api.put<Model>(`/models/${name}`, data),
   ensure: (name: string) => api.post<{ status: string; name: string }>(`/models/${name}/ensure`),
+  delete: (name: string) =>
+    api.delete<{ name: string; removed_files: string[]; is_downloaded: boolean }>(`/models/${name}`),
   register: (data: ModelRegistrationPayload) => api.post<Model>('/models/catalog/register', data),
 }
 

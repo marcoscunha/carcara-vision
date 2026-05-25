@@ -38,6 +38,7 @@ import {
   DragIndicator as DragIndicatorIcon,
   SwapVert as SwapVertIcon,
   Check as CheckIcon,
+  WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material'
 import {
   useStreams,
@@ -46,10 +47,11 @@ import {
   useDeleteStream,
   useReorderStreams,
   useCameras,
+  useModels,
   useInferenceRuntimeConfig,
   useRealtimeInferenceMetrics,
 } from '../hooks/useQueries'
-import { Stream, Camera, StreamInferenceMetrics } from '../types'
+import { Stream, Camera, StreamInferenceMetrics, Model } from '../types'
 import CameraStream, { CameraStreamStatsSnapshot } from '../components/CameraStream'
 
 const inferTaskTypeFromModel = (modelName: string): string => {
@@ -82,11 +84,13 @@ const getPerformanceTone = (metrics?: StreamInferenceMetrics): 'success' | 'warn
 const Streams: React.FC = () => {
   const [open, setOpen] = useState(false)
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
   const [formData, setFormData] = useState({
     camera_id: 0,
     status: 'stopped',
     current_frame: 0,
     detection_enabled: true,
+    detection_model: '',
     sync_video_predictions: false,
     detection_task_type: 'detect',
     stream_metadata: {},
@@ -115,11 +119,22 @@ const Streams: React.FC = () => {
   const [dragOverId, setDragOverId] = useState<number | null>(null)
 
   const { data: runtimeConfig } = useInferenceRuntimeConfig()
+  const { data: models } = useModels()
   const { data: realtimeMetrics } = useRealtimeInferenceMetrics()
+  const modelOptions = models || []
+  const selectableModelOptions = modelOptions.filter((model: Model) => model.is_downloaded && model.is_enabled)
+  const runtimeFallback = runtimeConfig?.model_name
+  const fallbackModel =
+    runtimeFallback && selectableModelOptions.some((m) => m.name === runtimeFallback)
+      ? runtimeFallback
+      : selectableModelOptions[0]?.name || ''
+  const modelByName = new Map(modelOptions.map((model) => [model.name, model]))
 
   const handleOpen = (stream?: Stream) => {
     if (stream) {
       setSelectedStream(stream)
+      setDialogMode('edit')
+      const streamModel = stream.detection_model || stream.stream_metadata?.detection_model
       setFormData({
         camera_id: stream.camera_id,
         status: stream.status,
@@ -128,6 +143,8 @@ const Streams: React.FC = () => {
           typeof stream.detection_enabled === 'boolean'
             ? stream.detection_enabled
             : Boolean(stream.stream_metadata?.detection_enabled),
+        detection_model:
+          streamModel && selectableModelOptions.some((m) => m.name === streamModel) ? streamModel : streamModel || '',
         sync_video_predictions:
           typeof stream.sync_video_predictions === 'boolean'
             ? stream.sync_video_predictions
@@ -137,11 +154,13 @@ const Streams: React.FC = () => {
       })
     } else {
       setSelectedStream(null)
+      setDialogMode('create')
       setFormData({
         camera_id: 0,
         status: 'stopped',
         current_frame: 0,
         detection_enabled: true,
+        detection_model: fallbackModel || '',
         sync_video_predictions: false,
         detection_task_type: 'detect',
         stream_metadata: {},
@@ -153,11 +172,13 @@ const Streams: React.FC = () => {
   const handleClose = () => {
     setOpen(false)
     setSelectedStream(null)
+    setDialogMode('create')
     setFormData({
       camera_id: 0,
       status: 'stopped',
       current_frame: 0,
       detection_enabled: true,
+      detection_model: fallbackModel || '',
       sync_video_predictions: false,
       detection_task_type: 'detect',
       stream_metadata: {},
@@ -167,13 +188,17 @@ const Streams: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const globalModel = runtimeConfig?.model_name
-    const globalTaskType = runtimeConfig?.task_type ?? inferTaskTypeFromModel(globalModel ?? '')
+    const selectedModel = formData.detection_model
+    if (formData.detection_enabled && !selectedModel) {
+      return
+    }
+    const selectedTaskType =
+      modelOptions.find((m: Model) => m.name === selectedModel)?.task_type || inferTaskTypeFromModel(selectedModel)
 
     const streamPayload = {
       ...formData,
-      ...(globalModel ? { detection_model: globalModel } : {}),
-      detection_task_type: globalTaskType,
+      detection_model: selectedModel,
+      detection_task_type: selectedTaskType,
     }
 
     if (selectedStream) {
@@ -182,6 +207,15 @@ const Streams: React.FC = () => {
       createMutation.mutate(streamPayload, { onSuccess: () => handleClose() })
     }
   }
+
+  const isSavingStream = updateMutation.isPending || createMutation.isPending
+  const submitLabel = isSavingStream
+    ? selectedStream || dialogMode === 'edit'
+      ? 'Saving...'
+      : 'Creating...'
+    : selectedStream || dialogMode === 'edit'
+      ? 'Save changes'
+      : 'Create stream'
 
   if (streamsLoading || camerasLoading) {
     return (
@@ -389,6 +423,12 @@ const Streams: React.FC = () => {
                   ? stream.detection_enabled
                   : Boolean(stream.stream_metadata?.detection_enabled)
               const showNoWorkerBadge = detectionEnabled && !stream.worker_active
+              const configuredModel = stream.detection_model || stream.stream_metadata?.detection_model || ''
+              const configuredModelInfo = configuredModel ? modelByName.get(configuredModel) : undefined
+              const hasModelMismatch =
+                detectionEnabled &&
+                Boolean(configuredModel) &&
+                (!configuredModelInfo || !configuredModelInfo.is_downloaded)
               const syncVideoPredictions =
                 typeof stream.sync_video_predictions === 'boolean'
                   ? stream.sync_video_predictions
@@ -429,10 +469,29 @@ const Streams: React.FC = () => {
                         color={getStatusColor(stream.status)}
                         className={`status-chip chip-capitalize ${stream.status === 'running' ? 'status-chip--active' : ''}`}
                       />
+                      {hasModelMismatch && (
+                        <Tooltip title="Configured model is unavailable locally. Video remains visible but AI is paused.">
+                          <Chip
+                            icon={<WarningAmberIcon />}
+                            label="Mismatch model"
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                          />
+                        </Tooltip>
+                      )}
                     </Box>
 
                     {showNoWorkerBadge && (
-                      <Chip label="No active worker" size="small" color="warning" sx={{ mt: 1, mb: 1 }} />
+                      <Tooltip
+                        title={
+                          hasModelMismatch
+                            ? 'AI is enabled but the selected model is unavailable locally.'
+                            : 'AI worker is not running for this stream.'
+                        }
+                      >
+                        <Chip label="No active worker" size="small" color="warning" sx={{ mt: 1, mb: 1 }} />
+                      </Tooltip>
                     )}
 
                     {/* Stream Preview */}
@@ -496,7 +555,7 @@ const Streams: React.FC = () => {
                                 <Typography variant="caption" color="text.secondary">
                                   AI inference FPS
                                 </Typography>
-                                <Tooltip title="Frames per second processed by the AI inference engine for this stream.">
+                                <Tooltip title="AI frames processed per second for this stream.">
                                   <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
                                     <HelpOutlineIcon />
                                   </SvgIcon>
@@ -509,7 +568,7 @@ const Streams: React.FC = () => {
                                 <Typography variant="caption" color="text.secondary">
                                   Avg inference latency
                                 </Typography>
-                                <Tooltip title="Average time (ms) to process a single frame with the current model and hardware.">
+                                <Tooltip title="Average inference time per frame in milliseconds.">
                                   <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
                                     <HelpOutlineIcon />
                                   </SvgIcon>
@@ -524,7 +583,7 @@ const Streams: React.FC = () => {
                                 <Typography variant="caption" color="text.secondary">
                                   Last inference latency
                                 </Typography>
-                                <Tooltip title="Time (ms) taken for the most recent inference operation.">
+                                <Tooltip title="Most recent inference time in milliseconds.">
                                   <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
                                     <HelpOutlineIcon />
                                   </SvgIcon>
@@ -548,7 +607,7 @@ const Streams: React.FC = () => {
                                 <Typography variant="caption" color="text.secondary">
                                   Source stream FPS
                                 </Typography>
-                                <Tooltip title="Frame rate of the incoming camera/video stream as rendered in the browser.">
+                                <Tooltip title="Incoming stream frame rate in the browser preview.">
                                   <SvgIcon fontSize="small" sx={{ cursor: 'pointer', color: 'action.active' }}>
                                     <HelpOutlineIcon />
                                   </SvgIcon>
@@ -581,22 +640,30 @@ const Streams: React.FC = () => {
 
                     {/* Actions */}
                     <Box className="card-actions">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpen(stream)}
-                        className="icon-button--primary"
-                        disabled={reorderMode}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => deleteMutation.mutate(stream.id)}
-                        className="icon-button--error"
-                        disabled={reorderMode}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      <Tooltip title="Edit stream settings.">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpen(stream)}
+                            className="icon-button--primary"
+                            disabled={reorderMode}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Delete this stream.">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => deleteMutation.mutate(stream.id)}
+                            className="icon-button--error"
+                            disabled={reorderMode}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Box>
                   </CardContent>
                 </Card>
@@ -607,9 +674,10 @@ const Streams: React.FC = () => {
       </Box>
 
       <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>{selectedStream ? 'Edit Stream' : 'Add Stream'}</DialogTitle>
+        <DialogTitle>{selectedStream || dialogMode === 'edit' ? 'Edit Stream' : 'Add Stream'}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
+            {isSavingStream && <CircularProgress size={20} sx={{ mb: 1 }} />}
             <FormControl fullWidth margin="dense">
               <InputLabel>Camera</InputLabel>
               <Select
@@ -635,6 +703,65 @@ const Streams: React.FC = () => {
               label="AI Enable"
             />
 
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                Detection model
+              </Typography>
+              <Tooltip title="Only downloaded active models are selectable. Unavailable assigned models appear as mismatch.">
+                <HelpOutlineIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+              </Tooltip>
+            </Box>
+
+            <FormControl
+              fullWidth
+              margin="dense"
+              disabled={!formData.detection_enabled || selectableModelOptions.length === 0}
+            >
+              <Select
+                value={formData.detection_model || ''}
+                displayEmpty
+                onChange={(e) => {
+                  const modelName = String(e.target.value)
+                  setFormData({
+                    ...formData,
+                    detection_model: modelName,
+                    detection_task_type: inferTaskTypeFromModel(modelName),
+                  })
+                }}
+              >
+                {selectableModelOptions.length === 0 && (
+                  <MenuItem value="" disabled>
+                    No downloaded active models
+                  </MenuItem>
+                )}
+                {formData.detection_model &&
+                  !selectableModelOptions.some((model) => model.name === formData.detection_model) && (
+                    <MenuItem value={formData.detection_model} disabled>
+                      {formData.detection_model} (mismatch model)
+                    </MenuItem>
+                  )}
+                {selectableModelOptions.map((model: Model) => (
+                  <MenuItem key={model.name} value={model.name}>
+                    {model.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {formData.detection_enabled && selectableModelOptions.length === 0 && (
+              <Typography variant="caption" color="warning.main" sx={{ display: 'block' }}>
+                No downloaded active models available. Open Settings and enable at least one downloaded model.
+              </Typography>
+            )}
+
+            {formData.detection_enabled &&
+              formData.detection_model &&
+              !selectableModelOptions.some((model) => model.name === formData.detection_model) && (
+                <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
+                  Mismatch model selected. AI remains paused until this model is available and active.
+                </Typography>
+              )}
+
             <FormControlLabel
               control={
                 <Switch
@@ -646,13 +773,21 @@ const Streams: React.FC = () => {
             />
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-              The active AI model and accelerator are configured globally in Settings and applied to all streams.
+              Each stream can use a different model. Streams with the same model are eligible for paired batch
+              execution.
             </Typography>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleClose}>Cancel</Button>
-            <Button type="submit" variant="contained">
-              {selectedStream ? 'Update' : 'Create'}
+            <Button onClick={handleClose} disabled={isSavingStream}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isSavingStream || (formData.detection_enabled && !formData.detection_model)}
+              startIcon={isSavingStream ? <CircularProgress size={14} color="inherit" /> : undefined}
+            >
+              {submitLabel}
             </Button>
           </DialogActions>
         </form>

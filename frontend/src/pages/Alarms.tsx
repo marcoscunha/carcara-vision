@@ -353,7 +353,7 @@ const AlarmDialog: React.FC<AlarmDialogProps> = ({ open, editing, streams, onClo
                     ;(e.target as HTMLImageElement).style.display = 'none'
                   }}
                 />
-                <Tooltip title="Refresh preview">
+                <Tooltip title="Refresh stream preview.">
                   <IconButton
                     size="small"
                     onClick={() => setPreviewKey((k) => k + 1)}
@@ -596,7 +596,7 @@ const AlarmDialog: React.FC<AlarmDialogProps> = ({ open, editing, streams, onClo
                     <Typography variant="caption" color="text.secondary">
                       Min ON: {form.min_on_seconds}s
                     </Typography>
-                    <Tooltip title="Debounce: alarm only opens after the condition is true for this many consecutive seconds. Prevents flickering from brief detections.">
+                    <Tooltip title="Alarm opens after this condition stays true for these seconds.">
                       <HelpIcon sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                     </Tooltip>
                   </Box>
@@ -614,7 +614,7 @@ const AlarmDialog: React.FC<AlarmDialogProps> = ({ open, editing, streams, onClo
                     <Typography variant="caption" color="text.secondary">
                       Min OFF: {form.min_off_seconds}s
                     </Typography>
-                    <Tooltip title="Grace period: alarm only closes after the condition has been false for this many consecutive seconds. Prevents premature closing when the subject briefly leaves the frame.">
+                    <Tooltip title="Alarm closes after this condition stays false for these seconds.">
                       <HelpIcon sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                     </Tooltip>
                   </Box>
@@ -634,7 +634,7 @@ const AlarmDialog: React.FC<AlarmDialogProps> = ({ open, editing, streams, onClo
                 <Typography variant="caption" color="text.secondary">
                   Cooldown: {form.cooldown_seconds}s
                 </Typography>
-                <Tooltip title="Suppression: after an alarm closes, it cannot re-open for this many seconds. Prevents alarm storms from rapidly repeating conditions.">
+                <Tooltip title="Alarm cannot reopen during this cooldown period in seconds.">
                   <HelpIcon sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                 </Tooltip>
               </Box>
@@ -1141,7 +1141,7 @@ const Alarms: React.FC = () => {
                         {/* Action buttons */}
                         <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                           {ev.state === 'open' && (
-                            <Tooltip title="Acknowledge">
+                            <Tooltip title="Acknowledge event.">
                               <IconButton
                                 size="small"
                                 onClick={() => ackMutation.mutate({ id: ev.id })}
@@ -1151,7 +1151,7 @@ const Alarms: React.FC = () => {
                               </IconButton>
                             </Tooltip>
                           )}
-                          <Tooltip title="Delete event">
+                          <Tooltip title="Delete event.">
                             <IconButton
                               size="small"
                               onClick={() => deleteEventMutation.mutate(ev.id)}

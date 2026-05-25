@@ -19,7 +19,9 @@ from pydantic import Field
 from ...services.models import ensure_model_available
 from ...services.models import get_available_models
 from ...services.models import get_model_by_name
+from ...services.models import remove_model_artifacts
 from ...services.models import register_yolo_model
+from ...services.models import update_model_state
 
 router = APIRouter()
 
@@ -29,6 +31,10 @@ class RegisterModelRequest(BaseModel):
     task_type: str = Field(default="detect", description="Task type: detect, pose, segment")
     description: str = Field(default="", description="Optional model description")
     version: str = Field(default="custom", description="Optional model version label")
+
+
+class UpdateModelRequest(BaseModel):
+    is_enabled: bool | None = Field(default=None, description="Enable/disable model for stream selection")
 
 
 @router.get("/", response_model=list[dict[str, Any]])
@@ -64,6 +70,15 @@ def trigger_model_download(name: str, background_tasks: BackgroundTasks):
     return {"message": f"Download initiated for '{name}'", "model": name}
 
 
+@router.put("/{name}", response_model=dict[str, Any])
+def update_model(name: str, payload: UpdateModelRequest):
+    """Update mutable model state (for example enabled/disabled)."""
+    try:
+        return update_model_state(name, is_enabled=payload.is_enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/catalog/register", response_model=dict[str, Any], status_code=201)
 def register_model(payload: RegisterModelRequest):
     """Register a custom model entry so it appears in the Settings model catalog."""
@@ -76,3 +91,12 @@ def register_model(payload: RegisterModelRequest):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/{name}", response_model=dict[str, Any])
+def delete_model_artifacts(name: str):
+    """Remove local files for a model while keeping the catalog entry."""
+    try:
+        return remove_model_artifacts(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

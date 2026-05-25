@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Card,
@@ -35,20 +35,27 @@ import {
   OpenInNew as OpenInNewIcon,
   CloudDownload as CloudDownloadIcon,
   AddCircleOutline as AddCircleOutlineIcon,
+  DeleteOutline as DeleteOutlineIcon,
+  History as HistoryIcon,
+  PlayCircleFilled as PlayCircleFilledIcon,
 } from '@mui/icons-material'
 import {
   useModels,
   useEnsureModel,
   useRegisterModel,
+  useDeleteModel,
   useBenchmarkHistory,
   useHardwareDetection,
   useDetectHardware,
   useInferenceRuntimeConfig,
+  useRealtimeInferenceMetrics,
   useUpdateInferenceRuntimeConfig,
+  useUpdateModel,
 } from '../hooks/useQueries'
 import { useAuth } from '../auth'
 import { AUTH_ENABLED } from '../auth/keycloak'
 import type { Model, AcceleratorStatus, AcceleratorType } from '../types'
+import { ConfirmDeleteDialog } from '../components/dialogs'
 
 // Helper functions for hardware display
 const getAcceleratorIcon = (type: AcceleratorType) => {
@@ -139,16 +146,20 @@ const formatArchitecture = (arch: string): string => {
 
 // Task type labels for display
 const TASK_LABELS: Record<string, string> = {
-  detect: 'Object Detection',
-  pose: 'Pose Estimation',
+  detect: 'Detection',
   segment: 'Segmentation',
+  pose: 'Pose',
 }
+
+const EXECUTED_MODELS_STORAGE_KEY = 'carcara.executedModelsHistory'
 
 const Settings: React.FC = () => {
   const [taskTab, setTaskTab] = useState<string>('detect')
   const [newModelName, setNewModelName] = useState<string>('')
   const [newModelDescription, setNewModelDescription] = useState<string>('')
   const [newModelTaskType, setNewModelTaskType] = useState<string>('detect')
+  const [downloadingModels, setDownloadingModels] = useState<string[]>([])
+  const [modelPendingDelete, setModelPendingDelete] = useState<string | null>(null)
 
   // Auth hook for user info
   const { user, logout, isAdmin } = useAuth()
@@ -159,38 +170,183 @@ const Settings: React.FC = () => {
   const keycloakAdminUrl = `${keycloakBaseUrl}/admin/master/console/#/realms/${keycloakRealm}/users`
 
   // TanStack Query hooks
-  const { data: allModels, isLoading } = useModels()
+  const { data: allModels, isLoading, refetch: refetchModels } = useModels()
   const { data: benchmarkHistory, isLoading: isBenchmarkHistoryLoading } = useBenchmarkHistory(10)
   const { data: runtimeConfig } = useInferenceRuntimeConfig()
+  const { data: realtimeMetrics } = useRealtimeInferenceMetrics()
   const updateRuntimeMutation = useUpdateInferenceRuntimeConfig()
+  const updateModelMutation = useUpdateModel()
   const ensureModelMutation = useEnsureModel()
+  const deleteModelMutation = useDeleteModel()
   const registerModelMutation = useRegisterModel()
 
   // Hardware detection hooks
   const { data: hardwareData, isLoading: isHardwareLoading } = useHardwareDetection(true)
   const detectHardwareMutation = useDetectHardware()
+  const allModelsList: Model[] = allModels || []
+  const [persistedExecutedModelNames, setPersistedExecutedModelNames] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') {
+      return new Set<string>()
+    }
+
+    try {
+      const raw = window.localStorage.getItem(EXECUTED_MODELS_STORAGE_KEY)
+      if (!raw) {
+        return new Set<string>()
+      }
+
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        return new Set<string>()
+      }
+
+      return new Set<string>(parsed.filter((item): item is string => typeof item === 'string' && item.length > 0))
+    } catch {
+      return new Set<string>()
+    }
+  })
+
+  const liveExecutedModelNames = useMemo(() => {
+    const names = new Set<string>()
+    const perStream = realtimeMetrics?.per_stream || {}
+
+    for (const streamMetrics of Object.values(perStream)) {
+      if (streamMetrics.model_name && streamMetrics.samples > 0) {
+        names.add(streamMetrics.model_name)
+      }
+    }
+
+    return names
+  }, [realtimeMetrics?.per_stream])
+
+  const displayedExecutedModelNames = useMemo(() => {
+    const names = new Set<string>(persistedExecutedModelNames)
+    for (const name of liveExecutedModelNames) {
+      names.add(name)
+    }
+    return names
+  }, [persistedExecutedModelNames, liveExecutedModelNames])
+
+  useEffect(() => {
+    setPersistedExecutedModelNames((previous) => {
+      const next = new Set(previous)
+      let changed = false
+
+      const benchmarkItems = benchmarkHistory?.items || []
+      for (const item of benchmarkItems) {
+        if (item.model_name && !next.has(item.model_name)) {
+          next.add(item.model_name)
+          changed = true
+        }
+      }
+
+      const perStream = realtimeMetrics?.per_stream || {}
+      for (const streamMetrics of Object.values(perStream)) {
+        if (streamMetrics.model_name && streamMetrics.samples > 0 && !next.has(streamMetrics.model_name)) {
+          next.add(streamMetrics.model_name)
+          changed = true
+        }
+      }
+
+      if (!changed) {
+        return previous
+      }
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(EXECUTED_MODELS_STORAGE_KEY, JSON.stringify(Array.from(next)))
+      }
+
+      return next
+    })
+  }, [benchmarkHistory?.items, realtimeMetrics?.per_stream])
+
+  const runningModelNames = liveExecutedModelNames
 
   // Models filtered by current tab (task type)
-  const modelList: Model[] = (allModels?.data ?? []).filter((m: Model) => m.task_type === taskTab)
-  const downloadedModelsCount = (allModels?.data ?? []).filter((m: Model) => m.is_downloaded).length
+  const modelList: Model[] = allModelsList.filter((m: Model) => m.task_type === taskTab)
+  const downloadedModelsCount = allModelsList.filter((m: Model) => m.is_downloaded).length
   const storageRoots = Array.from(
-    new Set((allModels?.data ?? []).map((m: Model) => m.storage_root).filter((v): v is string => Boolean(v))),
+    new Set(allModelsList.map((m: Model) => m.storage_root).filter((v): v is string => Boolean(v))),
   )
 
   // Global runtime model selection (default to runtimeConfig or first model)
   const selectedModel = runtimeConfig?.model_name ?? ''
   const selectedTaskType = runtimeConfig?.task_type ?? 'detect'
 
+  useEffect(() => {
+    if (downloadingModels.length === 0) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void refetchModels()
+    }, 1500)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [downloadingModels.length, refetchModels])
+
+  useEffect(() => {
+    if (downloadingModels.length === 0) {
+      return
+    }
+
+    setDownloadingModels((current) =>
+      current.filter((name) => {
+        const model = allModelsList.find((item) => item.name === name)
+        return !model?.is_downloaded
+      }),
+    )
+  }, [allModelsList, downloadingModels.length])
+
   const handleSelectModel = (modelName: string) => {
     updateRuntimeMutation.mutate({ model_name: modelName, task_type: taskTab })
   }
 
   const handleEnsureModel = (name: string) => {
-    ensureModelMutation.mutate(name)
+    setDownloadingModels((current) => (current.includes(name) ? current : [...current, name]))
+    ensureModelMutation.mutate(name, {
+      onError: () => {
+        setDownloadingModels((current) => current.filter((item) => item !== name))
+      },
+    })
+  }
+
+  const handleToggleModelActive = (model: Model) => {
+    updateModelMutation.mutate({
+      name: model.name,
+      data: { is_enabled: !model.is_enabled },
+    })
+  }
+
+  const handleRequestDeleteModel = (name: string) => {
+    setModelPendingDelete(name)
+  }
+
+  const handleConfirmDeleteModel = () => {
+    if (!modelPendingDelete) {
+      return
+    }
+
+    const modelToDelete = modelPendingDelete
+    deleteModelMutation.mutate(modelToDelete, {
+      onSuccess: () => {
+        setDownloadingModels((current) => current.filter((item) => item !== modelToDelete))
+        setModelPendingDelete(null)
+      },
+    })
   }
 
   const handleDetectHardware = () => {
     detectHardwareMutation.mutate(true)
+  }
+
+  const handleClearModelHistory = () => {
+    setPersistedExecutedModelNames(new Set<string>())
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(EXECUTED_MODELS_STORAGE_KEY)
+    }
   }
 
   const handleRegisterModel = () => {
@@ -260,22 +416,46 @@ const Settings: React.FC = () => {
 
             {/* Task Type Tabs */}
             <Tabs value={taskTab} onChange={(_, v) => setTaskTab(v)} sx={{ mb: 2 }}>
-              {Object.entries(TASK_LABELS).map(([key, label]) => (
-                <Tab key={key} value={key} label={label} />
-              ))}
+              <Tab value="detect" label={TASK_LABELS.detect} />
+              <Tab value="segment" label={TASK_LABELS.segment} />
+              <Tab value="pose" label={TASK_LABELS.pose} />
             </Tabs>
 
-            {/* Global active model indicator */}
+            {/* Global default model indicator */}
             {selectedModel && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                Active global model: <strong>{selectedModel}</strong> (
-                {TASK_LABELS[selectedTaskType] ?? selectedTaskType})
+                <Tooltip title="Fallback model for new streams and streams without an explicit model.">
+                  <span>
+                    Global default model: <strong>{selectedModel}</strong> (
+                    {TASK_LABELS[selectedTaskType] ?? selectedTaskType})
+                  </span>
+                </Tooltip>
               </Alert>
             )}
 
             <Alert severity="success" sx={{ mb: 2 }}>
-              Downloaded models: <strong>{downloadedModelsCount}</strong> / {(allModels?.data ?? []).length}
+              <Tooltip title="Models with local weights on this device across all task types.">
+                <span>
+                  Downloaded models: <strong>{downloadedModelsCount}</strong> / {allModelsList.length}
+                </span>
+              </Tooltip>
             </Alert>
+
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+              <Tooltip title="Clear executed model history icons.">
+                <span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    onClick={handleClearModelHistory}
+                    disabled={persistedExecutedModelNames.size === 0}
+                  >
+                    Clear model history
+                  </Button>
+                </span>
+              </Tooltip>
+            </Box>
 
             {storageRoots.length > 0 && (
               <Box sx={{ mb: 2 }}>
@@ -312,74 +492,178 @@ const Settings: React.FC = () => {
                       gap: 1,
                     }}
                   >
-                    {/* Model info */}
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body2" fontWeight={600} noWrap>
-                        {model.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {model.description || model.task_type}
-                      </Typography>
-                      {model.storage_path && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: 'block', mt: 0.25, wordBreak: 'break-all' }}
-                        >
-                          Stored at: {model.storage_path}
-                        </Typography>
-                      )}
-                    </Box>
+                    {(() => {
+                      const isDownloading = downloadingModels.includes(model.name)
+                      const isDeleting = deleteModelMutation.isPending && deleteModelMutation.variables === model.name
+                      const hasExecutedOnHardware = displayedExecutedModelNames.has(model.name)
+                      const isRunningOnAnyStream = runningModelNames.has(model.name)
 
-                    {/* Status chip */}
-                    <Chip
-                      label={model.is_downloaded ? 'Downloaded' : 'Not downloaded'}
-                      size="small"
-                      color={model.is_downloaded ? 'success' : 'default'}
-                      variant="outlined"
-                    />
+                      return (
+                        <>
+                          {/* Model info */}
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Typography variant="body2" fontWeight={600} noWrap>
+                                {model.name}
+                              </Typography>
+                              {hasExecutedOnHardware && (
+                                <Tooltip title="This model has run on this hardware before.">
+                                  <HistoryIcon fontSize="small" color="action" />
+                                </Tooltip>
+                              )}
+                              {isRunningOnAnyStream && (
+                                <Tooltip title="This model is running on at least one stream now.">
+                                  <PlayCircleFilledIcon fontSize="small" color="success" />
+                                </Tooltip>
+                              )}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {model.description || model.task_type}
+                            </Typography>
+                            {model.storage_path && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block', mt: 0.25, wordBreak: 'break-all' }}
+                              >
+                                Stored at: {model.storage_path}
+                              </Typography>
+                            )}
+                            {isDownloading && (
+                              <Box sx={{ mt: 1 }}>
+                                <LinearProgress />
+                                <Typography variant="caption" color="text.secondary">
+                                  Download in progress...
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
 
-                    {/* Actions */}
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      {/* Download / ensure button */}
-                      {!model.is_downloaded && (
-                        <Tooltip title="Download model weights">
-                          <span>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              startIcon={
-                                ensureModelMutation.isPending && ensureModelMutation.variables === model.name ? (
-                                  <CircularProgress size={14} />
-                                ) : (
-                                  <CloudDownloadIcon />
-                                )
+                          {/* Status chip */}
+                          <Tooltip
+                            title={
+                              isDownloading
+                                ? 'Weights are downloading now.'
+                                : model.is_downloaded
+                                  ? model.is_enabled
+                                    ? 'Downloaded and selectable in stream model fields.'
+                                    : 'Downloaded but hidden from stream model fields.'
+                                  : 'Not downloaded on this device.'
+                            }
+                          >
+                            <Chip
+                              label={
+                                isDownloading
+                                  ? 'Downloading'
+                                  : model.is_downloaded
+                                    ? model.is_enabled
+                                      ? 'Downloaded • Active'
+                                      : 'Downloaded • Inactive'
+                                    : 'Not downloaded'
                               }
-                              onClick={() => handleEnsureModel(model.name)}
-                              disabled={ensureModelMutation.isPending}
-                            >
-                              Download
-                            </Button>
-                          </span>
-                        </Tooltip>
-                      )}
+                              size="small"
+                              color={
+                                isDownloading
+                                  ? 'warning'
+                                  : model.is_downloaded
+                                    ? model.is_enabled
+                                      ? 'success'
+                                      : 'default'
+                                    : 'default'
+                              }
+                              variant="outlined"
+                            />
+                          </Tooltip>
 
-                      {/* Set as global model */}
-                      {model.is_downloaded && model.name !== selectedModel && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleSelectModel(model.name)}
-                          disabled={updateRuntimeMutation.isPending}
-                        >
-                          Set Active
-                        </Button>
-                      )}
+                          {/* Actions */}
+                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                            {/* Download / ensure button */}
+                            {!model.is_downloaded && (
+                              <Tooltip title="Download weights to this device.">
+                                <span>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={isDownloading ? <CircularProgress size={14} /> : <CloudDownloadIcon />}
+                                    onClick={() => handleEnsureModel(model.name)}
+                                    disabled={isDownloading}
+                                  >
+                                    Download model
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            )}
 
-                      {model.name === selectedModel && (
-                        <Chip label="Active" size="small" color="primary" icon={<CheckCircleIcon />} />
-                      )}
-                    </Box>
+                            {/* Set as global model */}
+                            {model.is_downloaded && model.name !== selectedModel && (
+                              <Tooltip title="Set as the global default model.">
+                                <span>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={() => handleSelectModel(model.name)}
+                                    disabled={updateRuntimeMutation.isPending || isDeleting || isDownloading}
+                                  >
+                                    Set as default
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            )}
+
+                            {model.name === selectedModel && (
+                              <Tooltip title="Current global default model.">
+                                <Chip label="Default" size="small" color="primary" icon={<CheckCircleIcon />} />
+                              </Tooltip>
+                            )}
+
+                            {model.is_downloaded && (
+                              <Tooltip
+                                title={
+                                  model.is_enabled
+                                    ? 'Disable this model in stream model selectors.'
+                                    : 'Enable this model in stream model selectors.'
+                                }
+                              >
+                                <span>
+                                  <Button
+                                    size="small"
+                                    variant={model.is_enabled ? 'outlined' : 'contained'}
+                                    color={model.is_enabled ? 'warning' : 'success'}
+                                    onClick={() => handleToggleModelActive(model)}
+                                    disabled={updateModelMutation.isPending || isDeleting || isDownloading}
+                                  >
+                                    {model.is_enabled ? 'Disable model' : 'Enable model'}
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            )}
+
+                            {model.is_downloaded && (
+                              <Tooltip
+                                title={
+                                  model.name === selectedModel
+                                    ? 'Cannot delete the current default model.'
+                                    : 'Delete local weights for this model.'
+                                }
+                              >
+                                <span>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="error"
+                                    startIcon={isDeleting ? <CircularProgress size={14} /> : <DeleteOutlineIcon />}
+                                    onClick={() => handleRequestDeleteModel(model.name)}
+                                    disabled={model.name === selectedModel || isDeleting || isDownloading}
+                                  >
+                                    Delete model
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </>
+                      )
+                    })()}
                   </Box>
                 ))
               )}
@@ -704,7 +988,13 @@ const Settings: React.FC = () => {
                             </Typography>
                           </Box>
                         </Box>
-                        <Tooltip title={acc.status === 'driver_missing' ? 'Driver not installed' : acc.status}>
+                        <Tooltip
+                          title={
+                            acc.status === 'driver_missing'
+                              ? 'Driver is not installed.'
+                              : `Status is ${acc.status.replace('_', ' ')}.`
+                          }
+                        >
                           <Chip
                             label={acc.status.replace('_', ' ')}
                             size="small"
@@ -909,6 +1199,16 @@ const Settings: React.FC = () => {
           </Card>
         )}
       </Box>
+
+      <ConfirmDeleteDialog
+        open={Boolean(modelPendingDelete)}
+        onClose={() => setModelPendingDelete(null)}
+        onConfirm={handleConfirmDeleteModel}
+        title="Delete Model"
+        itemName={modelPendingDelete || ''}
+        warningMessage="This removes local model files from this hardware. You can download the model again later from Settings."
+        isLoading={deleteModelMutation.isPending}
+      />
     </Box>
   )
 }

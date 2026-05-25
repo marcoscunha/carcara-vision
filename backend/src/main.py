@@ -27,6 +27,8 @@ from .models.stream import Stream
 from .services.alarm_dispatcher import alarm_dispatcher
 from .services.camera_connectivity import sync_local_camera_connectivity
 from .services.inference_worker_manager import inference_worker_manager
+from .services.models import ensure_stream_models_enabled
+from .services.models import ensure_model_available
 
 # Setup logging
 setup_logging()
@@ -65,6 +67,9 @@ async def lifespan(app: FastAPI):
     dispatcher_task: asyncio.Task | None = None
     self_heal_task: asyncio.Task | None = None
     try:
+        if not ensure_model_available(settings.DEFAULT_MODEL):
+            logger.warning("Default model '%s' is not available at startup", settings.DEFAULT_MODEL)
+
         # First heal local camera bindings after detach/reattach events.
         sync_local_camera_connectivity(db)
 
@@ -72,6 +77,9 @@ async def lifespan(app: FastAPI):
         logger.info("Startup stream pipeline restore: %d restored, %d failed", restored, failed)
 
         active_streams = db.query(Stream).filter(Stream.status == "active").all()
+        enabled_from_streams = ensure_stream_models_enabled(active_streams)
+        if enabled_from_streams:
+            logger.info("Enabled %d models referenced by active streams", enabled_from_streams)
         inference_worker_manager.restore_workers(active_streams)
         logger.info("Restored %d active-stream workers", len(active_streams))
 

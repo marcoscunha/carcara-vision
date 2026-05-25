@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     AUTH_ENABLED: bool = _env_bool("AUTH_ENABLED", True)
 
     # Object Detection
-    DEFAULT_MODEL: str = os.getenv("DEFAULT_MODEL", "yolov8n")
+    DEFAULT_MODEL: str = os.getenv("DEFAULT_MODEL", "yolov8m")
     CONFIDENCE_THRESHOLD: float = 0.5
     SUPPORTED_MODELS: list[str] = [
         "yolov8n",
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     GO2RTC_RTSP_HOST: str = os.getenv("GO2RTC_RTSP_HOST", "localhost")
 
     # Model path
-    MODEL_PATH: str = os.getenv("MODEL_PATH", "yolov8n.pt")
+    MODEL_PATH: str = os.getenv("MODEL_PATH", "yolov8m.pt")
 
     # Video/prediction synchronization flow
     # When enabled, streams default to backend-centered sync flow

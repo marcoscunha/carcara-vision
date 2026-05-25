@@ -602,13 +602,16 @@ async def create_stream(
 
     _apply_resolved_camera_binding(camera, resolved_source)
 
+    runtime_cfg = inference_runtime_service.get()
+    default_model = runtime_cfg.model_name or settings.DEFAULT_MODEL
+
     stream_metadata = {
         "source_config": source_config,
         "width": stream.width or 640,
         "height": stream.height or 360,
         "codec": stream.codec or "h264",
         "detection_enabled": bool(stream.detection_enabled),
-        "detection_model": stream.detection_model or "yolov8n",
+        "detection_model": stream.detection_model or default_model,
         "detection_task_type": stream.detection_task_type or "detect",
         "detection_confidence": stream.detection_confidence or 0.5,
         "detection_classes": stream.detection_classes,

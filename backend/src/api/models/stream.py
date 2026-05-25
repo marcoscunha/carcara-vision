@@ -16,7 +16,7 @@ class StreamCreate(StreamBase):
     height: int | None = 360
     codec: str | None = "h264"
     detection_enabled: bool | None = False
-    detection_model: str | None = "yolov8n"
+    detection_model: str | None = "yolov8m"
     detection_task_type: str | None = "detect"
     detection_confidence: float | None = 0.5
     detection_classes: list[int] | None = None

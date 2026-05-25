@@ -44,6 +44,7 @@ class ModelInfo:
     created_at: datetime = field(default_factory=datetime.utcnow)
     file_hash: str | None = None
     is_downloaded: bool = True
+    is_enabled: bool = False
     download_url: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -61,6 +62,7 @@ class ModelInfo:
             "created_at": self.created_at.isoformat(),
             "file_hash": self.file_hash,
             "is_downloaded": self.is_downloaded,
+            "is_enabled": self.is_enabled,
             "download_url": self.download_url,
         }
 
@@ -80,6 +82,7 @@ class ModelInfo:
             created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.utcnow(),
             file_hash=data.get("file_hash"),
             is_downloaded=data.get("is_downloaded", True),
+            is_enabled=data.get("is_enabled", data.get("is_downloaded", False)),
             download_url=data.get("download_url"),
         )
 
@@ -168,6 +171,9 @@ class ModelRegistry:
         # Register default models
         self._register_defaults()
 
+        # Reconcile persisted state with real on-disk artifacts.
+        self.reconcile_registry_state()
+
     def _get_registry_path(self) -> Path:
         return self.cache_dir / "registry.json"
 
@@ -203,9 +209,81 @@ class ModelRegistry:
                 if model_path.exists():
                     info.path = str(model_path)
                     info.is_downloaded = True
+                    info.is_enabled = True
                 else:
                     info.is_downloaded = False
+                    info.is_enabled = False
                 self._registry[name] = info
+
+    def _artifact_candidates(self, info: ModelInfo) -> list[Path]:
+        """Return likely filesystem locations for a model artifact."""
+        explicit_path = Path(info.path)
+        model_filename = explicit_path.name if explicit_path.suffix else f"{info.name}.pt"
+
+        candidates: list[Path] = []
+        if explicit_path.is_absolute():
+            candidates.append(explicit_path)
+        else:
+            candidates.extend(
+                [
+                    (self.models_dir / explicit_path).resolve(),
+                    (self.models_dir / model_filename).resolve(),
+                    (Path.cwd() / explicit_path).resolve(),
+                    (Path.cwd() / model_filename).resolve(),
+                ]
+            )
+
+        # Common backend container working directory.
+        candidates.append((Path("/app") / model_filename).resolve())
+        return candidates
+
+    def _resolve_existing_artifact(self, info: ModelInfo) -> Path | None:
+        """Find the first existing artifact path for a model, if any."""
+        for candidate in self._artifact_candidates(info):
+            if candidate.exists() and candidate.is_file():
+                return candidate
+
+        explicit_path = Path(info.path)
+        model_filename = explicit_path.name if explicit_path.suffix else f"{info.name}.pt"
+        cache_root = Path.home() / ".cache" / "ultralytics"
+        if cache_root.exists():
+            for candidate in cache_root.rglob(model_filename):
+                if candidate.exists() and candidate.is_file():
+                    return candidate.resolve()
+
+        return None
+
+    def reconcile_model_state(self, name: str) -> bool:
+        """Refresh a model's downloaded/path state from filesystem truth."""
+        info = self._registry.get(name)
+        if info is None:
+            return False
+
+        existing = self._resolve_existing_artifact(info)
+        new_downloaded = existing is not None
+        new_path = str(existing) if existing is not None else info.path
+
+        changed = info.is_downloaded != new_downloaded or info.path != new_path
+        if changed:
+            info.is_downloaded = new_downloaded
+            info.path = new_path
+
+            # Keep enabled state meaningful when artifact is absent.
+            if not new_downloaded:
+                info.is_enabled = False
+
+            self._registry[name] = info
+        return changed
+
+    def reconcile_registry_state(self) -> None:
+        """Refresh registry downloaded/path state based on current filesystem."""
+        changed = False
+        for name in list(self._registry.keys()):
+            if self.reconcile_model_state(name):
+                changed = True
+
+        if changed:
+            self._save_registry()
 
     def register_engine(self, model_type: ModelType, engine_class: type[BaseInferenceEngine]) -> None:
         """Register an inference engine class for a model type."""
@@ -229,6 +307,7 @@ class ModelRegistry:
 
     def get_model(self, name: str) -> ModelInfo | None:
         """Get model info by name."""
+        self.reconcile_model_state(name)
         return self._registry.get(name)
 
     def list_models(
@@ -280,6 +359,9 @@ class ModelRegistry:
             return False
 
         if model_info.is_downloaded and not force:
+            if not model_info.is_enabled:
+                model_info.is_enabled = True
+                self._save_registry()
             logger.info(f"Model {name} already downloaded")
             return True
 
@@ -304,6 +386,7 @@ class ModelRegistry:
                     return False
 
             model_info.is_downloaded = True
+            model_info.is_enabled = True
             model_info.path = str(target_path)
             self._save_registry()
 
@@ -340,6 +423,9 @@ class ModelRegistry:
 
         # If already confirmed available, skip
         if model_info.is_downloaded:
+            if not model_info.is_enabled:
+                model_info.is_enabled = True
+                self._save_registry()
             return True
 
         if model_info.model_type == ModelType.YOLO:
@@ -348,9 +434,9 @@ class ModelRegistry:
 
                 logger.info("Triggering ultralytics auto-download for '%s'", name)
                 # YOLO(name) downloads weights once; raises on failure
-                _model = YOLO(name)
-                del _model
+                YOLO(name)
                 model_info.is_downloaded = True
+                model_info.is_enabled = True
                 self._save_registry()
                 logger.info("Model '%s' is now available", name)
                 return True

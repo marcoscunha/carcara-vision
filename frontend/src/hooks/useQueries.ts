@@ -209,9 +209,10 @@ export const useUpdateStream = () => {
 
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Stream> }) => streamApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: async () => {
       // Invalidate all stream queries (including byStatus variants)
-      queryClient.invalidateQueries({ queryKey: ['streams'] })
+      await queryClient.invalidateQueries({ queryKey: ['streams'] })
+      await queryClient.refetchQueries({ queryKey: ['streams'] })
     },
   })
 }
@@ -455,6 +456,17 @@ export const useRegisterModel = () => {
 
   return useMutation({
     mutationFn: (payload: ModelRegistrationPayload) => modelApi.register(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.models.all })
+    },
+  })
+}
+
+export const useDeleteModel = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (name: string) => modelApi.delete(name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.models.all })
     },

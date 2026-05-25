@@ -300,6 +300,7 @@ export interface Model {
   description: string
   is_available: boolean
   is_downloaded: boolean
+  is_enabled: boolean
   task_type: string
   confidence_threshold: number
   storage_path?: string

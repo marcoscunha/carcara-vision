@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     # ===================
 
     # Object Detection
-    DEFAULT_MODEL: str = Field(default="yolov8n.pt", env="DEFAULT_MODEL")
+    DEFAULT_MODEL: str = Field(default="yolov8m.pt", env="DEFAULT_MODEL")
     CONFIDENCE_THRESHOLD: float = Field(default=0.5, env="CONFIDENCE_THRESHOLD")
     IOU_THRESHOLD: float = Field(default=0.45, env="IOU_THRESHOLD")
     MAX_DETECTIONS: int = Field(default=100, env="MAX_DETECTIONS")

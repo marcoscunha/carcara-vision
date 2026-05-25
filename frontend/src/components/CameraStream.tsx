@@ -381,6 +381,10 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     typeof stream.detection_enabled === 'boolean'
       ? stream.detection_enabled
       : Boolean(stream.stream_metadata?.detection_enabled)
+  const configuredTaskType =
+    stream.detection_task_type || (stream.stream_metadata?.detection_task_type as string | undefined) || 'detect'
+  const configuredModelName =
+    stream.detection_model || (stream.stream_metadata?.detection_model as string | undefined) || ''
 
   const [stats, setStats] = useState<StreamStats>({
     time: '',
@@ -395,6 +399,12 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   useEffect(() => {
     setCurrentProtocol(pickPreferredProtocol(stream, showAnnotatedStream, protocol))
   }, [stream, stream.id, stream.urls, showAnnotatedStream, protocol])
+
+  useEffect(() => {
+    taskTypeRef.current = configuredTaskType
+    lastDetectionsRef.current = []
+    setDetectionFps(0)
+  }, [configuredTaskType, configuredModelName])
 
   // ── Clock ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -551,7 +561,7 @@ const CameraStream: React.FC<CameraStreamProps> = ({
       sourceFrameRef.current = { width: 0, height: 0 }
       publishFrameRef.current = { width: 0, height: 0 }
     }
-  }, [stream.id, stream.worker_active, showAnnotatedStream, detectionEnabled])
+  }, [stream.id, stream.worker_active, showAnnotatedStream, detectionEnabled, configuredTaskType, configuredModelName])
 
   // ── WebRTC stats ────────────────────────────────────────────────────────────
   useEffect(() => {

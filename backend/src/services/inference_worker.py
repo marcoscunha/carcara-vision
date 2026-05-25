@@ -35,12 +35,14 @@ from typing import Any
 
 import cv2
 
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     import numpy as np
+    from .model_batch_coordinator import ModelBatchCoordinator
 
-from ..core.config import settings
+
 from ..ml.annotator import FrameAnnotator
 from ..ml.base import HardwareAccelerator
 from ..ml.registry import TASK_TYPE_DETECT
@@ -64,7 +66,8 @@ class WorkerConfig:
     stream_name: str
     rtsp_url: str  # MediaMTX RTSP input (raw stream)
     mediamtx_rtsp_base: str  # e.g. "rtsp://mediamtx:8554"
-    model_name: str
+    model_name: str  # execution model reference (resolved path or registry id)
+    assigned_model_name: str | None = None  # user-selected stream model name
     task_type: str = TASK_TYPE_DETECT
     runtime: str = "auto"
     dtype: str = "auto"
@@ -77,6 +80,8 @@ class WorkerConfig:
     max_inference_fps: int = 10  # cap inference to reduce CPU pressure
     output_fps: int = 25  # annotated stream frame-rate (decoupled from inference rate)
     encoder_mode: str = "x264"  # resolved hardware encoder: nvenc | jetson | v4l2 | x264
+    batch_group_key: str | None = None
+    batch_coordinator: ModelBatchCoordinator | None = None
 
 
 @dataclass
@@ -281,7 +286,7 @@ class InferenceWorker:
             "missed_slots_total": self._missed_slots_total,
             "dropped_events_total": self._dropped_events_total,
             "stage_timings_ms": stage_timings,
-            "model": self._config.model_name,
+            "model": self._config.assigned_model_name or self._config.model_name,
             "accelerator": self._config.accelerator,
             "runtime": self._config.runtime,
             "dtype": self._config.dtype,
@@ -487,7 +492,7 @@ class InferenceWorker:
                     stream_name=self._config.stream_name,
                     timestamp=time.time(),
                     task_type=self._config.task_type,
-                    model_name=self._config.model_name,
+                    model_name=self._config.assigned_model_name or self._config.model_name,
                     detections=self._last_detections,
                     inference_time_ms=inference_ms,
                     fps=event_fps,
@@ -543,7 +548,22 @@ class InferenceWorker:
             detections = self._parse_segment_result(result)
             return detections, result.inference_time_ms, result.preprocess_ms, result.postprocess_ms
 
-        # Default: TASK_TYPE_DETECT (prefer engine tracking if available).
+        # Default: TASK_TYPE_DETECT
+        if self._config.batch_coordinator is not None:
+            return self._config.batch_coordinator.infer(
+                stream_id=self._config.stream_id,
+                group_key=self._config.batch_group_key,
+                frame=frame,
+                confidence=self._config.confidence,
+                classes_filter=self._config.classes_filter,
+                run_single=self._run_inference_detect_single,
+                run_batch=self._run_inference_detect_batch,
+            )
+
+        return self._run_inference_detect_single(frame)
+
+    def _run_inference_detect_single(self, frame: np.ndarray) -> tuple[list[dict[str, Any]], float, float, float]:
+        # Keep existing behavior for single-frame detect inference (with tracking when available).
         if self._engine is not None and hasattr(self._engine, "track"):
             result = self._engine.track(frame, persist=True)
             return result.detections, result.inference_time_ms, result.preprocess_ms, result.postprocess_ms
@@ -555,6 +575,20 @@ class InferenceWorker:
         )
         detections = [self._sdk_detection_to_legacy(det) for det in result.detections]
         return detections, result.latency_ms, 0.0, 0.0
+
+    def _run_inference_detect_batch(
+        self, frames: list[np.ndarray]
+    ) -> list[tuple[list[dict[str, Any]], float, float, float]]:
+        """Run one batched detect execution when the backing engine supports it."""
+        if self._engine is not None and hasattr(self._engine, "infer_batch"):
+            results = self._engine.infer_batch(frames)
+            parsed: list[tuple[list[dict[str, Any]], float, float, float]] = []
+            for item in results:
+                parsed.append((list(item.detections), item.inference_time_ms, item.preprocess_ms, item.postprocess_ms))
+            return parsed
+
+        # Fallback for runtimes without explicit batch support.
+        return [self._run_inference_detect_single(frame) for frame in frames]
 
     @staticmethod
     def _sdk_detection_to_legacy(det: Detection) -> dict[str, Any]:
@@ -732,7 +766,8 @@ class InferenceWorker:
         except Exception:
             pass
 
-        model_candidates = [self._config.model_name, settings.DEFAULT_MODEL, "yolov8n", "yolov8n.pt"]
+        # Strict behavior: run only the model configured for this stream.
+        model_candidates = [self._config.model_name]
 
         # Add stem candidates to handle names like "yolov8n.pt" -> "yolov8n".
         extra_candidates: list[str] = []
@@ -777,7 +812,7 @@ class InferenceWorker:
             except ModelNotFoundError as exc:
                 last_error = exc
                 logger.warning(
-                    "Model candidate '%s' unavailable for stream %d; trying next fallback",
+                    "Configured model candidate '%s' unavailable for stream %d; trying equivalent variant",
                     candidate,
                     self._config.stream_id,
                 )

@@ -34,6 +34,7 @@ import threading
 from typing import TYPE_CHECKING
 from typing import Any
 from urllib.parse import urlparse
+import os
 
 from ..core.config import settings
 from ..ml.registry import TASK_TYPE_DETECT
@@ -41,6 +42,7 @@ from ..ml.registry import model_registry
 from .alarm_engine import AlarmEngine
 from .inference_worker import InferenceWorker
 from .inference_worker import WorkerConfig
+from .model_batch_coordinator import model_batch_coordinator
 
 if TYPE_CHECKING:
     import asyncio
@@ -48,6 +50,18 @@ if TYPE_CHECKING:
     from ..models.stream import Stream
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_registered_model(name: str | None):
+    if not name:
+        return None
+    info = model_registry.get_model(name)
+    if info is not None:
+        return info
+    stem, ext = os.path.splitext(str(name))
+    if ext.lower() in {".pt", ".onnx", ".engine", ".trt"} and stem:
+        return model_registry.get_model(stem)
+    return None
 
 
 def _mediamtx_rtsp_base() -> str:
@@ -69,10 +83,13 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
     rt = runtime or inference_runtime_service.get()
 
     # Persisted stream metadata is authoritative; runtime is fallback.
-    model_name = metadata.get("detection_model") or rt.model_name
-    model_info = model_registry.get_model(model_name) if model_name else None
-    if model_info and model_info.path:
-        model_name = model_info.path
+    assigned_model_name = metadata.get("detection_model") or rt.model_name
+    model_info = _resolve_registered_model(assigned_model_name)
+    if model_info is None:
+        raise RuntimeError(f"Configured model '{assigned_model_name}' is not registered")
+    if not model_info.is_downloaded:
+        raise RuntimeError(f"Configured model '{assigned_model_name}' is not downloaded")
+    model_name = model_info.path
     task_type = metadata.get("detection_task_type") or getattr(rt, "task_type", TASK_TYPE_DETECT)
     runtime = metadata.get("detection_runtime", "auto")
     dtype = metadata.get("detection_dtype", "auto")
@@ -101,6 +118,7 @@ def _build_worker_config(stream: Stream, runtime: Any | None = None) -> WorkerCo
         rtsp_url=rtsp_url,
         mediamtx_rtsp_base=rtsp_base,
         model_name=model_name,
+        assigned_model_name=assigned_model_name,
         task_type=task_type,
         runtime=runtime,
         dtype=dtype,
@@ -121,6 +139,24 @@ def _is_detection_enabled(stream: Stream) -> bool:
     if "detection_enabled" in metadata:
         return bool(metadata.get("detection_enabled"))
     return bool(getattr(stream, "detection_enabled", False))
+
+
+def _build_batch_group_key(config: WorkerConfig) -> str | None:
+    """Return a stable key for streams that can share batched inference."""
+    if config.task_type != TASK_TYPE_DETECT:
+        return None
+
+    providers_key = ",".join(config.providers or [])
+    return "|".join(
+        [
+            str(config.model_name),
+            str(config.task_type),
+            str(config.accelerator),
+            str(config.runtime),
+            str(config.dtype),
+            providers_key,
+        ]
+    )
 
 
 class InferenceWorkerManager:
@@ -152,16 +188,22 @@ class InferenceWorkerManager:
             logger.warning("Stream %d has no stream_name — skipping worker start", stream.id)
             return
 
-        config = _build_worker_config(stream, runtime)
-        with self._lock:
-            self._stop_and_remove(stream.id)
-            worker = InferenceWorker(config)
-            engine = self._build_engine(stream.id)
-            worker.set_alarm_callback(engine.evaluate)
-            worker.start()
-            self._workers[stream.id] = worker
-            self._engines[stream.id] = engine
-            logger.info("Worker started for stream %d (%s)", stream.id, stream.stream_name)
+        try:
+            config = _build_worker_config(stream, runtime)
+            config.batch_group_key = _build_batch_group_key(config)
+            config.batch_coordinator = model_batch_coordinator
+            with self._lock:
+                self._stop_and_remove(stream.id)
+                model_batch_coordinator.register_stream(stream.id, config.batch_group_key)
+                worker = InferenceWorker(config)
+                engine = self._build_engine(stream.id)
+                worker.set_alarm_callback(engine.evaluate)
+                worker.start()
+                self._workers[stream.id] = worker
+                self._engines[stream.id] = engine
+                logger.info("Worker started for stream %d (%s)", stream.id, stream.stream_name)
+        except Exception as exc:
+            logger.warning("Worker not started for stream %d: %s", stream.id, exc)
 
     def stop_worker(self, stream_id: int) -> None:
         """Stop and remove the worker for the given stream ID."""
@@ -291,6 +333,7 @@ class InferenceWorkerManager:
 
     def _stop_and_remove(self, stream_id: int) -> None:
         """Stop and remove worker; caller must hold ``_lock``."""
+        model_batch_coordinator.unregister_stream(stream_id)
         worker = self._workers.pop(stream_id, None)
         if worker:
             worker.stop()

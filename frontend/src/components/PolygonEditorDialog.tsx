@@ -158,14 +158,14 @@ export const PolygonEditorDialog: React.FC<Props> = ({
           />
         </Box>
         <Box sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
-          <Tooltip title="Remove last point">
+          <Tooltip title="Remove last point.">
             <span>
               <Button size="small" startIcon={<UndoIcon />} onClick={handleUndo} disabled={points.length === 0}>
                 Undo
               </Button>
             </span>
           </Tooltip>
-          <Tooltip title="Clear all points">
+          <Tooltip title="Clear all points.">
             <span>
               <Button
                 size="small"
