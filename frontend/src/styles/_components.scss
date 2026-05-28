@@ -38,6 +38,25 @@
   color: #ff3b30;
 }
 
+.camera-stream__offline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 15;
+}
+
 .camera-stream__image,
 .camera-stream__video {
   position: absolute;

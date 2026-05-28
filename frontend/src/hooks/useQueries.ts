@@ -135,6 +135,9 @@ export const useUpdateCamera = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.cameras.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.cameras.detail(variables.id) })
+      // Camera activation toggles also change stream status server-side
+      // (streams go offline when deactivated, recover when reactivated).
+      queryClient.invalidateQueries({ queryKey: queryKeys.streams.all })
     },
   })
 }

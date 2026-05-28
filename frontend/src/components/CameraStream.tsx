@@ -2,6 +2,22 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { DetectionBox, DetectionEvent, Stream } from '../types'
 import { buildDetectionsWsUrl } from '../utils/apiUrl'
 
+const OfflineOverlay: React.FC<{ label?: string }> = ({ label = 'Camera offline' }) => (
+  <div className="camera-stream__offline" role="status" aria-label={label}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width="56"
+      height="56"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M3.27 2 2 3.27l2.84 2.84A1.99 1.99 0 0 0 4 8v8c0 1.1.9 2 2 2h11.73l3 3L22 19.73 3.27 2zM21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5z" />
+    </svg>
+    <span>{label}</span>
+  </div>
+)
+
 // ─── COCO 17-keypoint skeleton ────────────────────────────────────────────────
 const COCO_SKELETON: [number, number][] = [
   [0, 1],
@@ -941,6 +957,9 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   // ── Protocol switch ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (stream.status !== 'active' || !stream.urls) return
+    // Clear any stale error from a previous offline state so the UI doesn't
+    // flash a red "Failed to load stream" notice while reconnecting.
+    setError(null)
     if (currentProtocol === 'webrtc') connectWebRTC()
     else if (currentProtocol === 'mse' || currentProtocol === 'hls') connectMSE()
 
@@ -959,13 +978,20 @@ const CameraStream: React.FC<CameraStreamProps> = ({
   // ── MJPEG fallback ──────────────────────────────────────────────────────────
   if (currentProtocol === 'mjpeg' && stream.urls?.mjpeg) {
     const mjpegUrl = showAnnotatedStream ? stream.urls.annotated_mjpeg || stream.urls.mjpeg : stream.urls.mjpeg
+    const showOffline = stream.status !== 'active' && stream.status !== 'running'
     return (
       <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
         <div className="camera-stream__frame">
           <div className="camera-stream__protocol-badge">{protocolLabel}</div>
-          {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
-          {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
-          <img src={mjpegUrl} alt={`Stream ${stream.stream_name}`} className="camera-stream__image" />
+          {!showOffline && isConnecting && (
+            <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>
+          )}
+          {showOffline ? (
+            <OfflineOverlay />
+          ) : (
+            error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>
+          )}
+          {!showOffline && <img src={mjpegUrl} alt={`Stream ${stream.stream_name}`} className="camera-stream__image" />}
           {showStats && (
             <div className="camera-stream__stats">
               <div>⏱ {stats.time}</div>
@@ -980,12 +1006,20 @@ const CameraStream: React.FC<CameraStreamProps> = ({
     )
   }
 
+  const showOffline = stream.status !== 'active' && stream.status !== 'running'
+
   return (
     <div className={`camera-stream ${size === 'fixed' ? 'camera-stream--fixed' : ''}`.trim()}>
       <div className="camera-stream__frame" style={{ position: 'relative' }}>
         <div className="camera-stream__protocol-badge">{protocolLabel}</div>
-        {isConnecting && <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>}
-        {error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>}
+        {!showOffline && isConnecting && (
+          <div className="camera-stream__notice camera-stream__notice--connecting">Connecting...</div>
+        )}
+        {showOffline ? (
+          <OfflineOverlay />
+        ) : (
+          error && <div className="camera-stream__notice camera-stream__notice--error">{error}</div>
+        )}
 
         <video
           ref={videoRef}

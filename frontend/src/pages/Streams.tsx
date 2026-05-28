@@ -462,37 +462,38 @@ const Streams: React.FC = () => {
                       <Typography variant="h6" className="card-title">
                         {camera?.name || 'Unknown Camera'}
                       </Typography>
-                      <Chip
-                        icon={<CircleIcon className="chip-icon--tiny" />}
-                        label={stream.status}
-                        size="small"
-                        color={getStatusColor(stream.status)}
-                        className={`status-chip chip-capitalize ${stream.status === 'running' ? 'status-chip--active' : ''}`}
-                      />
-                      {hasModelMismatch && (
-                        <Tooltip title="Configured model is unavailable locally. Video remains visible but AI is paused.">
-                          <Chip
-                            icon={<WarningAmberIcon />}
-                            label="Mismatch model"
-                            size="small"
-                            color="warning"
-                            variant="outlined"
-                          />
-                        </Tooltip>
-                      )}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+                        <Chip
+                          icon={<CircleIcon className="chip-icon--tiny" />}
+                          label={stream.status}
+                          size="small"
+                          color={getStatusColor(stream.status)}
+                          className={`status-chip chip-capitalize ${stream.status === 'running' ? 'status-chip--active' : ''}`}
+                        />
+                        {hasModelMismatch && (
+                          <Tooltip title="Configured model is unavailable locally. Video remains visible but AI is paused.">
+                            <Chip
+                              icon={<WarningAmberIcon />}
+                              label="Mismatch model"
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                            />
+                          </Tooltip>
+                        )}
+                        {showNoWorkerBadge && (
+                          <Tooltip
+                            title={
+                              hasModelMismatch
+                                ? 'AI is enabled but the selected model is unavailable locally.'
+                                : 'AI worker is not running for this stream.'
+                            }
+                          >
+                            <Chip label="No active worker" size="small" color="warning" />
+                          </Tooltip>
+                        )}
+                      </Box>
                     </Box>
-
-                    {showNoWorkerBadge && (
-                      <Tooltip
-                        title={
-                          hasModelMismatch
-                            ? 'AI is enabled but the selected model is unavailable locally.'
-                            : 'AI worker is not running for this stream.'
-                        }
-                      >
-                        <Chip label="No active worker" size="small" color="warning" sx={{ mt: 1, mb: 1 }} />
-                      </Tooltip>
-                    )}
 
                     {/* Stream Preview */}
                     <Box className="stream-preview-wrapper">

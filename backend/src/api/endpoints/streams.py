@@ -384,6 +384,75 @@ async def restore_active_stream_pipelines(db: Session) -> tuple[int, int]:
     return restored, failed
 
 
+async def recover_streams_for_camera(db: Session, camera_id: int) -> tuple[int, int]:
+    """
+    Re-register every stream attached to ``camera_id`` whose current status is
+    not ``active``. Used when a camera is reactivated by the user so the
+    GStreamer pipelines and inference workers are brought back online.
+
+    Returns ``(recovered, failed)`` counts.
+    """
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if camera is None or not camera.is_active:
+        return 0, 0
+
+    streams = db.query(Stream).filter(Stream.camera_id == camera_id, Stream.status != "active").all()
+
+    recovered = 0
+    failed = 0
+
+    for stream in streams:
+        metadata = dict(stream.stream_metadata or {})
+        previous_source_config = metadata.get("source_config") or {}
+
+        try:
+            source_config, resolved_source = _build_source_config_for_camera(
+                camera,
+                width=int(previous_source_config.get("width") or metadata.get("width") or 640),
+                height=int(previous_source_config.get("height") or metadata.get("height") or 360),
+                codec=previous_source_config.get("codec") or metadata.get("codec") or "h264",
+                source_config=previous_source_config,
+            )
+
+            if not stream.stream_name:
+                stream.stream_name = _generate_stream_name(camera, stream.id)
+
+            _apply_resolved_camera_binding(camera, resolved_source)
+            metadata["source_config"] = source_config
+            stream.stream_metadata = metadata
+
+            await gstreamer_service.remove_stream(stream.stream_name)
+            success = await gstreamer_service.add_stream(
+                name=stream.stream_name,
+                source_type=source_config["source_type"],
+                source_uri=source_config.get("source_uri"),
+                device_id=source_config.get("device_id"),
+                device_path=source_config.get("device_path"),
+                width=source_config.get("width", 640),
+                height=source_config.get("height", 360),
+                codec=source_config.get("codec", "h264"),
+            )
+
+            if success:
+                stream.status = "active"
+                inference_worker_manager.restart_worker(stream)
+                recovered += 1
+                logger.info("Recovered stream '%s' after camera reactivation", stream.stream_name)
+            else:
+                stream.status = "error"
+                failed += 1
+                logger.warning("Failed to recover stream '%s' after camera reactivation", stream.stream_name)
+        except Exception as exc:
+            stream.status = "error"
+            failed += 1
+            logger.exception("Error recovering stream %s after camera reactivation: %s", stream.id, exc)
+
+    if recovered or failed:
+        db.commit()
+
+    return recovered, failed
+
+
 async def _recover_reconnected_local_streams(db: Session) -> tuple[int, int]:
     """
     Re-register offline local streams when their camera becomes active again.
@@ -393,15 +462,7 @@ async def _recover_reconnected_local_streams(db: Session) -> tuple[int, int]:
     """
     gst_streams = await gstreamer_service.get_streams()
 
-    candidates = (
-        db.query(Stream)
-        .join(Camera, Camera.id == Stream.camera_id)
-        .filter(
-            Camera.camera_type.in_(tuple(LOCAL_CAMERA_TYPES)),
-            Camera.is_active.is_(True),
-        )
-        .all()
-    )
+    candidates = db.query(Stream).join(Camera, Camera.id == Stream.camera_id).filter(Camera.is_active.is_(True)).all()
 
     recovered = 0
     failed = 0
@@ -684,9 +745,12 @@ async def list_streams(
     db: Session = Depends(get_db),
 ):
     """List all streams with their RTSP URLs. Requires authentication."""
-    changed = sync_local_camera_connectivity(db)
-    if changed:
-        await _recover_reconnected_local_streams(db)
+    # Refresh USB identity for local cameras.
+    sync_local_camera_connectivity(db)
+    # Always attempt to bring offline streams back online when their camera is
+    # active. Cheap when nothing needs recovering (no-op DB read) and ensures
+    # the UI converges after a camera is reactivated.
+    await _recover_reconnected_local_streams(db)
 
     query = db.query(Stream)
 

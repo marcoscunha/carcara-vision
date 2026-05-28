@@ -160,13 +160,18 @@ def get_camera_status(
 
 
 @router.put("/{camera_id}", response_model=CameraResponse)
-def update_camera(
+async def update_camera(
     camera_id: int,
     camera_update: CameraUpdate,
     current_user: AuthenticatedUser,
     db: Session = Depends(get_db),
 ):
     """Update a camera's information. Requires authentication."""
+    from ...models.stream import Stream
+    from ...services.gstreamer import gstreamer_service
+    from ...services.inference_worker_manager import inference_worker_manager
+    from .streams import recover_streams_for_camera
+
     db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if db_camera is None:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -180,11 +185,39 @@ def update_camera(
         for field in LOCAL_CAMERA_IDENTITY_FIELDS:
             update_data[field] = None
 
+    was_active = bool(db_camera.is_active)
+
     for field, value in update_data.items():
         setattr(db_camera, field, value)
 
+    # When the camera transitions to inactive, tear down all associated streams
+    # so GStreamer stops consuming the source and inference workers stop.
+    deactivating = was_active and update_data.get("is_active") is False
+    activating = not was_active and update_data.get("is_active") is True
+
+    if deactivating:
+        streams = db.query(Stream).filter(Stream.camera_id == camera_id).all()
+        for stream in streams:
+            if stream.stream_name:
+                try:
+                    await gstreamer_service.remove_stream(stream.stream_name)
+                except Exception as e:
+                    print(f"Warning: Failed to remove stream {stream.stream_name} from GStreamer: {e}")
+            inference_worker_manager.stop_worker(stream.id)
+            stream.status = "offline"
+
     db.commit()
     db.refresh(db_camera)
+
+    # When the camera transitions to active, bring its streams back online by
+    # re-registering pipelines and inference workers.
+    if activating:
+        try:
+            await recover_streams_for_camera(db, camera_id)
+            db.refresh(db_camera)
+        except Exception as e:
+            print(f"Warning: Failed to recover streams for camera {camera_id}: {e}")
+
     return db_camera
 
 

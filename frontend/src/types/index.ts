@@ -5,9 +5,6 @@ export interface Camera {
   is_active: boolean
   device_id: number
   device_path: string | null
-  resolution: [number, number]
-  fps: number
-  is_available: boolean
   camera_type: string
   created_at: string
   updated_at: string

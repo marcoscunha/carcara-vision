@@ -25,10 +25,9 @@ LOCAL_CAMERA_IDENTITY_FIELDS = (
 
 def sync_local_camera_connectivity(db: Session, camera_ids: set[int] | None = None) -> bool:
     """
-    Refresh persisted availability state for local/USB cameras.
-
-    When a camera is detached, mark the camera inactive and move all related
-    streams from active/starting to offline.
+    Refresh persisted USB identity for local/USB cameras and stop streams that
+    point at detached devices. Never modifies `Camera.is_active` — that flag
+    reflects user intent and is owned exclusively by the cameras endpoints.
     """
     query = db.query(Camera).filter(Camera.camera_type.in_(LOCAL_CAMERA_TYPES))
     if camera_ids:
@@ -45,10 +44,9 @@ def sync_local_camera_connectivity(db: Session, camera_ids: set[int] | None = No
         resolved = CameraService.resolve_local_camera(**identity)
 
         if resolved is not None:
-            if camera.is_active is not True:
-                camera.is_active = True
-                changed = True
-
+            # Hardware is present: refresh persisted identity fields, but do NOT
+            # auto-reactivate. `is_active` reflects user intent (manual toggle in
+            # the UI) and must only be changed by an explicit user action.
             for field in LOCAL_CAMERA_IDENTITY_FIELDS:
                 new_value = resolved.get(field)
                 if getattr(camera, field, None) != new_value:
@@ -56,10 +54,9 @@ def sync_local_camera_connectivity(db: Session, camera_ids: set[int] | None = No
                     changed = True
             continue
 
-        if camera.is_active is not False:
-            camera.is_active = False
-            changed = True
-
+        # Hardware is missing: stop running streams so we don't keep trying to
+        # consume a detached device. We still leave `is_active` untouched so
+        # the user's intent is preserved across reconnects.
         impacted_streams = (
             db.query(Stream).filter(Stream.camera_id == camera.id, Stream.status.in_(("active", "starting"))).all()
         )

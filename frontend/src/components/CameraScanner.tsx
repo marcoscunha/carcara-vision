@@ -44,9 +44,6 @@ export const CameraScanner: React.FC = () => {
         device_path: camera.device_path,
         camera_type: 'local',
         is_active: true,
-        resolution: camera.resolution,
-        fps: camera.fps,
-        is_available: camera.is_available,
       },
       {
         onSuccess: () => {

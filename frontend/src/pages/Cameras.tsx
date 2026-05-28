@@ -140,8 +140,6 @@ const Cameras: React.FC = () => {
                   <TableCell className="table-head-cell">Name</TableCell>
                   <TableCell className="table-head-cell">Type</TableCell>
                   <TableCell className="table-head-cell">URL / Device</TableCell>
-                  <TableCell className="table-head-cell">Resolution</TableCell>
-                  <TableCell className="table-head-cell">FPS</TableCell>
                   <TableCell className="table-head-cell">Status</TableCell>
                   <TableCell className="table-head-cell" align="right">
                     Actions
@@ -171,14 +169,6 @@ const Cameras: React.FC = () => {
                       <Typography variant="body2" color="text.secondary" className="table-url">
                         {camera.rtsp_url || `Device ${camera.device_id}`}
                       </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {camera.resolution ? `${camera.resolution[0]}x${camera.resolution[1]}` : '-'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{camera.fps || '-'}</Typography>
                     </TableCell>
                     <TableCell>
                       <Chip
