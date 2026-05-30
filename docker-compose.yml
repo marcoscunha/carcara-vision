@@ -86,7 +86,6 @@ services:
       - db
       - mediamtx
       - gstreamer
-      - keycloak
     devices:
       - "/dev/video0:/dev/video0"
       - "/dev/video1:/dev/video1"
@@ -113,9 +112,12 @@ services:
       - "5432:5432"
 
   # Keycloak - Identity and Access Management
+  # Only started when the "auth" compose profile is active (controlled via
+  # COMPOSE_PROFILES in .env). Set COMPOSE_PROFILES=auth to enable.
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: keycloak
+    profiles: ["auth"]
     command: start-dev --import-realm
     environment:
       - KEYCLOAK_ADMIN=admin

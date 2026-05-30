@@ -113,26 +113,31 @@ class HardwareDetectionService:
         threads = cores
         features: list[str] = []
         max_freq: float | None = None
+        cpu_implementer: str | None = None
+        cpu_part: str | None = None
 
         try:
             if os.path.exists("/proc/cpuinfo"):
                 with open("/proc/cpuinfo") as f:
                     content = f.read()
 
-                # Model name
+                # Model name (x86 / some ARM kernels)
                 match = re.search(r"model name\s*:\s*(.+)", content)
                 if match:
                     model_name = match.group(1).strip()
 
-                # Vendor
+                # Vendor (x86)
                 match = re.search(r"vendor_id\s*:\s*(.+)", content)
                 if match:
                     vendor = match.group(1).strip()
-                elif "Hardware" in content:
-                    # ARM devices often have Hardware field
-                    match = re.search(r"Hardware\s*:\s*(.+)", content)
-                    if match:
-                        vendor = match.group(1).strip()
+
+                # ARM-specific fields (no vendor_id on aarch64)
+                impl_match = re.search(r"CPU implementer\s*:\s*(0x[0-9a-fA-F]+)", content)
+                if impl_match:
+                    cpu_implementer = impl_match.group(1).lower()
+                part_match = re.search(r"CPU part\s*:\s*(0x[0-9a-fA-F]+)", content)
+                if part_match:
+                    cpu_part = part_match.group(1).lower()
 
                 # CPU cores (physical)
                 physical_cores = len(re.findall(r"^processor\s*:", content, re.MULTILINE))
@@ -160,6 +165,37 @@ class HardwareDetectionService:
         except Exception as e:
             logger.warning(f"Error reading /proc/cpuinfo: {e}")
 
+        # ----- ARM / Jetson vendor & model resolution -----
+        # On ARM there is no vendor_id; resolve via CPU implementer/part codes
+        # and refine with Jetson-specific SoC info when applicable.
+        if architecture in (CPUArchitecture.ARM64, CPUArchitecture.ARMV7, CPUArchitecture.ARMV8):
+            arm_vendor, arm_core = self._resolve_arm_cpu(cpu_implementer, cpu_part)
+            if vendor == "Unknown" and arm_vendor:
+                vendor = arm_vendor
+            if model_name == "Unknown" and arm_core:
+                model_name = arm_core
+
+            # If we're on a Jetson, the SoC is designed and integrated by
+            # NVIDIA even when the ARM cores carry an "Arm Limited" implementer
+            # code (0x41). Report NVIDIA as the vendor and annotate the model
+            # with the SoC + Jetson module name.
+            if self._is_jetson():
+                vendor = "NVIDIA"
+                soc = self._get_jetson_soc()  # e.g. "Tegra T234 (Orin)"
+                jetson_model = self._get_jetson_model()
+                parts = [p for p in [arm_core, soc, jetson_model] if p]
+                if parts:
+                    # Example: "8x Arm Cortex-A78AE • NVIDIA Tegra T234 (Orin) • NVIDIA Jetson Orin Nano"
+                    core_label = f"{threads}x {arm_core}" if arm_core and threads else arm_core
+                    pieces: list[str] = []
+                    if core_label:
+                        pieces.append(core_label)
+                    if soc:
+                        pieces.append(soc)
+                    if jetson_model and (not soc or jetson_model.lower() not in soc.lower()):
+                        pieces.append(jetson_model)
+                    model_name = " • ".join(pieces)
+
         # Try to get max frequency
         try:
             freq_path = "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
@@ -178,6 +214,119 @@ class HardwareDetectionService:
             max_frequency_mhz=max_freq,
             features=features[:50],  # Limit to 50 most relevant features
         )
+
+    # =========================================================================
+    # ARM CPU resolution helpers
+    # =========================================================================
+
+    # CPU implementer codes (from Linux arch/arm64/include/asm/cputype.h)
+    _ARM_IMPLEMENTERS: dict[str, str] = {
+        "0x41": "Arm Limited",
+        "0x42": "Broadcom",
+        "0x43": "Cavium",
+        "0x44": "DEC",
+        "0x46": "Fujitsu",
+        "0x48": "HiSilicon",
+        "0x49": "Infineon",
+        "0x4d": "Motorola/Freescale",
+        "0x4e": "NVIDIA",
+        "0x50": "Applied Micro (APM)",
+        "0x51": "Qualcomm",
+        "0x53": "Samsung",
+        "0x56": "Marvell",
+        "0x61": "Apple",
+        "0x66": "Faraday",
+        "0x69": "Intel",
+        "0x70": "Phytium",
+        "0xc0": "Ampere Computing",
+    }
+
+    # CPU part codes for ARM Limited implementer (0x41) — common cores.
+    _ARM_PARTS_ARM: dict[str, str] = {
+        "0xd03": "Arm Cortex-A53",
+        "0xd05": "Arm Cortex-A55",
+        "0xd07": "Arm Cortex-A57",
+        "0xd08": "Arm Cortex-A72",
+        "0xd09": "Arm Cortex-A73",
+        "0xd0a": "Arm Cortex-A75",
+        "0xd0b": "Arm Cortex-A76",
+        "0xd0c": "Arm Neoverse-N1",
+        "0xd0d": "Arm Cortex-A77",
+        "0xd40": "Arm Neoverse-V1",
+        "0xd41": "Arm Cortex-A78",
+        "0xd42": "Arm Cortex-A78AE",   # Jetson Orin
+        "0xd44": "Arm Cortex-X1",
+        "0xd46": "Arm Cortex-A510",
+        "0xd47": "Arm Cortex-A710",
+        "0xd48": "Arm Cortex-X2",
+        "0xd49": "Arm Neoverse-N2",
+        "0xd4a": "Arm Neoverse-E1",
+        "0xd4b": "Arm Cortex-A78C",
+    }
+
+    # NVIDIA custom ARM cores (implementer 0x4e).
+    _ARM_PARTS_NVIDIA: dict[str, str] = {
+        "0x000": "NVIDIA Denver",
+        "0x003": "NVIDIA Denver 2",
+        "0x004": "NVIDIA Carmel",      # Jetson Xavier
+    }
+
+    def _resolve_arm_cpu(
+        self, implementer: str | None, part: str | None
+    ) -> tuple[str | None, str | None]:
+        """Resolve ARM CPU implementer + part codes to human-readable strings."""
+        vendor = self._ARM_IMPLEMENTERS.get(implementer) if implementer else None
+        core: str | None = None
+        if part:
+            if implementer == "0x4e":
+                core = self._ARM_PARTS_NVIDIA.get(part)
+            else:
+                core = self._ARM_PARTS_ARM.get(part)
+            if not core:
+                core = f"ARM core {part}"
+        return vendor, core
+
+    def _get_jetson_soc(self) -> str | None:
+        """
+        Identify the Tegra SoC powering a Jetson board.
+
+        Sources (in order):
+        - /sys/devices/soc0/family + /sys/devices/soc0/machine
+        - /proc/device-tree/compatible (e.g. "nvidia,tegra234")
+        """
+        try:
+            family = None
+            for p in ("/sys/devices/soc0/family", "/sys/devices/soc0/soc_id"):
+                if os.path.exists(p):
+                    with open(p) as f:
+                        family = f.read().strip().rstrip("\x00")
+                    if family:
+                        break
+            if family and family.lower().startswith("tegra"):
+                # family is usually like "tegra234"
+                code = family.lower().replace("tegra", "").strip()
+                soc_map = {
+                    "186": "Tegra T186 (Parker)",   # TX2
+                    "194": "Tegra T194 (Xavier)",   # Xavier NX / AGX
+                    "234": "Tegra T234 (Orin)",     # Orin Nano / NX / AGX
+                    "210": "Tegra T210 (Erista)",   # Nano / TX1
+                }
+                return f"NVIDIA {soc_map.get(code, family.capitalize())}"
+
+            if os.path.exists("/proc/device-tree/compatible"):
+                with open("/proc/device-tree/compatible", "rb") as f:
+                    compat = f.read().decode("utf-8", errors="ignore").lower()
+                if "tegra234" in compat:
+                    return "NVIDIA Tegra T234 (Orin)"
+                if "tegra194" in compat:
+                    return "NVIDIA Tegra T194 (Xavier)"
+                if "tegra186" in compat:
+                    return "NVIDIA Tegra T186 (Parker)"
+                if "tegra210" in compat:
+                    return "NVIDIA Tegra T210 (Erista)"
+        except Exception:
+            pass
+        return None
 
     # =========================================================================
     # Memory Detection
@@ -223,24 +372,52 @@ class HardwareDetectionService:
         board_model = None
         serial_number = None
 
-        # OS information
-        os_name = "Unknown"
-        os_version = "Unknown"
         kernel_version = platform.release()
 
+        # Detect container vs host OS separately so the UI can show both.
+        container_os_name, container_os_version = self._read_os_release("/etc/os-release")
+        host_os_name, host_os_version = self._read_os_release("/host/etc/os-release")
+
+        is_containerized = self._is_running_in_container()
+        # If the host-mounted file is missing but we are clearly not in a
+        # container, the "container" OS *is* the host OS.
+        if not host_os_name and not is_containerized:
+            host_os_name = container_os_name
+            host_os_version = container_os_version
+            container_os_name = None
+            container_os_version = None
+
+        # L4T (Linux for Tegra) info — only meaningful on Jetson hosts.
+        l4t_version: str | None = None
         try:
-            # Try to get OS info
-            if os.path.exists("/etc/os-release"):
-                with open("/etc/os-release") as f:
-                    content = f.read()
-                match = re.search(r'NAME="?([^"\n]+)"?', content)
-                if match:
-                    os_name = match.group(1)
-                match = re.search(r'VERSION_ID="?([^"\n]+)"?', content)
-                if match:
-                    os_version = match.group(1)
+            for path in ("/host/etc/nv_tegra_release", "/etc/nv_tegra_release"):
+                if os.path.exists(path):
+                    with open(path) as f:
+                        tegra_line = f.readline().strip()
+                    # Example: "# R36 (release), REVISION: 4.0, GCID: ..."
+                    rev_match = re.search(r"R(\d+).*REVISION:\s*([\d.]+)", tegra_line)
+                    if rev_match:
+                        l4t_version = f"{rev_match.group(1)}.{rev_match.group(2)}"
+                    break
         except Exception:
             pass
+
+        # Pick the "primary" OS shown in os_name/os_version: prefer the host
+        # OS when available, otherwise the container OS. On Jetson, annotate
+        # with the L4T release.
+        primary_name = host_os_name or container_os_name or "Unknown"
+        primary_version = host_os_version or container_os_version or "Unknown"
+        if l4t_version:
+            if "ubuntu" not in primary_name.lower() and host_os_name is None:
+                # No host info available; L4T implies Ubuntu-based host.
+                primary_name = "Ubuntu (NVIDIA L4T)"
+            else:
+                primary_name = f"{primary_name} (NVIDIA L4T)"
+            primary_version = (
+                f"{primary_version} / L4T {l4t_version}"
+                if primary_version != "Unknown"
+                else f"L4T {l4t_version}"
+            )
 
         # Detect specific platforms
         vendor, board_name, board_model = self._identify_platform_vendor()
@@ -261,10 +438,47 @@ class HardwareDetectionService:
             board_name=board_name,
             board_model=board_model,
             serial_number=serial_number,
-            os_name=os_name,
-            os_version=os_version,
+            os_name=primary_name,
+            os_version=primary_version,
             kernel_version=kernel_version,
+            host_os_name=host_os_name,
+            host_os_version=host_os_version,
+            container_os_name=container_os_name if is_containerized else None,
+            container_os_version=container_os_version if is_containerized else None,
+            is_containerized=is_containerized,
+            l4t_version=l4t_version,
         )
+
+    def _read_os_release(self, path: str) -> tuple[str | None, str | None]:
+        """Parse an os-release file. Returns (name, version) or (None, None)."""
+        try:
+            if not os.path.exists(path):
+                return None, None
+            with open(path) as f:
+                content = f.read()
+            name_match = re.search(r'^NAME="?([^"\n]+?)"?$', content, re.MULTILINE)
+            ver_match = re.search(r'^VERSION_ID="?([^"\n]+?)"?$', content, re.MULTILINE)
+            name = name_match.group(1) if name_match else None
+            version = ver_match.group(1) if ver_match else None
+            return name, version
+        except Exception:
+            return None, None
+
+    def _is_running_in_container(self) -> bool:
+        """Best-effort detection of whether we are inside a container."""
+        try:
+            if os.path.exists("/.dockerenv"):
+                return True
+            if os.path.exists("/run/.containerenv"):
+                return True
+            if os.path.exists("/proc/1/cgroup"):
+                with open("/proc/1/cgroup") as f:
+                    cg = f.read()
+                if "docker" in cg or "containerd" in cg or "kubepods" in cg:
+                    return True
+        except Exception:
+            pass
+        return False
 
     def _identify_platform_vendor(self) -> tuple[PlatformVendor, str, str | None]:
         """Identify the platform vendor and board information."""
@@ -349,7 +563,7 @@ class HardwareDetectionService:
     def _is_jetson(self) -> bool:
         """Check if running on NVIDIA Jetson."""
         try:
-            if os.path.exists("/etc/nv_tegra_release"):
+            if os.path.exists("/etc/nv_tegra_release") or os.path.exists("/host/etc/nv_tegra_release"):
                 return True
             if os.path.exists("/proc/device-tree/compatible"):
                 with open("/proc/device-tree/compatible", "rb") as f:
@@ -368,6 +582,29 @@ class HardwareDetectionService:
                     return f.read().strip().rstrip("\x00")
         except Exception:
             pass
+        return None
+
+    def _get_jetson_gpu_architecture(self, model: str | None) -> str | None:
+        """
+        Map a Jetson module/board name to its GPU microarchitecture.
+
+        References (NVIDIA Jetson product briefs):
+        - Orin (Nano / NX / AGX)          -> Ampere
+        - Xavier (NX / AGX)               -> Volta
+        - TX2 / TX2 NX                    -> Pascal
+        - TX1 / Nano (original) / Nano 2GB -> Maxwell
+        """
+        if not model:
+            return None
+        m = model.lower()
+        if "orin" in m:
+            return "Ampere"
+        if "xavier" in m:
+            return "Volta"
+        if "tx2" in m:
+            return "Pascal"
+        if "tx1" in m or "nano" in m:
+            return "Maxwell"
         return None
 
     def _is_orange_pi(self) -> bool:
@@ -505,24 +742,68 @@ class HardwareDetectionService:
         # Method 1: nvidia-smi (most reliable when available)
         gpus = self._detect_nvidia_via_smi()
         if gpus:
-            return gpus
+            return self._refine_nvidia_for_jetson(gpus)
 
         # Method 2: Check via lspci for NVIDIA devices
         gpus = self._detect_nvidia_via_lspci()
         if gpus:
-            return gpus
+            return self._refine_nvidia_for_jetson(gpus)
 
         # Method 3: Check CUDA availability via Python
         gpus = self._detect_nvidia_via_cuda()
         if gpus:
-            return gpus
+            return self._refine_nvidia_for_jetson(gpus)
 
         # Method 4: Check /proc/driver/nvidia
         gpus = self._detect_nvidia_via_proc()
         if gpus:
-            return gpus
+            return self._refine_nvidia_for_jetson(gpus)
 
         return gpus
+
+    def _refine_nvidia_for_jetson(self, gpus: list[AcceleratorInfo]) -> list[AcceleratorInfo]:
+        """
+        On NVIDIA Jetson, retag generic ``NVIDIA_GPU`` entries as
+        ``NVIDIA_JETSON`` and produce a more descriptive name that includes
+        the GPU microarchitecture (e.g. ``Ampere iGPU (Jetson Orin Nano)``)
+        rather than the generic ``NVIDIA GPU`` reported by some probes.
+        """
+        if not self._is_jetson():
+            return gpus
+
+        model = self._get_jetson_model()
+        arch = self._get_jetson_gpu_architecture(model)
+
+        refined: list[AcceleratorInfo] = []
+        for acc in gpus:
+            if acc.type != AcceleratorType.NVIDIA_GPU:
+                refined.append(acc)
+                continue
+
+            # Build a human-friendly name.
+            arch_label = f"{arch} iGPU" if arch else "Integrated GPU"
+            if model:
+                friendly = f"{arch_label} ({model})"
+            else:
+                friendly = arch_label
+
+            details = dict(acc.details or {})
+            if arch:
+                details["gpu_architecture"] = arch
+            if model:
+                details["jetson_model"] = model
+            details["integrated"] = True
+
+            refined.append(
+                acc.model_copy(
+                    update={
+                        "type": AcceleratorType.NVIDIA_JETSON,
+                        "name": friendly,
+                        "details": details,
+                    }
+                )
+            )
+        return refined
 
     def _detect_nvidia_via_smi(self) -> list[AcceleratorInfo]:
         """Detect NVIDIA GPUs via nvidia-smi."""

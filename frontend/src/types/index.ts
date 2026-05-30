@@ -381,6 +381,12 @@ export interface PlatformInfo {
   os_name: string
   os_version: string
   kernel_version: string
+  host_os_name?: string | null
+  host_os_version?: string | null
+  container_os_name?: string | null
+  container_os_version?: string | null
+  is_containerized?: boolean
+  l4t_version?: string | null
 }
 
 export interface AcceleratorInfo {

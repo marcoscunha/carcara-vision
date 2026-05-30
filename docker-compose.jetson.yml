@@ -1,3 +1,9 @@
 services:
   backend:
     runtime: nvidia
+    volumes:
+      # Expose the host OS identification files so the hardware-detection
+      # service can report the real platform (e.g. Ubuntu / NVIDIA L4T)
+      # instead of the container's base image (Debian).
+      - /etc/os-release:/host/etc/os-release:ro
+      - /etc/nv_tegra_release:/host/etc/nv_tegra_release:ro

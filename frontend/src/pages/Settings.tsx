@@ -101,7 +101,7 @@ const formatAcceleratorName = (type: AcceleratorType): string => {
   const names: Record<string, string> = {
     nvidia_gpu: 'NVIDIA GPU',
     nvidia_tensorrt: 'NVIDIA TensorRT',
-    nvidia_jetson: 'NVIDIA Jetson',
+    nvidia_jetson: 'NVIDIA Jetson iGPU',
     google_coral_usb: 'Google Coral USB',
     google_coral_pcie: 'Google Coral PCIe',
     google_coral_m2: 'Google Coral M.2',
@@ -154,6 +154,9 @@ const TASK_LABELS: Record<string, string> = {
 }
 
 const EXECUTED_MODELS_STORAGE_KEY = 'carcara.executedModelsHistory'
+
+// Injected at build time from frontend/package.json via vite.config.ts.
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? 'dev'
 
 const Settings: React.FC = () => {
   const [taskTab, setTaskTab] = useState<string>('detect')
@@ -879,12 +882,9 @@ const Settings: React.FC = () => {
                         <Typography variant="caption" color="text.secondary">
                           Vendor
                         </Typography>
-                        <Chip
-                          label={formatPlatformVendor(hardwareData.platform.vendor)}
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                        />
+                        <Typography variant="body2" className="text-strong">
+                          {formatPlatformVendor(hardwareData.platform.vendor)}
+                        </Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="text.secondary">
@@ -896,12 +896,36 @@ const Settings: React.FC = () => {
                       </Box>
                       <Box>
                         <Typography variant="caption" color="text.secondary">
-                          OS
+                          OS (Host)
                         </Typography>
                         <Typography variant="body2" className="text-strong">
-                          {hardwareData.platform.os_name} {hardwareData.platform.os_version}
+                          {hardwareData.platform.host_os_name
+                            ? `${hardwareData.platform.host_os_name}${
+                                hardwareData.platform.host_os_version
+                                  ? ` ${hardwareData.platform.host_os_version}`
+                                  : ''
+                              }${
+                                hardwareData.platform.l4t_version
+                                  ? ` • L4T ${hardwareData.platform.l4t_version}`
+                                  : ''
+                              }`
+                            : `${hardwareData.platform.os_name} ${hardwareData.platform.os_version}`}
                         </Typography>
                       </Box>
+                      {hardwareData.platform.is_containerized &&
+                        hardwareData.platform.container_os_name && (
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              OS (Container)
+                            </Typography>
+                            <Typography variant="body2" className="text-strong">
+                              {hardwareData.platform.container_os_name}
+                              {hardwareData.platform.container_os_version
+                                ? ` ${hardwareData.platform.container_os_version}`
+                                : ''}
+                            </Typography>
+                          </Box>
+                        )}
                       <Box>
                         <Typography variant="caption" color="text.secondary">
                           Kernel
@@ -1032,7 +1056,7 @@ const Settings: React.FC = () => {
                   System Information
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Carcara Vision application details
+                  Build, runtime and platform details for this Carcara Vision instance
                 </Typography>
               </Box>
             </Box>
@@ -1053,7 +1077,7 @@ const Settings: React.FC = () => {
                   Description
                 </Typography>
                 <Typography variant="body2" className="text-strong">
-                  Network Video Controller
+                  AI-powered Network Video Controller for multi-camera detection, alarms and analytics
                 </Typography>
               </Box>
               <Box className="settings-info__row">
@@ -1061,7 +1085,7 @@ const Settings: React.FC = () => {
                   Version
                 </Typography>
                 <Typography variant="body2" className="text-strong">
-                  1.0.0
+                  {APP_VERSION}
                 </Typography>
               </Box>
             </Box>

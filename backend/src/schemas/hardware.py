@@ -100,7 +100,17 @@ class MemoryInfo(BaseModel):
 
 
 class PlatformInfo(BaseModel):
-    """Platform/Board information."""
+    """Platform/Board information.
+
+    The ``os_name`` / ``os_version`` fields keep backwards compatibility and
+    report the most relevant OS for the deployment:
+    - The **host** OS when it can be detected (preferred, e.g. on Jetson).
+    - Otherwise the **container** OS the backend is running inside.
+
+    The explicit ``host_*`` and ``container_*`` fields expose both sides so
+    the UI (and operators) can distinguish e.g. a Debian-based container
+    running on an Ubuntu/L4T Jetson host.
+    """
 
     vendor: PlatformVendor
     board_name: str = Field(default="Unknown")
@@ -109,6 +119,12 @@ class PlatformInfo(BaseModel):
     os_name: str = Field(default="Unknown")
     os_version: str = Field(default="Unknown")
     kernel_version: str = Field(default="Unknown")
+    host_os_name: str | None = None
+    host_os_version: str | None = None
+    container_os_name: str | None = None
+    container_os_version: str | None = None
+    is_containerized: bool = False
+    l4t_version: str | None = None
 
 
 class AcceleratorInfo(BaseModel):
